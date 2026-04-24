@@ -21,6 +21,9 @@
 ### 修复
 - **用户管理 - 编辑按钮无响应**：`openEditUser` 使用了 Alpine.js v2 的私有属性 `__x.$data`，但项目实际使用的是 Alpine v3（该属性已移除），导致点击编辑按钮静默抛 `TypeError`。改为 v3 公开 API `Alpine.$data(el)`
 - **用户管理 / 权限管理 - 删除按钮无响应、不弹框**：`{% include "components/resource_modals.html" %}` 位置错误地放在 `{% extends %}` 之后、`{% block content %}` 之外。Django 模板继承规则下 block 外的内容会被完全忽略，导致删除弹框 DOM 根本没被渲染，事件派发后无人监听。修复为将 include 移到 `{% block content %}` 内部
+- **删除资源后列表短暂残留（体验问题）**：后台 `trigger_immediate_sync` 以异步线程方式执行，K8s list + 序列化 + 写 DB 需要 500-1500ms，但前端 `resource-updated` 事件只延迟 500ms 就重新拉取，大概率拿到的还是旧缓存，用户短暂看到"已删除的资源仍在列表里"再过一会才消失。修复：
+  - 前端乐观更新：删除成功后立即从 `rows` 数组中移除该项（删除弹框派发事件时携带 `{action: 'delete', name, namespace}` detail）
+  - 延迟时间 500ms → 1500ms：给后台同步更充足的完成时间，1.5s 后再次 `load()` 做最终校验
 - **新增集群后资源永远不显示（致命）**：`resources/apps.py:ready()` 仅在 Django 启动时一次性扫描 `status='online'` 的集群并启动各自的同步线程，**通过 Web 界面新加的集群永远不会被纳入同步**，必须重启 Django 才能看到资源 —— 这就是用户反馈"导入集群 20 分钟后 Deployment / Namespace 等仍为空"的原因。修复：在 `_refresh_cluster_info` 中检测到集群上线时立即调用 `start_sync_for_cluster`（重复调用安全，内部有 `is_alive()` 判断）。同时 `cluster_delete` 调用 `stop_sync_for_cluster` 清理线程，避免被删除集群的同步线程持续报错
 - **添加权限功能完全不可用（致命）**：权限管理页的新增表单存在多处字段不对齐，以及集群字段是文本输入（没法选择集群）
   - `name="user"` vs 后端 `user_id` → 用户 ID 丢失

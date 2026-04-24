@@ -4,7 +4,16 @@
 {% block extra_head %}{% endblock %}
 
 {% block content %}
-<div class="card bg-base-100 border border-base-300" x-data="resourceList()" x-init="load()">
+<div class="card bg-base-100 border border-base-300" x-data="resourceList()" x-init="load()"
+  @resource-updated.window="
+    const d = $event.detail;
+    if (d && d.action === 'delete') {
+      // 乐观移除：后台同步前先从 UI 拿掉，避免用户短暂看到已删除的资源
+      rows = rows.filter(r => !(r.name === d.name && (r.namespace || '') === (d.namespace || '')));
+    }
+    // 1.5s 后再拉一次后端数据做最终校验（保守等待后台同步完成）
+    setTimeout(() => load(), 1500);
+  ">
   <div class="card-body p-5">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <div class="flex items-center gap-3">

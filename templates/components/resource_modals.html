@@ -92,13 +92,26 @@
       <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="deleteModal.close()">取消</button>
       <button class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105"
         @click="
-          fetch($el.closest('.modal-box').dataset.deleteUrl, {
+          const modalBox = $el.closest('.modal-box');
+          const deletedName = modalBox.querySelector('#deleteResourceName').textContent;
+          const deletedNs = modalBox.querySelector('#deleteResourceNs').textContent;
+          fetch(modalBox.dataset.deleteUrl, {
             method: 'POST',
             headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value}
           })
           .then(r => r.json())
-          .then(d => { if(d.success) location.reload(); else showToast(d.error, 'error'); })
-          .catch(e => showToast(e), 'error');
+          .then(d => {
+            if(d.success) {
+              showToast('删除成功', 'success');
+              // 携带 detail 供列表页做乐观移除，无需等后台同步完成
+              window.dispatchEvent(new CustomEvent('resource-updated', {
+                detail: {action: 'delete', name: deletedName, namespace: deletedNs}
+              }));
+            } else {
+              showToast(d.error, 'error');
+            }
+          })
+          .catch(e => showToast(e, 'error'));
           deleteModal.close();
         ">
         <i class="fas fa-trash-alt text-[10px]"></i> 确认删除
@@ -158,8 +171,15 @@
           body: JSON.stringify({replicas: replicas})
         })
         .then(r => r.json())
-        .then(d => { if(d.success) location.reload(); else showToast(d.error, 'error'); })
-        .catch(e => showToast(e), 'error');
+        .then(d => {
+          if(d.success) {
+            showToast('副本数调整成功', 'success');
+            window.dispatchEvent(new CustomEvent('resource-updated'));
+          } else {
+            showToast(d.error, 'error');
+          }
+        })
+        .catch(e => showToast(e, 'error'));
         scaleModal.close();
       ">
         <i class="fas fa-check text-[10px]"></i> 确认调整
@@ -200,8 +220,15 @@
           headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value}
         })
         .then(r => r.json())
-        .then(d => { if(d.success) location.reload(); else showToast(d.error, 'error'); })
-        .catch(e => showToast(e), 'error');
+        .then(d => {
+          if(d.success) {
+            showToast('重启触发成功', 'success');
+            window.dispatchEvent(new CustomEvent('resource-updated'));
+          } else {
+            showToast(d.error, 'error');
+          }
+        })
+        .catch(e => showToast(e, 'error'));
         restartModal.close();
       ">
         <i class="fas fa-redo text-[10px]"></i> 确认重启
@@ -347,7 +374,12 @@ function applyYaml() {
       document.getElementById('yamlSuccess').classList.remove('hidden');
       document.getElementById('yamlSuccessText').textContent = data.message || '资源配置已成功应用到集群';
       document.getElementById('yamlStatus').textContent = '应用成功';
-      setTimeout(() => location.reload(), 1500);
+      // 通知列表组件重新拉取数据（等后端 sync 完成）
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('resource-updated'));
+        if (typeof showToast === 'function') showToast(data.message || '已应用', 'success');
+        yamlModal.close();
+      }, 1500);
     } else {
       document.getElementById('yamlError').classList.remove('hidden');
       document.getElementById('yamlErrorText').textContent = data.error;
