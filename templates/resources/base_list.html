@@ -8,16 +8,16 @@
   @resource-updated.window="
     const d = $event.detail;
     if (d && d.action === 'delete') {
-      // Pod / Namespace 有 K8s 优雅退出期 → 乐观改状态为 Terminating（与 kubectl 行为一致）；
-      // 其他资源删除后立即从 K8s 消失 → 直接从列表移除
-      if (d.type === 'Pod' || d.type === 'Namespace') {
-        markTerminating(d.name, d.namespace);
-      } else {
+      // force 删除（grace_period_seconds=0）→ K8s 立即清除，从列表直接移除
+      // Pod / Namespace（非 force）→ 有优雅退出期，乐观改状态为 Terminating
+      // 其他资源 → 立即清除，从列表直接移除
+      if (d.force || (d.type !== 'Pod' && d.type !== 'Namespace')) {
         markRemoved(d.name, d.namespace);
+      } else {
+        markTerminating(d.name, d.namespace);
       }
     }
-    // 1.5s 后静默刷新拉后端真实数据（不闪骨架屏）；
-    // 若仍有 Terminating 资源会自动启动轮询，直到 Pod 真正从 API 消失
+    // 1.5s 后静默刷新拉后端真实数据；若仍有 Terminating 资源会自动轮询直到消失
     setTimeout(() => load({silent: true}), 1500);
   ">
   <div class="card-body p-5">

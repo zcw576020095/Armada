@@ -18,6 +18,7 @@ class K8sResourceManager:
             'create': 'create_namespace',
             'delete': 'delete_namespace',
             'patch': 'patch_namespace',
+            'replace': 'replace_namespace',
             'namespaced': False,
         },
         'deployment': {
@@ -28,6 +29,7 @@ class K8sResourceManager:
             'create': 'create_namespaced_deployment',
             'delete': 'delete_namespaced_deployment',
             'patch': 'patch_namespaced_deployment',
+            'replace': 'replace_namespaced_deployment',
             'namespaced': True,
         },
         'statefulset': {
@@ -38,6 +40,7 @@ class K8sResourceManager:
             'create': 'create_namespaced_stateful_set',
             'delete': 'delete_namespaced_stateful_set',
             'patch': 'patch_namespaced_stateful_set',
+            'replace': 'replace_namespaced_stateful_set',
             'namespaced': True,
         },
         'daemonset': {
@@ -48,6 +51,7 @@ class K8sResourceManager:
             'create': 'create_namespaced_daemon_set',
             'delete': 'delete_namespaced_daemon_set',
             'patch': 'patch_namespaced_daemon_set',
+            'replace': 'replace_namespaced_daemon_set',
             'namespaced': True,
         },
         'pod': {
@@ -56,6 +60,8 @@ class K8sResourceManager:
             'list_all': 'list_pod_for_all_namespaces',
             'get': 'read_namespaced_pod',
             'delete': 'delete_namespaced_pod',
+            'patch': 'patch_namespaced_pod',
+            'replace': 'replace_namespaced_pod',
             'namespaced': True,
         },
         'service': {
@@ -66,6 +72,7 @@ class K8sResourceManager:
             'create': 'create_namespaced_service',
             'delete': 'delete_namespaced_service',
             'patch': 'patch_namespaced_service',
+            'replace': 'replace_namespaced_service',
             'namespaced': True,
         },
         'ingress': {
@@ -76,6 +83,7 @@ class K8sResourceManager:
             'create': 'create_namespaced_ingress',
             'delete': 'delete_namespaced_ingress',
             'patch': 'patch_namespaced_ingress',
+            'replace': 'replace_namespaced_ingress',
             'namespaced': True,
         },
         'configmap': {
@@ -86,6 +94,7 @@ class K8sResourceManager:
             'create': 'create_namespaced_config_map',
             'delete': 'delete_namespaced_config_map',
             'patch': 'patch_namespaced_config_map',
+            'replace': 'replace_namespaced_config_map',
             'namespaced': True,
         },
         'secret': {
@@ -96,6 +105,7 @@ class K8sResourceManager:
             'create': 'create_namespaced_secret',
             'delete': 'delete_namespaced_secret',
             'patch': 'patch_namespaced_secret',
+            'replace': 'replace_namespaced_secret',
             'namespaced': True,
         },
         'persistentvolumeclaim': {
@@ -106,6 +116,7 @@ class K8sResourceManager:
             'create': 'create_namespaced_persistent_volume_claim',
             'delete': 'delete_namespaced_persistent_volume_claim',
             'patch': 'patch_namespaced_persistent_volume_claim',
+            'replace': 'replace_namespaced_persistent_volume_claim',
             'namespaced': True,
         },
     }
@@ -119,39 +130,6 @@ class K8sResourceManager:
     def _get_api_client(self, api_name):
         """获取对应的 API 客户端"""
         return getattr(self, api_name)
-
-    def list_resources(self, resource_type, namespace=None, label_selector=None, field_selector=None):
-        """列出资源"""
-        config = self.RESOURCE_TYPES.get(resource_type)
-        if not config:
-            raise ValueError(f"Unknown resource type: {resource_type}")
-
-        api_client = self._get_api_client(config['api'])
-        list_method = getattr(api_client, config['list'])
-
-        kwargs = {'_request_timeout': 10}
-        if label_selector:
-            kwargs['label_selector'] = label_selector
-        if field_selector:
-            kwargs['field_selector'] = field_selector
-
-        try:
-            if config['namespaced']:
-                if namespace:
-                    result = list_method(namespace, **kwargs)
-                else:
-                    # Use list_*_for_all_namespaces for cross-namespace listing
-                    list_all_name = config.get('list_all')
-                    if list_all_name:
-                        list_all_method = getattr(api_client, list_all_name)
-                        result = list_all_method(**kwargs)
-                    else:
-                        result = list_method(namespace='', **kwargs)
-            else:
-                result = list_method(**kwargs)
-            return result.items
-        except ApiException as e:
-            raise Exception(f"Failed to list {resource_type}: {e.reason}")
 
     def get_resource(self, resource_type, name, namespace=None):
         """获取单个资源"""
@@ -180,8 +158,13 @@ class K8sResourceManager:
             resource.metadata.managed_fields = None
         return yaml.dump(client.ApiClient().sanitize_for_serialization(resource), default_flow_style=False)
 
-    def delete_resource(self, resource_type, name, namespace=None):
-        """删除资源"""
+    def delete_resource(self, resource_type, name, namespace=None, force=False):
+        """删除资源。
+
+        force=True 时对 Pod 启用强制删除：跳过 30 秒优雅退出期立即清除。
+        ⚠️ 对 StatefulSet / 带 PV / 有状态服务不安全，可能导致 PV 挂载冲突或数据丢失，
+        因此仅作用于 Pod 类型，其他资源传 force=True 也会被忽略。
+        """
         config = self.RESOURCE_TYPES.get(resource_type)
         if not config:
             raise ValueError(f"Unknown resource type: {resource_type}")
@@ -189,18 +172,27 @@ class K8sResourceManager:
         api_client = self._get_api_client(config['api'])
         delete_method = getattr(api_client, config['delete'])
 
+        kwargs = {'_request_timeout': 10}
+        if force and resource_type == 'pod':
+            kwargs['grace_period_seconds'] = 0
+            kwargs['propagation_policy'] = 'Background'
+
         try:
             if config['namespaced']:
-                delete_method(name, namespace, _request_timeout=10)
+                delete_method(name, namespace, **kwargs)
             else:
-                delete_method(name, _request_timeout=10)
+                delete_method(name, **kwargs)
         except ApiException as e:
             if e.status == 404:
                 raise Exception(f"{resource_type.capitalize()} '{name}' not found")
             raise Exception(f"Failed to delete {resource_type}: {e.reason}")
 
     def apply_yaml(self, yaml_content):
-        """应用 YAML 配置（创建或更新资源）"""
+        """应用 YAML 配置（整体替换，不存在则创建）。
+
+        使用 replace 而非 patch —— patch 是 strategic merge，删除的字段不会生效，
+        而 replace 会整体替换资源，符合"应用"的语义。
+        """
         try:
             docs = list(yaml.safe_load_all(yaml_content))
             results = []
@@ -216,26 +208,33 @@ class K8sResourceManager:
                 if not kind or not name:
                     raise Exception("Invalid YAML: missing 'kind' or 'metadata.name'")
 
-                # 映射 kind 到 resource_type
-                resource_type = kind
-                if kind == 'persistentvolumeclaim':
-                    resource_type = 'persistentvolumeclaim'
-
-                config = self.RESOURCE_TYPES.get(resource_type)
+                config = self.RESOURCE_TYPES.get(kind)
                 if not config:
                     raise Exception(f"Unsupported resource type: {kind}")
 
                 api_client = self._get_api_client(config['api'])
 
-                # 尝试更新，如果不存在则创建
                 try:
-                    if config.get('patch'):
-                        patch_method = getattr(api_client, config['patch'])
-                        if config['namespaced']:
-                            patch_method(name, namespace, doc, _request_timeout=10)
-                        else:
-                            patch_method(name, doc, _request_timeout=10)
-                        results.append(f"Updated {kind} '{name}'")
+                    # 整体替换：先读取现有资源拿到 resourceVersion，再做 replace
+                    get_method = getattr(api_client, config['get'])
+                    if config['namespaced']:
+                        existing = get_method(name, namespace, _request_timeout=5)
+                    else:
+                        existing = get_method(name, _request_timeout=5)
+
+                    doc.setdefault('metadata', {})
+                    doc['metadata']['resourceVersion'] = existing.metadata.resource_version
+
+                    replace_name = config.get('replace')
+                    if not replace_name:
+                        raise Exception(f"Resource type {kind} does not support replace")
+                    replace_method = getattr(api_client, replace_name)
+                    if config['namespaced']:
+                        replace_method(name, namespace, doc, _request_timeout=10)
+                    else:
+                        replace_method(name, doc, _request_timeout=10)
+                    results.append(f"Updated {kind} '{name}'")
+
                 except ApiException as e:
                     if e.status == 404 and config.get('create'):
                         # 资源不存在，创建
@@ -246,7 +245,9 @@ class K8sResourceManager:
                             create_method(doc, _request_timeout=10)
                         results.append(f"Created {kind} '{name}'")
                     else:
-                        raise
+                        # 把 K8s 的详细报错传给上层
+                        detail = e.body or e.reason or str(e)
+                        raise Exception(f"{e.reason}: {detail[:500]}")
 
             return {'success': True, 'message': '; '.join(results)}
         except yaml.YAMLError as e:
@@ -286,46 +287,6 @@ class K8sResourceManager:
         except ApiException as e:
             raise Exception(f"Failed to restart deployment: {e.reason}")
 
-    def rollback_deployment(self, name, namespace, revision=None):
-        """回滚 Deployment 到指定版本"""
-        try:
-            # 获取 ReplicaSet 历史
-            rs_list = self.apps_v1.list_namespaced_replica_set(
-                namespace,
-                label_selector=f'app={name}',
-                _request_timeout=5
-            )
-
-            if not rs_list.items:
-                raise Exception("No revision history found")
-
-            # 按 revision 排序
-            rs_list.items.sort(
-                key=lambda x: int(x.metadata.annotations.get('deployment.kubernetes.io/revision', '0')),
-                reverse=True
-            )
-
-            if revision:
-                target_rs = next(
-                    (rs for rs in rs_list.items
-                     if rs.metadata.annotations.get('deployment.kubernetes.io/revision') == str(revision)),
-                    None
-                )
-            else:
-                # 回滚到上一个版本
-                target_rs = rs_list.items[1] if len(rs_list.items) > 1 else None
-
-            if not target_rs:
-                raise Exception(f"Revision {revision} not found")
-
-            # 更新 Deployment 的 template
-            body = {'spec': {'template': target_rs.spec.template}}
-            self.apps_v1.patch_namespaced_deployment(
-                name, namespace, body, _request_timeout=10
-            )
-        except ApiException as e:
-            raise Exception(f"Failed to rollback deployment: {e.reason}")
-
     # StatefulSet 特定操作
     def scale_statefulset(self, name, namespace, replicas):
         """扩缩容 StatefulSet"""
@@ -357,19 +318,3 @@ class K8sResourceManager:
             )
         except ApiException as e:
             raise Exception(f"Failed to restart statefulset: {e.reason}")
-
-    # Pod 特定操作
-    def get_pod_logs(self, name, namespace, container=None, tail_lines=100):
-        """获取 Pod 日志"""
-        try:
-            kwargs = {
-                'name': name,
-                'namespace': namespace,
-                'tail_lines': tail_lines,
-                '_request_timeout': 10,
-            }
-            if container:
-                kwargs['container'] = container
-            return self.core_v1.read_namespaced_pod_log(**kwargs)
-        except ApiException as e:
-            raise Exception(f"Failed to get pod logs: {e.reason}")

@@ -21,6 +21,11 @@
 ### 修复
 - **用户管理 - 编辑按钮无响应**：`openEditUser` 使用了 Alpine.js v2 的私有属性 `__x.$data`，但项目实际使用的是 Alpine v3（该属性已移除），导致点击编辑按钮静默抛 `TypeError`。改为 v3 公开 API `Alpine.$data(el)`
 - **用户管理 / 权限管理 - 删除按钮无响应、不弹框**：`{% include "components/resource_modals.html" %}` 位置错误地放在 `{% extends %}` 之后、`{% block content %}` 之外。Django 模板继承规则下 block 外的内容会被完全忽略，导致删除弹框 DOM 根本没被渲染，事件派发后无人监听。修复为将 include 移到 `{% block content %}` 内部
+- **Pod 强制删除选项（可选，默认关闭）**：
+  - 删除 Pod 的确认框里新增「强制删除」复选框（仅 Pod 类型展示），勾选后传 `grace_period_seconds=0` + `propagation_policy=Background`，跳过 30 秒优雅退出期立即清除
+  - 默认不勾，保留 K8s 标准 30 秒优雅期（显示 Terminating 状态）—— 保护 StatefulSet / 带 PV / 有状态服务的数据安全
+  - 前端乐观更新：勾选强制删除时直接从列表移除（立即消失），未勾选时显示 Terminating 状态
+  - 确认按钮文案跟随勾选状态动态切换：`确认删除` ↔ `强制删除`
 - **资源列表自动刷新与状态保持**：
   - 删除操作后除 1.5s 首轮 silent load 外，检测到 `Terminating` 资源时**每 5s 自动后台轮询**直到资源消失（最长 90s），无需手动 F5 —— 从点击删除到 Pod 彻底消失全程无人工干预
   - 页面状态（命名空间筛选、搜索关键字、当前页码）写入 URL query，**刷新页面或分享链接时保持原位置**，不再跳回全量第 1 页

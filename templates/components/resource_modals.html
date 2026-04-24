@@ -65,13 +65,17 @@
 
 <!-- Delete Confirm Modal -->
 <dialog id="deleteModal" class="modal">
-  <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl" x-data @open-delete-modal.window="
-    $el.querySelector('#deleteResourceType').textContent = $event.detail.type;
-    $el.querySelector('#deleteResourceName').textContent = $event.detail.name;
-    $el.querySelector('#deleteResourceNs').textContent = $event.detail.namespace || '';
-    $el.dataset.deleteUrl = $event.detail.deleteUrl;
-    deleteModal.showModal();
-  ">
+  <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl"
+    x-data="{resType: '', forceDelete: false}"
+    @open-delete-modal.window="
+      resType = $event.detail.type;
+      forceDelete = false;
+      $el.querySelector('#deleteResourceType').textContent = $event.detail.type;
+      $el.querySelector('#deleteResourceName').textContent = $event.detail.name;
+      $el.querySelector('#deleteResourceNs').textContent = $event.detail.namespace || '';
+      $el.dataset.deleteUrl = $event.detail.deleteUrl;
+      deleteModal.showModal();
+    ">
     <div class="flex items-center gap-3 mb-5">
       <div class="w-11 h-11 rounded-xl bg-error/10 flex items-center justify-center flex-shrink-0">
         <i class="fas fa-exclamation-triangle text-lg text-error"></i>
@@ -88,6 +92,21 @@
         <span class="text-[11px] opacity-40 w-14">命名空间</span> <span id="deleteResourceNs" class="font-medium text-sm"></span>
       </div>
     </div>
+
+    <!-- 强制删除选项 - 仅对 Pod 展示 -->
+    <template x-if="resType === 'Pod'">
+      <label class="flex items-start gap-2.5 mt-3 p-3 rounded-lg bg-orange-500/5 border border-orange-500/20 cursor-pointer hover:bg-orange-500/10 transition-colors">
+        <input type="checkbox" x-model="forceDelete" class="checkbox checkbox-xs checkbox-warning mt-0.5">
+        <div class="flex-1">
+          <div class="text-xs font-medium text-orange-400">强制删除（跳过 30 秒优雅退出期）</div>
+          <div class="text-[10px] opacity-50 mt-0.5 leading-relaxed">
+            <i class="fas fa-exclamation-triangle text-[9px] mr-1"></i>
+            对 StatefulSet / 带 PV / 数据库等有状态 Pod 可能导致 PV 挂载冲突或数据丢失，请谨慎勾选
+          </div>
+        </div>
+      </label>
+    </template>
+
     <div class="modal-action mt-6 gap-2.5">
       <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="deleteModal.close()">取消</button>
       <button class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105"
@@ -96,19 +115,18 @@
           const deletedName = modalBox.querySelector('#deleteResourceName').textContent;
           const deletedNs = modalBox.querySelector('#deleteResourceNs').textContent;
           const deletedType = modalBox.querySelector('#deleteResourceType').textContent;
-          fetch(modalBox.dataset.deleteUrl, {
+          const useForce = forceDelete;
+          const url = modalBox.dataset.deleteUrl + (useForce ? '?force=1' : '');
+          fetch(url, {
             method: 'POST',
             headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value}
           })
           .then(r => r.json())
           .then(d => {
             if(d.success) {
-              showToast('删除成功', 'success');
-              // 携带 detail 供列表页做真实状态更新：
-              // Pod/Namespace 有优雅退出期 -> 状态变 Terminating 让用户看到过程；
-              // 其他资源删除后立即从 K8s 消失 -> 直接从列表移除
+              showToast(useForce ? '已强制删除' : '删除成功', 'success');
               window.dispatchEvent(new CustomEvent('resource-updated', {
-                detail: {action: 'delete', type: deletedType, name: deletedName, namespace: deletedNs}
+                detail: {action: 'delete', type: deletedType, name: deletedName, namespace: deletedNs, force: useForce}
               }));
             } else {
               showToast(d.error, 'error');
@@ -117,7 +135,8 @@
           .catch(e => showToast(e, 'error'));
           deleteModal.close();
         ">
-        <i class="fas fa-trash-alt text-[10px]"></i> 确认删除
+        <i class="fas fa-trash-alt text-[10px]"></i>
+        <span x-text="forceDelete ? '强制删除' : '确认删除'"></span>
       </button>
     </div>
   </div>
