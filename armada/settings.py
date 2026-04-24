@@ -172,6 +172,9 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 
+# 自定义 CSRF 校验失败页（跳回登录并提示会话过期，避免露出 Django 默认 403 页）
+CSRF_FAILURE_VIEW = 'accounts.views.csrf_failure_view'
+
 # Kubeconfig encryption key (Fernet)
 # Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 KUBECONFIG_ENCRYPTION_KEY = os.environ.get('KUBECONFIG_ENCRYPTION_KEY', '')

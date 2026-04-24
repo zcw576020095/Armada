@@ -8,7 +8,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 
 from clusters.models import Cluster
-from .models import UserProfile, UserModulePermission
+from .models import UserProfile, UserModulePermission, is_admin_user
 
 
 # ─── 登录/登出 ─────────────────────────────────────────────
@@ -17,7 +17,13 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect('dashboard:index')
 
+    # 处理从 CSRF 失败页等跳回时附带的提示
     error = ''
+    username = ''
+    msg_code = request.GET.get('msg', '')
+    if msg_code == 'session_expired':
+        error = '会话已过期，请重新登录'
+
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
@@ -26,9 +32,18 @@ def login_view(request):
             login(request, user)
             next_url = request.GET.get('next', '/')
             return redirect(next_url)
-        error = '用户名或密码错误'
 
-    return render(request, 'accounts/login.html', {'error': error})
+        # 密码正确但账户被禁用 → 明确提示；其他情况一律模糊提示（防止用户名探测）
+        try:
+            candidate = User.objects.get(username=username)
+            if not candidate.is_active and candidate.check_password(password):
+                error = '该账户已被禁用，请联系管理员'
+            else:
+                error = '用户名或密码错误'
+        except User.DoesNotExist:
+            error = '用户名或密码错误'
+
+    return render(request, 'accounts/login.html', {'error': error, 'username': username})
 
 
 def logout_view(request):
@@ -36,11 +51,17 @@ def logout_view(request):
     return redirect('accounts:login')
 
 
+def csrf_failure_view(request, reason=''):
+    """CSRF 校验失败时的友好处理：清理 session 并跳回登录页并提示"""
+    logout(request)
+    return redirect('/accounts/login/?msg=session_expired')
+
+
 # ─── 用户管理 ──────────────────────────────────────────────
 
 @login_required
 def user_list(request):
-    if not _is_admin(request.user):
+    if not is_admin_user(request.user):
         return render(request, 'accounts/forbidden.html', status=403)
 
     users = User.objects.select_related('profile').order_by('-date_joined')
@@ -50,7 +71,7 @@ def user_list(request):
 @login_required
 @require_POST
 def user_create(request):
-    if not _is_admin(request.user):
+    if not is_admin_user(request.user):
         return JsonResponse({'error': '无权限'}, status=403)
 
     username = request.POST.get('username', '').strip()
@@ -71,7 +92,7 @@ def user_create(request):
 @login_required
 @require_POST
 def user_update(request, user_id):
-    if not _is_admin(request.user):
+    if not is_admin_user(request.user):
         return JsonResponse({'error': '无权限'}, status=403)
 
     target = get_object_or_404(User, pk=user_id)
@@ -97,7 +118,7 @@ def user_update(request, user_id):
 @login_required
 @require_POST
 def user_delete(request, user_id):
-    if not _is_admin(request.user):
+    if not is_admin_user(request.user):
         return JsonResponse({'error': '无权限'}, status=403)
 
     target = get_object_or_404(User, pk=user_id)
@@ -111,7 +132,7 @@ def user_delete(request, user_id):
 
 @login_required
 def permission_list(request):
-    if not _is_admin(request.user):
+    if not is_admin_user(request.user):
         return render(request, 'accounts/forbidden.html', status=403)
 
     permissions = UserModulePermission.objects.select_related('user', 'cluster').all()
@@ -129,7 +150,7 @@ def permission_list(request):
 @login_required
 @require_POST
 def permission_create(request):
-    if not _is_admin(request.user):
+    if not is_admin_user(request.user):
         return JsonResponse({'error': '无权限'}, status=403)
 
     user_id = request.POST.get('user_id')
@@ -158,7 +179,7 @@ def permission_create(request):
 @login_required
 @require_POST
 def permission_delete(request, perm_id):
-    if not _is_admin(request.user):
+    if not is_admin_user(request.user):
         return JsonResponse({'error': '无权限'}, status=403)
 
     perm = get_object_or_404(UserModulePermission, pk=perm_id)
@@ -190,10 +211,3 @@ def profile_view(request):
     return render(request, 'accounts/profile.html', {'profile': profile})
 
 
-# ─── 辅助函数 ──────────────────────────────────────────────
-
-def _is_admin(user):
-    profile = getattr(user, 'profile', None)
-    if profile:
-        return profile.is_admin()
-    return user.is_superuser
