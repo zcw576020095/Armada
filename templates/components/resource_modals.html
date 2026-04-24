@@ -65,12 +65,11 @@
 
 <!-- Delete Confirm Modal -->
 <dialog id="deleteModal" class="modal">
-  <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl" x-data="{ confirmInput: '' }" @open-delete-modal.window="
+  <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl" x-data @open-delete-modal.window="
     $el.querySelector('#deleteResourceType').textContent = $event.detail.type;
     $el.querySelector('#deleteResourceName').textContent = $event.detail.name;
     $el.querySelector('#deleteResourceNs').textContent = $event.detail.namespace || '';
     $el.dataset.deleteUrl = $event.detail.deleteUrl;
-    confirmInput = '';
     deleteModal.showModal();
   ">
     <div class="flex items-center gap-3 mb-5">
@@ -82,23 +81,16 @@
         <p class="text-xs opacity-50 mt-0.5">此操作不可撤销，请谨慎操作</p>
       </div>
     </div>
-    <div class="space-y-4">
-      <div class="bg-error/5 border border-error/15 rounded-xl p-4 space-y-2.5">
-        <div class="flex items-center gap-3"><span class="text-[11px] opacity-40 w-14">类型</span> <span id="deleteResourceType" class="font-semibold text-sm"></span></div>
-        <div class="flex items-center gap-3"><span class="text-[11px] opacity-40 w-14">名称</span> <span id="deleteResourceName" class="font-bold text-sm text-error font-mono"></span></div>
-        <div class="flex items-center gap-3" x-show="$el.closest('.modal-box').querySelector('#deleteResourceNs').textContent">
-          <span class="text-[11px] opacity-40 w-14">命名空间</span> <span id="deleteResourceNs" class="font-medium text-sm"></span>
-        </div>
-      </div>
-      <div>
-        <label class="block text-xs font-medium opacity-50 mb-2">请输入资源名称以确认删除</label>
-        <input type="text" x-model="confirmInput" class="input input-bordered w-full h-10 focus:input-error text-sm rounded-lg" placeholder="输入资源名称..." autocomplete="off">
+    <div class="bg-error/5 border border-error/15 rounded-xl p-4 space-y-2.5">
+      <div class="flex items-center gap-3"><span class="text-[11px] opacity-40 w-14">类型</span> <span id="deleteResourceType" class="font-semibold text-sm"></span></div>
+      <div class="flex items-center gap-3"><span class="text-[11px] opacity-40 w-14">名称</span> <span id="deleteResourceName" class="font-bold text-sm text-error font-mono break-all"></span></div>
+      <div class="flex items-center gap-3" x-show="$el.closest('.modal-box').querySelector('#deleteResourceNs').textContent">
+        <span class="text-[11px] opacity-40 w-14">命名空间</span> <span id="deleteResourceNs" class="font-medium text-sm"></span>
       </div>
     </div>
     <div class="modal-action mt-6 gap-2.5">
       <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="deleteModal.close()">取消</button>
-      <button class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-30 disabled:shadow-none disabled:hover:scale-100"
-        :disabled="confirmInput !== $el.closest('.modal-box').querySelector('#deleteResourceName').textContent"
+      <button class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105"
         @click="
           fetch($el.closest('.modal-box').dataset.deleteUrl, {
             method: 'POST',
