@@ -21,6 +21,11 @@
 ### 修复
 - **用户管理 - 编辑按钮无响应**：`openEditUser` 使用了 Alpine.js v2 的私有属性 `__x.$data`，但项目实际使用的是 Alpine v3（该属性已移除），导致点击编辑按钮静默抛 `TypeError`。改为 v3 公开 API `Alpine.$data(el)`
 - **用户管理 / 权限管理 - 删除按钮无响应、不弹框**：`{% include "components/resource_modals.html" %}` 位置错误地放在 `{% extends %}` 之后、`{% block content %}` 之外。Django 模板继承规则下 block 外的内容会被完全忽略，导致删除弹框 DOM 根本没被渲染，事件派发后无人监听。修复为将 include 移到 `{% block content %}` 内部
+- **资源列表自动刷新与状态保持**：
+  - 删除操作后除 1.5s 首轮 silent load 外，检测到 `Terminating` 资源时**每 5s 自动后台轮询**直到资源消失（最长 90s），无需手动 F5 —— 从点击删除到 Pod 彻底消失全程无人工干预
+  - 页面状态（命名空间筛选、搜索关键字、当前页码）写入 URL query，**刷新页面或分享链接时保持原位置**，不再跳回全量第 1 页
+  - 新增 `silent` 模式：自动刷新不闪骨架屏，右上角显示淡出的"🔄 刷新中"指示器；仅首次加载才展示骨架屏
+  - 分页越界保护：资源减少后当前页超出范围时自动回退到最后一页
 - **删除资源的状态反馈重做：显示真实 Terminating 状态，废弃墓碑机制**：
   - 原先的前端墓碑方案是"视觉欺骗"：删除后直接隐藏，但刷新页面/列表同步重新拉取后资源又出现，用户质疑"我到底删成功没？"
   - 改为与 kubectl 一致的行为：**后端同步时检测 `metadata.deletion_timestamp`**，若有则将 `status_phase` / `status` 标记为 `Terminating`；前端据此展示橙色徽章 + 旋转 spinner 图标

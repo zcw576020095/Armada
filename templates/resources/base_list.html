@@ -4,7 +4,7 @@
 {% block extra_head %}{% endblock %}
 
 {% block content %}
-<div class="card bg-base-100 border border-base-300" x-data="resourceList()" x-init="load()"
+<div class="card bg-base-100 border border-base-300" x-data="resourceList()" x-init="init()"
   @resource-updated.window="
     const d = $event.detail;
     if (d && d.action === 'delete') {
@@ -16,8 +16,9 @@
         markRemoved(d.name, d.namespace);
       }
     }
-    // 1.5s 后再拉一次后端数据做最终校验（后端已识别 deletion_timestamp 返回真实 Terminating 状态）
-    setTimeout(() => load(), 1500);
+    // 1.5s 后静默刷新拉后端真实数据（不闪骨架屏）；
+    // 若仍有 Terminating 资源会自动启动轮询，直到 Pod 真正从 API 消失
+    setTimeout(() => load({silent: true}), 1500);
   ">
   <div class="card-body p-5">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -30,7 +31,7 @@
       </div>
       <div class="flex items-center gap-2">
         <select x-show="namespaces.length > 0" x-cloak id="nsFilter" class="select select-bordered select-sm h-8 min-h-0 w-40 text-xs focus:select-primary"
-          x-model="nsFilter" @change="load()">
+          x-model="nsFilter" @change="page = 1; load({silent: true})">
           <option value="">全部命名空间</option>
           <template x-for="ns in namespaces" :key="ns">
             <option :value="ns" x-text="ns"></option>
@@ -38,6 +39,10 @@
         </select>
         <input type="text" id="searchInput" placeholder="搜索名称..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary"
           x-model="search" @input="page = 1">
+        <!-- 静默刷新指示器：自动刷新期间淡入 -->
+        <span x-show="refreshing" x-cloak class="text-[11px] text-primary flex items-center gap-1 opacity-70">
+          <i class="fas fa-sync-alt fa-spin text-[10px]"></i> 刷新中
+        </span>
         {% block extra_actions %}{% endblock %}
       </div>
     </div>
@@ -129,15 +134,38 @@
 {% block extra_js %}
 <script>
 function resourceList() {
+  const initialParams = new URLSearchParams(location.search);
+
   return {
-    loading: true,
+    loading: true,         // 首次加载 - 显示骨架屏
+    refreshing: false,     // 后台静默刷新 - 不闪骨架屏，右上角显示"刷新中"
     error: null,
     rows: [],
     namespaces: [],
-    nsFilter: new URLSearchParams(location.search).get('namespace') || '',
-    search: '',
-    page: 1,
+    nsFilter: initialParams.get('namespace') || '',
+    search: initialParams.get('search') || '',
+    page: parseInt(initialParams.get('page'), 10) || 1,
     pageSize: 20,
+    _pollTimer: null,
+    _pollDeadline: 0,
+
+    init() {
+      // URL 状态同步：search / page / nsFilter 变化时写回 URL（replaceState 不新增历史）
+      this.$watch('search', () => { this.page = 1; this._syncUrl(); });
+      this.$watch('page', () => this._syncUrl());
+      this.$watch('nsFilter', () => this._syncUrl());
+      this.load();
+    },
+
+    _syncUrl() {
+      const p = new URLSearchParams(location.search);
+      this.nsFilter ? p.set('namespace', this.nsFilter) : p.delete('namespace');
+      this.search ? p.set('search', this.search) : p.delete('search');
+      (this.page && this.page !== 1) ? p.set('page', this.page) : p.delete('page');
+      const qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    },
+
     get filteredRows() {
       if (!this.search) return this.rows;
       const q = this.search.toLowerCase();
@@ -150,10 +178,8 @@ function resourceList() {
       const start = (this.page - 1) * this.pageSize;
       return this.filteredRows.slice(start, start + this.pageSize);
     },
-    // 乐观更新：删除请求返回 success 后立即把该行状态改为 Terminating。
-    // 用于 Pod / Namespace 等有 K8s 优雅退出期的资源。
-    // 1.5s 后 load() 会用后端真实数据覆盖（后端已检测 deletion_timestamp，返回 Terminating）。
-    // 刷新页面也能看到正确状态（非临时前端状态），不再"欺骗"用户。
+
+    // 乐观更新：Pod / Namespace 删除后立即把该行改成 Terminating，与 kubectl 行为一致
     markTerminating(name, namespace) {
       const ns = namespace || '';
       this.rows = this.rows.map(r => {
@@ -163,29 +189,62 @@ function resourceList() {
         return r;
       });
     },
-    // 删除后立即从列表移除（用于 Deployment / Service / ConfigMap 等无优雅期的资源）
+    // 其他资源删除后立即从列表移除（K8s 无优雅期）
     markRemoved(name, namespace) {
       const ns = namespace || '';
       this.rows = this.rows.filter(r => !(r.name === name && (r.namespace || '') === ns));
     },
-    load() {
-      this.loading = true;
+
+    _hasTerminating() {
+      return this.rows.some(r => r.status_phase === 'Terminating' || r.status === 'Terminating');
+    },
+    // 检测到 Terminating 资源时启动 5s 一次的后台轮询，直到资源真正消失或 90s 超时
+    _startPolling() {
+      if (this._pollTimer) return;
+      this._pollDeadline = Date.now() + 90000;
+      const tick = () => {
+        if (Date.now() > this._pollDeadline || !this._hasTerminating()) {
+          this._stopPolling();
+          return;
+        }
+        this.load({silent: true}).finally(() => {
+          this._pollTimer = setTimeout(tick, 5000);
+        });
+      };
+      this._pollTimer = setTimeout(tick, 5000);
+    },
+    _stopPolling() {
+      if (this._pollTimer) clearTimeout(this._pollTimer);
+      this._pollTimer = null;
+    },
+
+    load(opts) {
+      const silent = !!(opts && opts.silent);
+      if (silent) this.refreshing = true;
+      else this.loading = true;
       this.error = null;
       const apiUrl = '{% block api_url %}{% endblock %}' + (this.nsFilter ? '?namespace=' + this.nsFilter : '');
-      fetch(apiUrl)
+      return fetch(apiUrl)
         .then(r => r.json())
         .then(data => {
-          if (data.error) { this.error = data.error; this.loading = false; return; }
+          if (data.error) { this.error = data.error; return; }
           this.rows = data.resources || data.namespaces || [];
           if (data.resources) this.rows = data.resources;
-          // 从实际资源中提取命名空间列表（只显示有资源的命名空间）
           if (!this.nsFilter && this.rows.length > 0) {
             const nsSet = new Set(this.rows.map(r => r.namespace).filter(Boolean));
             this.namespaces = [...nsSet].sort();
           }
-          this.loading = false;
+          // 分页越界保护：数据变少时自动回退到最后一页
+          if (this.page > this.totalPages) this.page = this.totalPages;
+          // 根据是否还有 Terminating 资源决定是否继续轮询
+          if (this._hasTerminating()) this._startPolling();
+          else this._stopPolling();
         })
-        .catch(e => { this.error = e.message; this.loading = false; });
+        .catch(e => { this.error = e.message; })
+        .finally(() => {
+          this.loading = false;
+          this.refreshing = false;
+        });
     }
   }
 }
