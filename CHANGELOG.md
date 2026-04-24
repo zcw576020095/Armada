@@ -16,10 +16,17 @@
 - 登录失败重填时自动聚焦到**密码框**，省一次 Tab
 - 简化通用删除确认弹框：除集群删除外，其他所有删除操作（用户、权限、K8s 资源）不再要求输入资源名称二次确认，仅展示资源信息 + 确认/取消按钮；**集群删除仍保留输入名称确认**（高危操作需双重保障）
 - 将 `_is_admin` 工具函数抽到 `accounts.models.is_admin_user`，供 views 与中间件共用
+- **全站集群下拉与集群列表按权限过滤**：普通用户不再看到自己未被授权的集群，避免点进去才被拒的糟糕体验（管理员不受影响，仍可见全部集群）
 
 ### 修复
 - **用户管理 - 编辑按钮无响应**：`openEditUser` 使用了 Alpine.js v2 的私有属性 `__x.$data`，但项目实际使用的是 Alpine v3（该属性已移除），导致点击编辑按钮静默抛 `TypeError`。改为 v3 公开 API `Alpine.$data(el)`
 - **用户管理 / 权限管理 - 删除按钮无响应、不弹框**：`{% include "components/resource_modals.html" %}` 位置错误地放在 `{% extends %}` 之后、`{% block content %}` 之外。Django 模板继承规则下 block 外的内容会被完全忽略，导致删除弹框 DOM 根本没被渲染，事件派发后无人监听。修复为将 include 移到 `{% block content %}` 内部
+- **权限系统多处漏拦（严重安全漏洞）**：原 `PermissionMiddleware` 只覆盖 `/resources/` 与 `/clusters/<pk>/nodes|node` 路径，以下场景全部漏拦，**任何登录用户都可访问**（包括被取消权限的用户）：
+  - 根路径 `/`（仪表盘）— 未做 `dashboard` 模块权限校验
+  - `/clusters/<pk>/` 详情、`/edit`、`/delete`、`/refresh`、`/prometheus`、`/metrics`、`/debug-prom` — 全部未做 `cluster` 模块校验
+  - `/clusters/add/` — 应仅管理员可访问，但普通用户也能添加集群
+  - `/clusters/<pk>/pod/<ns>/<name>/logs/` — 未做 `pod` 模块校验
+  - 重构中间件后逻辑变为白名单制：**管理员放行 → 个人页/登出放行 → 管理员专属拦截 → Dashboard 按集群级权限校验 → 集群/资源按 `(cluster_id, module)` 校验 → 其他默认放行**
 
 ---
 

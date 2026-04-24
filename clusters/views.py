@@ -1,3 +1,4 @@
+import logging
 import re
 import threading
 import yaml
@@ -9,24 +10,34 @@ from django.views.decorators.http import require_POST
 
 from .models import Cluster
 from .k8s_client import k8s_pool
+from .pod_logs import fetch_pod_logs
 from .prometheus import PrometheusClient
 
 
-def _parse_memory(mem_str: str) -> str:
-    """Convert K8s memory string (Ki/Mi/Gi/bytes) to human-readable GB/MB."""
+logger = logging.getLogger(__name__)
+
+
+def _parse_memory_bytes(mem_str: str) -> int:
+    """Convert K8s memory string (Ki/Mi/Gi/bytes) to bytes."""
     if not mem_str:
-        return '0'
+        return 0
     m = re.match(r'^(\d+)\s*(Ki|Mi|Gi|Ti|K|M|G|T)?$', mem_str)
     if not m:
-        return mem_str
+        return 0
     val = int(m.group(1))
     unit = m.group(2) or ''
-    # Convert to bytes first
     multipliers = {
         '': 1, 'K': 1000, 'M': 1000**2, 'G': 1000**3, 'T': 1000**4,
         'Ki': 1024, 'Mi': 1024**2, 'Gi': 1024**3, 'Ti': 1024**4,
     }
-    bytes_val = val * multipliers.get(unit, 1)
+    return val * multipliers.get(unit, 1)
+
+
+def _parse_memory(mem_str: str) -> str:
+    """Convert K8s memory string to human-readable GB/MB."""
+    bytes_val = _parse_memory_bytes(mem_str)
+    if bytes_val == 0:
+        return mem_str if (mem_str and not re.match(r'^\d', mem_str)) else '0'
     gb = bytes_val / (1024**3)
     if gb >= 1:
         return f'{gb:.0f} GB'
@@ -35,8 +46,17 @@ def _parse_memory(mem_str: str) -> str:
 
 
 def cluster_list(request):
-    clusters = Cluster.objects.all()
+    clusters = _visible_clusters(request.user)
     return render(request, 'clusters/list.html', {'clusters': clusters})
+
+
+def _visible_clusters(user):
+    """根据用户身份返回可见的集群：管理员看全部，普通用户只看自己有任一模块权限的集群"""
+    from accounts.models import is_admin_user, UserModulePermission
+    if is_admin_user(user):
+        return Cluster.objects.all()
+    visible_ids = UserModulePermission.objects.filter(user=user).values_list('cluster_id', flat=True).distinct()
+    return Cluster.objects.filter(pk__in=visible_ids)
 
 
 def cluster_add(request):
@@ -423,7 +443,11 @@ def node_drain(request, pk, node_name):
                     p.metadata.name, p.metadata.namespace, eviction, _request_timeout=5
                 )
                 evicted += 1
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    'Eviction failed for pod %s/%s on node %s: %s',
+                    p.metadata.namespace, p.metadata.name, node_name, e
+                )
                 skipped += 1
         return JsonResponse({'success': True, 'message': f'节点 {node_name} 已 Drain，驱逐 {evicted} 个 Pod，跳过 {skipped} 个'})
     except Exception as e:
@@ -445,37 +469,7 @@ def node_delete(request, pk, node_name):
 def pod_logs_api(request, pk, namespace, pod_name):
     """Fetch logs for a specific pod."""
     cluster = get_object_or_404(Cluster, pk=pk)
-    container = request.GET.get('container', '')
-    tail_lines = int(request.GET.get('tail_lines', 200))
-    previous = request.GET.get('previous', 'false') == 'true'
-    try:
-        core = k8s_pool.core_v1(cluster)
-
-        # Get pod to check containers if none specified
-        if not container:
-            pod = core.read_namespaced_pod(pod_name, namespace, _request_timeout=5)
-            if pod.spec.containers:
-                container = pod.spec.containers[0].name
-
-        kwargs = {
-            'name': pod_name,
-            'namespace': namespace,
-            'tail_lines': tail_lines,
-            '_request_timeout': 10
-        }
-        if previous:
-            kwargs['previous'] = True
-        if container:
-            kwargs['container'] = container
-
-        logs = core.read_namespaced_pod_log(**kwargs)
-        return JsonResponse({'success': True, 'logs': logs or '', 'container': container, 'previous': previous})
-    except Exception as e:
-        err_str = str(e)
-        # No previous logs available
-        if previous and ('previous terminated' in err_str.lower() or 'not found' in err_str.lower() or 'previous' in err_str.lower()):
-            return JsonResponse({'success': True, 'logs': '', 'container': container, 'previous': previous, 'no_previous': True})
-        return JsonResponse({'error': err_str}, status=500)
+    return fetch_pod_logs(cluster, namespace, pod_name, request.GET)
 
 
 def _refresh_cluster_info(cluster_pk):
@@ -519,22 +513,6 @@ def _parse_cpu_nano(cpu_str: str) -> float:
     if cpu_str.endswith('m'):
         return int(cpu_str[:-1]) / 1000.0
     return float(cpu_str)
-
-
-def _parse_memory_bytes(mem_str: str) -> int:
-    """Convert K8s memory string to bytes."""
-    if not mem_str:
-        return 0
-    m = re.match(r'^(\d+)\s*(Ki|Mi|Gi|Ti|K|M|G|T)?$', mem_str)
-    if not m:
-        return 0
-    val = int(m.group(1))
-    unit = m.group(2) or ''
-    multipliers = {
-        '': 1, 'K': 1000, 'M': 1000**2, 'G': 1000**3, 'T': 1000**4,
-        'Ki': 1024, 'Mi': 1024**2, 'Gi': 1024**3, 'Ti': 1024**4,
-    }
-    return val * multipliers.get(unit, 1)
 
 
 def _fetch_metrics_data(cluster):

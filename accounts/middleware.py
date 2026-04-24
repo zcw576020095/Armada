@@ -2,7 +2,7 @@ from django.utils.deprecation import MiddlewareMixin
 from django.http import JsonResponse
 from django.shortcuts import redirect
 
-from .models import UserProfile, UserModulePermission
+from .models import UserModulePermission, is_admin_user
 
 
 # 不需要登录的路径
@@ -14,8 +14,9 @@ LOGIN_EXEMPT_URLS = [
 
 # URL 路径 -> 模块映射
 # 格式: (路径前缀, 模块名)
+# 注意：顺序敏感 —— 匹配时按顺序 startswith，更具体的路径必须放在更宽泛的路径前面
 MODULE_MAPPING = [
-    # resources 模块
+    # resources 模块（资源列表页）
     ('/resources/{pk}/namespaces/', 'namespace'),
     ('/resources/{pk}/deployments/', 'deployment'),
     ('/resources/{pk}/statefulsets/', 'statefulset'),
@@ -26,7 +27,8 @@ MODULE_MAPPING = [
     ('/resources/{pk}/configmaps/', 'configmap'),
     ('/resources/{pk}/secrets/', 'secret'),
     ('/resources/{pk}/pvcs/', 'pvc'),
-    # yaml/delete 通用 API
+    # yaml/delete 通用 API（更长的路径放前面防止误匹配，如 persistentvolumeclaim 前缀比 pod 长）
+    ('/resources/{pk}/yaml/persistentvolumeclaim', 'pvc'),
     ('/resources/{pk}/yaml/namespace', 'namespace'),
     ('/resources/{pk}/yaml/deployment', 'deployment'),
     ('/resources/{pk}/yaml/statefulset', 'statefulset'),
@@ -36,7 +38,7 @@ MODULE_MAPPING = [
     ('/resources/{pk}/yaml/ingress', 'ingress'),
     ('/resources/{pk}/yaml/configmap', 'configmap'),
     ('/resources/{pk}/yaml/secret', 'secret'),
-    ('/resources/{pk}/yaml/persistentvolumeclaim', 'pvc'),
+    ('/resources/{pk}/delete/persistentvolumeclaim', 'pvc'),
     ('/resources/{pk}/delete/namespace', 'namespace'),
     ('/resources/{pk}/delete/deployment', 'deployment'),
     ('/resources/{pk}/delete/statefulset', 'statefulset'),
@@ -46,10 +48,14 @@ MODULE_MAPPING = [
     ('/resources/{pk}/delete/ingress', 'ingress'),
     ('/resources/{pk}/delete/configmap', 'configmap'),
     ('/resources/{pk}/delete/secret', 'secret'),
-    ('/resources/{pk}/delete/persistentvolumeclaim', 'pvc'),
-    # 集群和节点
+    # 集群下的节点管理
     ('/clusters/{pk}/nodes/', 'node'),
     ('/clusters/{pk}/node/', 'node'),
+    # 集群下的 Pod 日志 API（归属 pod 模块）
+    ('/clusters/{pk}/pod/', 'pod'),
+    # 集群管理本身 —— 必须放在最后，作为 /clusters/{pk}/ 下所有未命中的路径的 fallback
+    # 匹配：/clusters/{pk}/ 详情、/edit、/delete、/refresh、/prometheus、/debug-prom、/metrics
+    ('/clusters/{pk}/', 'cluster'),
 ]
 
 # 写操作关键词
@@ -77,34 +83,67 @@ class LoginRequiredMiddleware(MiddlewareMixin):
 class PermissionMiddleware(MiddlewareMixin):
     """模块级权限拦截"""
 
+    # 管理员专属路径（普通用户拒绝）
+    ADMIN_ONLY_PATHS = (
+        '/accounts/users/',
+        '/accounts/permissions/',
+        '/clusters/add/',
+    )
+
+    # 登录即可、不做权限校验的路径
+    PUBLIC_AUTH_PATHS = (
+        '/accounts/profile/',
+        '/accounts/logout/',
+    )
+
     def process_request(self, request):
         if not request.user.is_authenticated:
             return None
 
-        # 管理员跳过
-        if _is_admin(request.user):
+        # 管理员跳过所有权限校验
+        if is_admin_user(request.user):
             return None
 
         path = request.path
 
-        # 只拦截 /resources/ 和 /clusters/<pk>/nodes|node|metrics 路径
-        if not path.startswith('/resources/') and not self._is_cluster_module_path(path):
-            # 拦截用户管理和权限管理（只有管理员能访问）
-            if path.startswith('/accounts/users/') or path.startswith('/accounts/permissions/'):
-                return _deny(request, '仅管理员可访问')
+        # 1. 登录即可访问的路径（个人设置、登出）
+        if any(path.startswith(p) for p in self.PUBLIC_AUTH_PATHS):
             return None
 
-        # 提取集群 ID
+        # 2. 管理员专属：用户管理、权限管理、添加集群
+        if any(path.startswith(p) for p in self.ADMIN_ONLY_PATHS):
+            return _deny(request, '该功能仅管理员可访问')
+
+        # 3. Dashboard（根路径 /）—— 需要对任一集群有 dashboard 模块权限
+        if path == '/':
+            has_dashboard = UserModulePermission.objects.filter(
+                user=request.user, module='dashboard',
+            ).exists()
+            if not has_dashboard:
+                return _deny(request, '无权访问「仪表盘」模块')
+            return None
+
+        # 4. 集群列表页 /clusters/ —— 放行（view 自行过滤展示范围）
+        if path == '/clusters/':
+            return None
+
+        # 5. 集群切换 /clusters/<pk>/select/ —— 放行（仅改 session，不泄露数据）
+        if path.startswith('/clusters/') and path.endswith('/select/'):
+            return None
+
+        # 6. 非 /resources/ 与 /clusters/ 的路径（兜底放行）
+        if not path.startswith('/resources/') and not path.startswith('/clusters/'):
+            return None
+
+        # 7. 进入按 cluster_id + module 细粒度权限校验
         cluster_id = self._extract_cluster_id(path)
         if not cluster_id:
             return None
 
-        # 识别模块
         module = self._resolve_module(path, cluster_id)
         if not module:
             return None
 
-        # 查询用户对该集群该模块的权限
         perm = UserModulePermission.objects.filter(
             user=request.user,
             cluster_id=cluster_id,
@@ -114,27 +153,16 @@ class PermissionMiddleware(MiddlewareMixin):
         if not perm:
             return _deny(request, f'无权访问「{self._module_label(module)}」模块')
 
-        # 判断操作类型
-        is_write = self._is_write_action(request, path)
-
-        if is_write and not perm.can_edit():
+        # 写操作需要 edit 权限
+        if self._is_write_action(request, path) and not perm.can_edit():
             return _deny(request, f'无权编辑「{self._module_label(module)}」模块，当前仅有查看权限')
 
         # 注入权限信息供模板使用
         request.user_can_edit = perm.can_edit()
-        request.user_can_delete = perm.can_edit()  # 编辑权限包含删除
+        request.user_can_delete = perm.can_edit()
         request.current_module = module
 
         return None
-
-    def _is_cluster_module_path(self, path):
-        """判断是否是集群模块路径（节点管理、metrics）"""
-        if not path.startswith('/clusters/'):
-            return False
-        parts = path.strip('/').split('/')
-        if len(parts) >= 3:
-            return parts[2] in ('nodes', 'node', 'metrics')
-        return False
 
     def _extract_cluster_id(self, path):
         """从路径中提取集群 ID"""
@@ -168,17 +196,10 @@ class PermissionMiddleware(MiddlewareMixin):
         return module
 
 
-def _is_admin(user):
-    profile = getattr(user, 'profile', None)
-    if profile:
-        return profile.is_admin()
-    return user.is_superuser
-
-
 def _is_ajax(request):
-    return request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
-           request.content_type == 'application/json' or \
-           request.method == 'POST'
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest' \
+        or request.content_type == 'application/json' \
+        or request.headers.get('Accept', '').startswith('application/json')
 
 
 def _deny(request, message):
