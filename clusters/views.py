@@ -245,6 +245,13 @@ def cluster_delete(request, pk):
         messages.error(request, '集群名称不匹配，删除取消')
         return redirect('clusters:detail', pk=pk)
 
+    # 停止该集群的后台同步线程，否则线程会持续尝试拉取已删除的集群
+    try:
+        from resources.sync_service import stop_sync_for_cluster
+        stop_sync_for_cluster(cluster.pk)
+    except Exception as e:
+        logger.error(f'Failed to stop sync thread for cluster {cluster.name}: {e}')
+
     k8s_pool.remove_client(cluster.id)
     cluster_name = str(cluster)
     cluster.delete()
@@ -501,6 +508,16 @@ def _refresh_cluster_info(cluster_pk):
     except Exception:
         cluster.status = 'offline'
     cluster.save()
+
+    # 集群上线后立即启动后台同步线程（如果尚未在跑）。
+    # 这是新增/编辑集群后能看到资源列表的关键 —— 否则只有 Django 重启时才会同步新集群。
+    if cluster.status == 'online':
+        try:
+            from resources.sync_service import start_sync_for_cluster
+            start_sync_for_cluster(cluster)
+        except Exception as e:
+            logger.error(f'Failed to start sync thread for cluster {cluster.name}: {e}')
+
     connection.close()
 
 

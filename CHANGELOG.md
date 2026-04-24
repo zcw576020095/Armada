@@ -21,6 +21,7 @@
 ### 修复
 - **用户管理 - 编辑按钮无响应**：`openEditUser` 使用了 Alpine.js v2 的私有属性 `__x.$data`，但项目实际使用的是 Alpine v3（该属性已移除），导致点击编辑按钮静默抛 `TypeError`。改为 v3 公开 API `Alpine.$data(el)`
 - **用户管理 / 权限管理 - 删除按钮无响应、不弹框**：`{% include "components/resource_modals.html" %}` 位置错误地放在 `{% extends %}` 之后、`{% block content %}` 之外。Django 模板继承规则下 block 外的内容会被完全忽略，导致删除弹框 DOM 根本没被渲染，事件派发后无人监听。修复为将 include 移到 `{% block content %}` 内部
+- **新增集群后资源永远不显示（致命）**：`resources/apps.py:ready()` 仅在 Django 启动时一次性扫描 `status='online'` 的集群并启动各自的同步线程，**通过 Web 界面新加的集群永远不会被纳入同步**，必须重启 Django 才能看到资源 —— 这就是用户反馈"导入集群 20 分钟后 Deployment / Namespace 等仍为空"的原因。修复：在 `_refresh_cluster_info` 中检测到集群上线时立即调用 `start_sync_for_cluster`（重复调用安全，内部有 `is_alive()` 判断）。同时 `cluster_delete` 调用 `stop_sync_for_cluster` 清理线程，避免被删除集群的同步线程持续报错
 - **添加权限功能完全不可用（致命）**：权限管理页的新增表单存在多处字段不对齐，以及集群字段是文本输入（没法选择集群）
   - `name="user"` vs 后端 `user_id` → 用户 ID 丢失
   - `name="cluster"`（文本输入 + 让用户手打）vs 后端 `cluster_id` → 集群 ID 丢失
