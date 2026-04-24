@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}编辑集群 - {{ cluster }} - Armada{% endblock %}
+{% block page_title %}编辑集群{% endblock %}
+{% block breadcrumb %}<li><a href="{% url 'clusters:list' %}">集群列表</a></li><li><a href="{% url 'clusters:detail' cluster.pk %}">{{ cluster }}</a></li><li>编辑</li>{% endblock %}
+
+{% block extra_head %}
+<style>
+  .form-card {
+    position: relative; overflow: hidden;
+    border-radius: 0.75rem; padding: 1.25rem;
+    border: 1px solid oklch(var(--bc) / 0.08);
+    background: oklch(var(--b1));
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .form-card-blue { border-color: rgba(59,130,246,0.12); background: linear-gradient(135deg, #1e2a4a, #172040); }
+  .form-card-amber { border-color: rgba(245,158,11,0.12); background: linear-gradient(135deg, #2a2415, #221c10); }
+  [data-theme="light"] .form-card-blue { background: linear-gradient(135deg, #eff6ff, #dbeafe); border-color: rgba(59,130,246,0.15); }
+  [data-theme="light"] .form-card-amber { background: linear-gradient(135deg, #fffbeb, #fef3c7); border-color: rgba(245,158,11,0.15); }
+  .form-card-header {
+    display: flex; align-items: center; gap: 0.5rem;
+    margin-bottom: 1rem; font-size: 0.75rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl" x-data="{ tab: 'file' }">
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-error text-sm border border-error/20 mb-5">
+    <i class="fas fa-exclamation-circle text-sm"></i>
+    <span>{{ message }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <!-- 基本信息 -->
+    <div class="form-card form-card-blue mb-4">
+      <div class="form-card-header">
+        <i class="fas fa-info-circle text-blue-400"></i> 基本信息
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium opacity-50 mb-1.5">集群名称</label>
+          <input type="text" value="{{ cluster.name }}" class="input input-bordered input-sm w-full h-10 opacity-50" disabled>
+          <p class="text-[10px] opacity-30 mt-1">集群名称创建后不可修改</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium opacity-50 mb-1.5">显示名称</label>
+            <input type="text" name="display_name" value="{{ cluster.display_name }}" class="input input-bordered input-sm w-full h-10 focus:input-primary" placeholder="例如：生产集群 01">
+          </div>
+          <div>
+            <label class="block text-xs font-medium opacity-50 mb-1.5">Prometheus 地址</label>
+            <input type="text" name="prometheus_url" value="{{ cluster.prometheus_url }}" class="input input-bordered input-sm w-full h-10 focus:input-primary" placeholder="http://prometheus:9090">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium opacity-50 mb-1.5">描述</label>
+          <textarea name="description" class="textarea textarea-bordered w-full focus:textarea-primary text-sm" rows="2" placeholder="可选">{{ cluster.description }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- 更新 Kubeconfig -->
+    <div class="form-card form-card-amber mb-4">
+      <div class="form-card-header">
+        <i class="fas fa-key text-amber-400"></i> 更新 Kubeconfig（可选）
+      </div>
+      <p class="text-xs opacity-40 mb-3">如果不需要更新 Kubeconfig，留空即可。上传新的将覆盖原有配置。</p>
+
+      <div role="tablist" class="tabs tabs-boxed bg-base-200 p-1 mb-3 w-fit">
+        <a role="tab" class="tab tab-sm text-xs" :class="tab === 'file' && 'tab-active'" @click="tab = 'file'">
+          <i class="fas fa-file-upload mr-1.5 text-[10px]"></i> 上传文件
+        </a>
+        <a role="tab" class="tab tab-sm text-xs" :class="tab === 'paste' && 'tab-active'" @click="tab = 'paste'">
+          <i class="fas fa-paste mr-1.5 text-[10px]"></i> 粘贴 YAML
+        </a>
+      </div>
+
+      <div x-show="tab === 'file'" x-transition>
+        <input type="file" name="kubeconfig_file" class="file-input file-input-bordered file-input-sm file-input-primary w-full h-10" accept=".yaml,.yml,.conf,.config">
+      </div>
+      <div x-show="tab === 'paste'" x-transition>
+        <textarea name="kubeconfig_text" class="textarea textarea-bordered focus:textarea-primary w-full font-mono text-xs" rows="8" placeholder="粘贴新的 Kubeconfig YAML..."></textarea>
+      </div>
+    </div>
+
+    <!-- 操作 -->
+    <div class="flex justify-between items-center">
+      <a href="{% url 'clusters:detail' cluster.pk %}" class="btn btn-ghost btn-sm h-9 min-h-0 text-xs">
+        <i class="fas fa-arrow-left text-[10px] mr-1"></i> 返回
+      </a>
+      <button type="submit" class="btn btn-primary btn-sm h-9 min-h-0 px-5 text-xs">
+        <i class="fas fa-check text-[10px] mr-1"></i> 保存修改
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}个人设置 - Armada{% endblock %}
+{% block page_title %}个人设置{% endblock %}
+{% block breadcrumb %}<li>个人设置</li>{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl" x-data="profileForm()">
+  <!-- 用户信息头部 -->
+  <div class="card bg-base-100 border border-base-300 mb-5">
+    <div class="card-body p-5">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center flex-shrink-0">
+          <span class="text-xl font-semibold text-white leading-none mt-px">{{ request.user.username|make_list|first|upper }}</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="text-lg font-semibold">{{ request.user.username }}</h3>
+          <div class="flex items-center gap-3 mt-1 text-sm opacity-50">
+            {% if profile.get_role_display %}
+            <span>{{ profile.get_role_display }}</span>
+            {% endif %}
+            {% if profile.department %}
+            <span class="before:content-['·'] before:mr-3">{{ profile.department }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="text-right text-xs opacity-40 hidden sm:block">
+          <div>注册于 {{ request.user.date_joined|date:"Y-m-d" }}</div>
+          <div class="mt-0.5">上次登录 {{ request.user.last_login|date:"Y-m-d H:i"|default:"-" }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div x-show="toast" x-transition:enter="transition ease-out duration-200" x-transition:leave="transition ease-in duration-150" x-cloak
+    class="alert mb-4 border text-sm"
+    :class="toastType === 'success' ? 'alert-success border-success/20' : 'alert-error border-error/20'">
+    <i class="text-sm" :class="toastType === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'"></i>
+    <span x-text="toastMsg"></span>
+  </div>
+
+  <form @submit.prevent="submit()">
+    {% csrf_token %}
+
+    <!-- 基本信息 -->
+    <div class="card bg-base-100 border border-base-300 mb-5">
+      <div class="card-body p-5">
+        <h3 class="text-sm font-semibold opacity-70 uppercase tracking-wide mb-4">基本信息</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium opacity-60 mb-1.5">手机号</label>
+            <input type="text" name="phone" value="{{ profile.phone }}" class="input input-bordered input-sm w-full h-10 focus:input-primary" placeholder="选填">
+          </div>
+          <div>
+            <label class="block text-sm font-medium opacity-60 mb-1.5">部门</label>
+            <input type="text" name="department" value="{{ profile.department }}" class="input input-bordered input-sm w-full h-10 focus:input-primary" placeholder="选填">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 修改密码 -->
+    <div class="card bg-base-100 border border-base-300 mb-5">
+      <div class="card-body p-5">
+        <h3 class="text-sm font-semibold opacity-70 uppercase tracking-wide mb-4">修改密码</h3>
+        <div class="max-w-sm">
+          <label class="block text-sm font-medium opacity-60 mb-1.5">新密码</label>
+          <input type="password" name="new_password" class="input input-bordered input-sm w-full h-10 focus:input-primary" placeholder="留空则不修改">
+          <p class="text-xs opacity-40 mt-1.5">至少 6 个字符</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 保存 -->
+    <div class="flex justify-end">
+      <button type="submit" class="btn btn-primary btn-sm h-9 px-5 gap-1.5" :disabled="submitting">
+        <span x-show="!submitting"><i class="fas fa-check text-xs"></i> 保存修改</span>
+        <span x-show="submitting" class="flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span> 保存中...</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function profileForm() {
+  return {
+    submitting: false,
+    toast: false,
+    toastMsg: '',
+    toastType: 'success',
+    showToast(msg, type) {
+      this.toastMsg = msg;
+      this.toastType = type;
+      this.toast = true;
+      setTimeout(() => { this.toast = false; }, 3000);
+    },
+    submit() {
+      this.submitting = true;
+      this.toast = false;
+      const form = this.$el.closest('form') || this.$el.querySelector('form') || document.querySelector('form');
+      const fd = new FormData(form);
+
+      fetch('{% url "accounts:profile" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': fd.get('csrfmiddlewaretoken') },
+        body: fd
+      })
+      .then(r => {
+        this.submitting = false;
+        if (r.ok || r.redirected) {
+          this.showToast('个人资料已保存成功', 'success');
+        } else {
+          this.showToast('保存失败，请稍后重试', 'error');
+        }
+      })
+      .catch(() => {
+        this.submitting = false;
+        this.showToast('网络错误，请检查连接', 'error');
+      });
+    }
+  }
+}
+</script>
+{% endblock %}

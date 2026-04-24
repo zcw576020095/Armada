@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 - Armada{% endblock %}
+{% block page_title %}用户管理{% endblock %}
+{% block breadcrumb %}<li>用户管理</li>{% endblock %}
+
+{% include "components/resource_modals.html" %}
+{% block content %}
+<div class="card bg-base-100 border border-base-300">
+  <div class="card-body p-5">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="flex items-center gap-3">
+        <h3 class="text-xl font-bold flex items-center gap-2 text-base-content/80">
+          <i class="fas fa-users-cog text-violet-500"></i>
+          用户列表
+        </h3>
+        <span class="px-3 py-1 rounded-full bg-violet-500 text-white text-sm font-bold">{{ users|length }}</span>
+      </div>
+      <button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="document.getElementById('createUserModal').showModal()">
+        <i class="fas fa-plus text-[10px]"></i> 新建用户
+      </button>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr class="border-b border-base-300">
+            <th class="font-semibold text-xs">用户名</th>
+            <th class="font-semibold text-xs">角色</th>
+            <th class="font-semibold text-xs">部门</th>
+            <th class="font-semibold text-xs">状态</th>
+            <th class="font-semibold text-xs">注册时间</th>
+            <th class="font-semibold text-xs">最后登录</th>
+            <th class="font-semibold text-xs">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr class="hover:bg-base-200/50 border-b border-base-300/50">
+            <td>
+              <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500/20 to-violet-500/20 flex items-center justify-center">
+                  <span class="text-[10px] font-semibold text-primary">{{ u.username|make_list|first|upper }}</span>
+                </div>
+                <span class="font-mono text-xs font-medium">{{ u.username }}</span>
+              </div>
+            </td>
+            <td>
+              {% if u.profile.role == 'admin' %}
+              <span class="badge badge-xs badge-primary gap-1"><i class="fas fa-crown text-[8px]"></i> 管理员</span>
+              {% else %}
+              <span class="badge badge-xs badge-ghost">普通用户</span>
+              {% endif %}
+            </td>
+            <td class="text-xs opacity-70">{{ u.profile.department|default:"-" }}</td>
+            <td>
+              {% if u.is_active %}
+              <span class="badge badge-xs badge-success">正常</span>
+              {% else %}
+              <span class="badge badge-xs badge-error">禁用</span>
+              {% endif %}
+            </td>
+            <td class="text-xs opacity-70">{{ u.date_joined|date:"Y-m-d H:i" }}</td>
+            <td class="text-xs opacity-70">{{ u.last_login|date:"Y-m-d H:i"|default:"-" }}</td>
+            <td>
+              <div class="flex gap-1 flex-nowrap">
+                <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" onclick="openEditUser({{ u.pk }}, '{{ u.username }}', '{{ u.profile.role|default:"user" }}', '{{ u.profile.department|default:"" }}', {{ u.is_active|yesno:"true,false" }})">
+                  <i class="fas fa-edit text-[10px]"></i> 编辑
+                </button>
+                {% if u != request.user %}
+                <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" onclick="deleteUser({{ u.pk }}, '{{ u.username }}')">
+                  <i class="fas fa-trash-alt text-[10px]"></i>
+                </button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 创建用户模态框 -->
+<dialog id="createUserModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-primary/20 rounded-2xl shadow-2xl">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-user-plus text-lg text-primary"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base">新建用户</h3>
+        <p class="text-xs opacity-50 mt-0.5">创建系统用户账户</p>
+      </div>
+    </div>
+    <form method="POST" action="{% url 'accounts:user_create' %}" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">用户名</label>
+        <input type="text" name="username" class="input input-bordered w-full h-10 text-sm rounded-lg focus:input-primary" placeholder="输入用户名" required />
+      </div>
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">密码</label>
+        <input type="password" name="password" class="input input-bordered w-full h-10 text-sm rounded-lg focus:input-primary" placeholder="输入密码" required />
+      </div>
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">角色</label>
+        <select name="role" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary">
+          <option value="user">普通用户</option>
+          <option value="admin">管理员</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">部门</label>
+        <input type="text" name="department" class="input input-bordered w-full h-10 text-sm rounded-lg focus:input-primary" placeholder="输入部门名称" />
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="createUserModal.close()">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105">
+          <i class="fas fa-check text-[10px]"></i> 创建
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- 编辑用户模态框 -->
+<dialog id="editUserModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-primary/20 rounded-2xl shadow-2xl">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-user-edit text-lg text-primary"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base">编辑用户</h3>
+        <p class="text-xs opacity-50 mt-0.5">修改用户账户信息</p>
+      </div>
+    </div>
+    <div x-data="{ userId: null, username: '', role: 'user', department: '', is_active: true, password: '', submitting: false }">
+      <form @submit.prevent="
+        submitting = true;
+        fetch(`/accounts/users/${userId}/update/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify({
+            role: role,
+            department: department,
+            is_active: is_active,
+            password: password
+          })
+        })
+        .then(r => r.json())
+        .then(d => { if(d.success) location.reload(); else showToast(d.error, 'error'); submitting=false; })
+        .catch(e => { showToast(e, 'error'); submitting=false; });
+      " class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium opacity-50 mb-2">用户名</label>
+          <input type="text" x-model="username" class="input input-bordered w-full h-10 text-sm rounded-lg opacity-50" disabled />
+        </div>
+        <div>
+          <label class="block text-xs font-medium opacity-50 mb-2">新密码</label>
+          <input type="password" x-model="password" class="input input-bordered w-full h-10 text-sm rounded-lg focus:input-primary" placeholder="留空则不修改密码" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium opacity-50 mb-2">角色</label>
+          <select x-model="role" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary">
+            <option value="user">普通用户</option>
+            <option value="admin">管理员</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium opacity-50 mb-2">部门</label>
+          <input type="text" x-model="department" class="input input-bordered w-full h-10 text-sm rounded-lg focus:input-primary" placeholder="输入部门名称" />
+        </div>
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-3">
+            <input type="checkbox" x-model="is_active" class="checkbox checkbox-primary checkbox-sm" />
+            <span class="text-sm font-medium">账户启用</span>
+          </label>
+        </div>
+        <div class="modal-action mt-6 gap-2.5">
+          <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="editUserModal.close()">取消</button>
+          <button type="submit" class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" :disabled="submitting">
+            <i class="fas fa-check text-[10px]"></i> 保存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{% csrf_token %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function openEditUser(id, username, role, department, isActive) {
+  const modal = document.getElementById('editUserModal');
+  const scope = modal.querySelector('[x-data]').__x.$data;
+  scope.userId = id;
+  scope.username = username;
+  scope.role = role;
+  scope.department = department;
+  scope.is_active = isActive;
+  scope.password = '';
+  scope.submitting = false;
+  editUserModal.showModal();
+}
+
+function deleteUser(id, username) {
+  window.dispatchEvent(new CustomEvent('open-delete-modal', {
+    detail: {
+      type: '用户',
+      name: username,
+      deleteUrl: `/accounts/users/${id}/delete/`
+    }
+  }));
+}
+</script>
+{% endblock %}

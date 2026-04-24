@@ -1,0 +1,37 @@
+{% extends "resources/base_list.html" %}
+
+{% block title %}Ingresses - {{ cluster }} - Armada{% endblock %}
+{% block page_title %}Ingresses{% endblock %}
+{% block breadcrumb %}<li><a href="{% url 'clusters:detail' cluster.pk %}">{{ cluster }}</a></li><li>Ingresses</li>{% endblock %}
+{% block resource_icon %}globe{% endblock %}
+{% block resource_title %}Ingresses{% endblock %}
+{% block api_url %}{% url 'resources:ingresses_api' cluster.pk %}{% endblock %}
+
+{% block table_headers %}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">命名空间</th>
+<th class="font-semibold text-xs">Ingress Class</th>
+<th class="font-semibold text-xs">规则</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">操作</th>
+{% endblock %}
+
+{% block table_row %}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="r.namespace"></span></span></td>
+  <td><span class="badge badge-xs badge-primary" x-text="r.class_name"></span></td>
+  <td class="text-xs opacity-70 max-w-80 truncate" :title="r.rules_str" x-text="r.rules_str"></td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td>
+    <div class="flex gap-1 flex-nowrap">
+      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('Ingress: ' + r.name, '/resources/{{ cluster.pk }}/yaml/ingress/' + r.namespace + '/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
+        <i class="fas fa-file-code text-[10px]"></i> YAML
+      </button>
+      <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Ingress', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{ cluster.pk }}/delete/ingress/' + r.namespace + '/' + r.name + '/'}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-trash-alt text-[10px]"></i>
+      </button>
+    </div>
+  </td>
+</tr>
+{% endblock %}

@@ -1,0 +1,214 @@
+{% extends "resources/base_list.html" %}
+
+{% block title %}Pods - {{ cluster }} - Armada{% endblock %}
+{% block page_title %}Pods{% endblock %}
+{% block breadcrumb %}<li><a href="{% url 'clusters:detail' cluster.pk %}">{{ cluster }}</a></li><li>Pods</li>{% endblock %}
+{% block resource_icon %}cubes{% endblock %}
+{% block resource_title %}Pods{% endblock %}
+{% block api_url %}{% url 'resources:pods_api' cluster.pk %}{% endblock %}
+
+{% block table_headers %}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">命名空间</th>
+<th class="font-semibold text-xs">状态</th>
+<th class="font-semibold text-xs">就绪</th>
+<th class="font-semibold text-xs">重启</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">节点</th>
+<th class="font-semibold text-xs">IP</th>
+<th class="font-semibold text-xs">操作</th>
+{% endblock %}
+
+{% block table_row %}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="r.namespace"></span></span></td>
+  <td>
+    <span class="badge badge-xs" :class="r.status_phase == 'Running' ? 'badge-success' : r.status_phase == 'Pending' ? 'badge-warning' : r.status_phase == 'Succeeded' ? 'badge-info' : 'badge-error'" x-text="r.status_phase"></span>
+  </td>
+  <td class="font-medium text-xs" x-text="r.ready_str"></td>
+  <td class="text-center text-xs" x-text="r.restarts"></td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td class="text-xs opacity-70" x-text="r.node"></td>
+  <td class="text-xs opacity-70 font-mono" x-text="r.ip"></td>
+  <td>
+    <div class="flex gap-1 flex-nowrap">
+      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('Pod: ' + r.name, '/resources/{{ cluster.pk }}/yaml/pod/' + r.namespace + '/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
+        <i class="fas fa-file-code text-[10px]"></i> YAML
+      </button>
+      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="viewLogs(r.namespace, r.name)">
+        <i class="fas fa-terminal text-[10px]"></i> 日志
+      </button>
+      <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Pod', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{ cluster.pk }}/delete/pod/' + r.namespace + '/' + r.name + '/'}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-trash-alt text-[10px]"></i>
+      </button>
+    </div>
+  </td>
+</tr>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+
+<!-- Pod Logs Modal -->
+<dialog id="logModal" class="modal">
+  <div class="modal-box max-w-3xl flex flex-col bg-base-100 shadow-xl rounded-xl p-0" style="height:55vh;">
+
+    <!-- Header: icon + title + pod name + close -->
+    <div class="flex items-center justify-between px-5 py-3 border-b border-base-200 flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg bg-violet-500/15 grid place-items-center">
+          <i class="fas fa-terminal text-violet-500 text-[10px]"></i>
+        </div>
+        <span class="font-semibold text-sm">Pod 日志</span>
+        <span class="text-xs opacity-40" x-text="logPodName"></span>
+      </div>
+      <button class="btn btn-ghost btn-sm btn-circle h-7 w-7 min-h-0" @click="stopLive(); logModal.close()">
+        <i class="fas fa-times text-xs"></i>
+      </button>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="flex items-center justify-between px-5 py-2 border-b border-base-200 flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <!-- Container badge -->
+        <span class="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-500 font-medium" x-text="logContainer || 'default'"></span>
+        <!-- Tail lines dropdown -->
+        <select x-model="logTailLines" @change="viewLogs(logNamespace, logPodName, false, true)"
+                class="select select-bordered select-xs h-7 min-h-0 text-[11px] w-28 focus:select-primary">
+          <option value="100">最近 100 行</option>
+          <option value="200">最近 200 行</option>
+          <option value="500">最近 500 行</option>
+          <option value="1000">最近 1000 行</option>
+        </select>
+        <!-- Live toggle -->
+        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+          <input type="checkbox" class="toggle toggle-xs toggle-success" :checked="liveMode" @change="toggleLive()">
+          <span class="text-[11px]" :class="liveMode ? 'text-emerald-500 font-medium' : 'opacity-40'">实时</span>
+        </label>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- Refresh -->
+        <button @click="viewLogs(logNamespace, logPodName, false, true)"
+                class="btn btn-ghost btn-xs h-7 min-h-0 gap-1 text-[11px]">
+          <i class="fas fa-sync-alt text-[9px]" :class="logLoading ? 'animate-spin' : ''"></i> 刷新
+        </button>
+        <!-- Previous logs -->
+        <button @click="if(liveMode) stopLive(); logPrevious = !logPrevious; viewLogs(logNamespace, logPodName, false, true)"
+                class="btn btn-xs h-7 min-h-0 gap-1 text-[11px] transition-all"
+                :class="logPrevious ? 'btn-warning' : 'btn-ghost'">
+          <i class="fas fa-history text-[9px]"></i> 上次日志
+        </button>
+      </div>
+    </div>
+
+    <!-- Log Content -->
+    <div class="flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed" id="logContainer"
+         style="background:#0d1117; color:#c9d1d9;">
+      <div x-show="logLoading && !logs" class="flex flex-col items-center justify-center h-full gap-2">
+        <span class="loading loading-spinner loading-sm text-primary"></span>
+        <span class="text-[11px] opacity-40">获取日志中...</span>
+      </div>
+      <div x-show="!logLoading && logError" class="text-error text-xs" x-text="logError"></div>
+      <pre x-show="logs" class="whitespace-pre-wrap break-all m-0" x-text="logs"></pre>
+      <div x-show="!logLoading && !logError && !logs" class="flex flex-col items-center justify-center h-full gap-2 opacity-30">
+        <i class="fas fa-file-alt text-2xl"></i>
+        <span class="text-xs">暂无日志输出</span>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="flex items-center justify-between px-5 py-1.5 border-t border-base-200 text-[10px] opacity-40 flex-shrink-0">
+      <span x-text="logNamespace + ' / ' + logPodName"></span>
+      <div class="flex items-center gap-3">
+        <span x-show="liveMode" class="text-emerald-500 flex items-center gap-1 opacity-100">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> 每 3s 刷新
+        </span>
+        <span x-text="logs ? (logs.split('\n').length + ' 行') : ''"></span>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop" @click="stopLive()"><button>close</button></form>
+</dialog>
+
+<script>
+(function() {
+  const _baseResourceList = resourceList;
+  resourceList = function() {
+    return Object.assign(_baseResourceList(), {
+      logPodName: '',
+      logNamespace: '',
+      logContainer: '',
+      logs: '',
+      logLoading: false,
+      logError: null,
+      liveMode: false,
+      liveTimer: null,
+      logTailLines: '200',
+      logPrevious: false,
+      viewLogs(namespace, podName, isAutoRefresh = false, skipReset = false) {
+        this.logPodName = podName;
+        this.logNamespace = namespace;
+        if (!isAutoRefresh && !skipReset) {
+          this.logPrevious = false;
+          this.logLoading = true;
+          this.logError = null;
+          this.logs = '';
+          document.getElementById('logModal').showModal();
+        } else if (!isAutoRefresh) {
+          this.logLoading = true;
+          this.logError = null;
+        }
+
+        fetch(`/resources/{{ cluster.pk }}/pods/${namespace}/${podName}/logs/?tail_lines=${this.logTailLines}${this.logPrevious ? '&previous=true' : ''}`)
+          .then(r => r.json())
+          .then(data => {
+            this.logLoading = false;
+            if (data.success) {
+              if (data.no_previous) {
+                this.logs = '';
+                this.logError = '该容器没有上次日志（容器未重启过）';
+              } else {
+                this.logs = data.logs || '';
+                this.logError = null;
+              }
+              this.logContainer = data.container || 'default';
+              setTimeout(() => {
+                const container = document.getElementById('logContainer');
+                if (container) container.scrollTop = container.scrollHeight;
+              }, 100);
+            } else {
+              this.logError = data.error || '获取日志失败';
+              if (this.liveMode) this.stopLive();
+            }
+          })
+          .catch(err => {
+            this.logLoading = false;
+            this.logError = err.message;
+            if (this.liveMode) this.stopLive();
+          });
+      },
+      toggleLive() {
+        this.liveMode = !this.liveMode;
+        if (this.liveMode) {
+          this.logPrevious = false;
+          this.viewLogs(this.logNamespace, this.logPodName, false, true);
+          this.liveTimer = setInterval(() => {
+            this.viewLogs(this.logNamespace, this.logPodName, true);
+          }, 3000);
+        } else {
+          this.stopLive();
+        }
+      },
+      stopLive() {
+        this.liveMode = false;
+        if (this.liveTimer) {
+          clearInterval(this.liveTimer);
+          this.liveTimer = null;
+        }
+      }
+    });
+  };
+})();
+</script>
+{% endblock %}

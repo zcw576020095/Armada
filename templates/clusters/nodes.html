@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}节点管理 - {{ cluster }} - Armada{% endblock %}
+{% block page_title %}节点管理{% endblock %}
+{% block breadcrumb %}
+<li><a href="{% url 'clusters:list' %}">集群列表</a></li>
+<li><a href="{% url 'clusters:detail' cluster.pk %}">{{ cluster }}</a></li>
+<li>节点管理</li>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .dash-card {
+    position: relative; overflow: hidden; border-radius: 0.75rem; padding: 1.25rem;
+    border: 1px solid oklch(var(--bc) / 0.06);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .dash-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
+  .dash-card::before { content: ''; position: absolute; top: -25px; right: -25px; width: 100px; height: 100px; border-radius: 50%; opacity: 0.12; }
+
+  .dash-card-primary { background: linear-gradient(135deg, #1e2a4a, #172040); border-color: rgba(59,130,246,0.15); }
+  .dash-card-primary::before { background: #3b82f6; }
+  .dash-card-primary:hover { border-color: rgba(59,130,246,0.3); }
+
+  .dash-card-success { background: linear-gradient(135deg, #1a2e22, #152618); border-color: rgba(16,185,129,0.15); }
+  .dash-card-success::before { background: #10b981; }
+  .dash-card-success:hover { border-color: rgba(16,185,129,0.3); }
+
+  .dash-card-error { background: linear-gradient(135deg, #2d1a22, #261418); border-color: rgba(244,63,94,0.15); }
+  .dash-card-error::before { background: #f43f5e; }
+  .dash-card-error:hover { border-color: rgba(244,63,94,0.3); }
+
+  .dash-card-violet { background: linear-gradient(135deg, #231e3a, #1c1730); border-color: rgba(139,92,246,0.15); }
+  .dash-card-violet::before { background: #8b5cf6; }
+  .dash-card-violet:hover { border-color: rgba(139,92,246,0.3); }
+
+  [data-theme="light"] .dash-card-primary { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-color: rgba(59,130,246,0.2); }
+  [data-theme="light"] .dash-card-success { background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-color: rgba(16,185,129,0.2); }
+  [data-theme="light"] .dash-card-error { background: linear-gradient(135deg, #ffe4e6, #fecdd3); border-color: rgba(244,63,94,0.2); }
+  [data-theme="light"] .dash-card-violet { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-color: rgba(139,92,246,0.2); }
+  [data-theme="light"] .dash-card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+
+  .chart-card {
+    border-radius: 0.75rem; border: 1px solid oklch(var(--bc) / 0.06);
+    background: oklch(var(--b1)); padding: 1.25rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="nodeManager()" x-init="load(); $watch('search', () => page = 1); $watch('filter', () => page = 1)">
+
+  <!-- Stats Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="dash-card dash-card-primary">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">节点总数</div>
+          <div class="text-2xl font-bold text-blue-400" x-text="loading ? '-' : stats.total">-</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-blue-500/15 grid place-items-center">
+          <i class="fas fa-server text-blue-400 text-sm"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-card dash-card-success">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">Ready</div>
+          <div class="text-2xl font-bold text-emerald-400" x-text="loading ? '-' : stats.ready">-</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-emerald-500/15 grid place-items-center">
+          <i class="fas fa-check-circle text-emerald-400 text-sm"></i>
+        </div>
+      </div>
+      <div class="mt-3 w-full bg-black/10 rounded-full h-1.5 overflow-hidden" x-show="!loading && stats.total > 0">
+        <div class="bg-emerald-400 h-full rounded-full transition-all duration-500" :style="`width: ${(stats.ready / stats.total) * 100}%`"></div>
+      </div>
+    </div>
+
+    <div class="dash-card dash-card-error">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">NotReady</div>
+          <div class="text-2xl font-bold" :class="stats.not_ready > 0 ? 'text-rose-400' : 'text-base-content/30'" x-text="loading ? '-' : stats.not_ready">-</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-rose-500/15 grid place-items-center">
+          <i class="fas fa-exclamation-circle text-rose-400 text-sm"></i>
+        </div>
+      </div>
+      <div class="mt-3 w-full bg-black/10 rounded-full h-1.5 overflow-hidden" x-show="!loading && stats.not_ready > 0">
+        <div class="bg-rose-400 h-full rounded-full transition-all duration-500" :style="`width: ${(stats.not_ready / stats.total) * 100}%`"></div>
+      </div>
+    </div>
+
+    <div class="dash-card dash-card-violet">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">GPU 节点</div>
+          <div class="text-2xl font-bold text-violet-400" x-text="loading ? '-' : stats.gpu_nodes">-</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-violet-500/15 grid place-items-center">
+          <i class="fas fa-microchip text-violet-400 text-sm"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nodes Table -->
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <h3 class="text-xl font-bold flex items-center gap-2 text-base-content/80">
+            <i class="fas fa-cube text-violet-500"></i> 节点列表
+          </h3>
+          <span class="px-3 py-1 rounded-full bg-violet-500 text-white text-sm font-bold" x-show="!loading" x-text="filteredNodes.length"></span>
+        </div>
+        <div class="flex items-center gap-2">
+        <select x-model="filter" class="select select-bordered select-sm h-8 min-h-0 text-xs w-32 focus:select-primary">
+          <option value="all">全部节点</option>
+          <option value="ready">Ready</option>
+          <option value="notready">NotReady</option>
+          <option value="gpu">GPU 节点</option>
+          <option value="cpu">CPU 节点</option>
+        </select>
+        <input type="text" x-model="search" placeholder="搜索节点名称..." class="input input-bordered input-sm h-8 min-h-0 w-52 text-xs focus:input-primary">
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="flex items-center justify-center py-16 gap-3">
+      <span class="loading loading-spinner loading-md text-primary"></span>
+      <span class="text-sm opacity-60">正在获取节点信息...</span>
+    </div>
+
+    <!-- Error -->
+    <div x-show="!loading && error" x-cloak class="alert alert-error text-sm border border-error/20">
+      <i class="fas fa-exclamation-triangle text-sm"></i>
+      <span x-text="'连接集群失败：' + error"></span>
+    </div>
+
+    <!-- Table -->
+    <div x-show="!loading && !error && pagedNodes.length > 0" x-cloak class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr class="border-b border-base-300">
+            <th class="font-semibold text-xs">节点名称</th>
+            <th class="font-semibold text-xs">状态</th>
+            <th class="font-semibold text-xs">类型</th>
+            <th class="font-semibold text-xs">规格</th>
+            <th class="font-semibold text-xs">角色</th>
+            <th class="font-semibold text-xs">K8s 版本</th>
+            <th class="font-semibold text-xs">操作系统</th>
+            <th class="font-semibold text-xs">CPU</th>
+            <th class="font-semibold text-xs">内存</th>
+            <th class="font-semibold text-xs">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="node in pagedNodes" :key="node.name">
+            <tr class="hover:bg-base-200/50 border-b border-base-300/50">
+              <td class="font-mono text-xs">
+                <a :href="'/clusters/{{ cluster.pk }}/node/' + node.name + '/'" class="link link-primary hover:link-hover font-medium" x-text="node.name"></a>
+              </td>
+              <td>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full" :class="node.status === 'Ready' ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+                  <span class="text-xs" x-text="node.status"></span>
+                </div>
+              </td>
+              <td>
+                <span class="badge badge-xs font-medium"
+                  :class="node.is_gpu ? 'bg-violet-500/15 text-violet-400 border-violet-500/30' : 'bg-sky-500/15 text-sky-400 border-sky-500/30'"
+                  x-text="node.is_gpu ? 'GPU' : 'CPU'"></span>
+              </td>
+              <td>
+                <span class="text-xs text-violet-400 font-medium" x-show="node.is_gpu" x-text="node.gpu"></span>
+                <span class="text-xs opacity-40" x-show="!node.is_gpu">-</span>
+              </td>
+              <td><span class="text-[10px] opacity-60 px-1.5 py-0.5 rounded bg-base-200 border border-base-300" x-text="node.roles"></span></td>
+              <td class="text-[10px] opacity-50" x-text="node.k8s_version"></td>
+              <td class="text-[10px] max-w-32 truncate opacity-50" :title="node.os" x-text="node.os"></td>
+              <td><span class="text-amber-400 font-medium text-xs" x-text="node.cpu_capacity + ' 核'"></span></td>
+              <td><span class="text-emerald-400 font-medium text-xs" x-text="node.memory_capacity"></span></td>
+              <td>
+                <a :href="'/clusters/{{ cluster.pk }}/node/' + node.name + '/'" class="btn btn-ghost btn-xs gap-1.5 h-7 min-h-0 text-[10px] hover:btn-primary hover:bg-primary/10 transition-all">
+                  <i class="fas fa-cog"></i> 管理
+                </a>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div x-show="!loading && totalPages > 1" class="flex items-center justify-between mt-4 pt-4 border-t border-base-300/50">
+      <span class="text-[10px] opacity-40">共 <span x-text="filteredNodes.length"></span> 条，每页 <span x-text="pageSize"></span> 条</span>
+      <div class="flex items-center gap-1">
+        <button @click="page = 1" :disabled="page === 1" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="page === 1 ? 'opacity-25 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-left text-[10px]"></i>
+        </button>
+        <button @click="page--" :disabled="page === 1" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="page === 1 ? 'opacity-25 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-left text-[10px]"></i>
+        </button>
+        <span class="text-xs opacity-50 px-3">第 <span class="font-semibold text-primary" x-text="page"></span> / <span x-text="totalPages"></span> 页</span>
+        <button @click="page++" :disabled="page === totalPages" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="page === totalPages ? 'opacity-25 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-right text-[10px]"></i>
+        </button>
+        <button @click="page = totalPages" :disabled="page === totalPages" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="page === totalPages ? 'opacity-25 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-right text-[10px]"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty -->
+    <div x-show="!loading && !error && filteredNodes.length === 0" x-cloak class="text-sm opacity-50 text-center py-16">
+      <i class="fas fa-search text-3xl mb-3 block text-primary/30"></i>
+      <span x-show="search || filter !== 'all'">没有匹配的节点</span>
+      <span x-show="!search && filter === 'all'">暂无节点数据</span>
+    </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function nodeManager() {
+  return {
+    loading: true,
+    nodes: [],
+    stats: { total: 0, ready: 0, not_ready: 0, gpu_nodes: 0 },
+    error: null,
+    search: '',
+    filter: 'all',
+    page: 1,
+    pageSize: 20,
+    get filteredNodes() {
+      let result = this.nodes;
+      if (this.filter === 'ready') result = result.filter(n => n.status === 'Ready');
+      else if (this.filter === 'notready') result = result.filter(n => n.status !== 'Ready');
+      else if (this.filter === 'gpu') result = result.filter(n => n.is_gpu);
+      else if (this.filter === 'cpu') result = result.filter(n => !n.is_gpu);
+      if (this.search) {
+        const q = this.search.toLowerCase();
+        result = result.filter(n => n.name.toLowerCase().includes(q));
+      }
+      return result;
+    },
+    get totalPages() {
+      return Math.ceil(this.filteredNodes.length / this.pageSize) || 1;
+    },
+    get pagedNodes() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.filteredNodes.slice(start, start + this.pageSize);
+    },
+    load() {
+      fetch('{% url "clusters:nodes_api" cluster.pk %}')
+        .then(r => r.json())
+        .then(data => {
+          this.nodes = data.nodes || [];
+          this.stats = data.stats || this.stats;
+          this.error = data.error;
+          this.loading = false;
+        })
+        .catch(err => {
+          this.error = err.message;
+          this.loading = false;
+        });
+    }
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}集群列表 - Armada{% endblock %}
+{% block page_title %}集群列表{% endblock %}
+{% block breadcrumb %}<li>集群列表</li>{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'clusters:add' %}" class="btn btn-primary btn-sm gap-2 h-9">
+  <i class="fas fa-plus text-xs"></i> 导入集群
+</a>
+{% endblock %}
+
+{% block content %}
+{% if clusters %}
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+  {% for cluster in clusters %}
+  <div class="card bg-base-100 border border-base-300 hover:border-primary/30 transition-all group">
+    <div class="card-body p-5">
+      <div class="flex items-start justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center group-hover:from-primary/30 group-hover:to-primary/10 transition-all">
+            <i class="fas fa-server text-primary text-sm"></i>
+          </div>
+          <div>
+            <h3 class="font-semibold text-base">{{ cluster.display_name|default:cluster.name }}</h3>
+            <p class="text-xs opacity-50 font-mono">{{ cluster.name }}</p>
+          </div>
+        </div>
+        <div class="badge badge-sm {% if cluster.status == 'online' %}badge-success{% elif cluster.status == 'offline' %}badge-error{% else %}badge-warning{% endif %} gap-1 px-2.5 py-2">
+          <i class="fas fa-circle text-[5px] status-pulse"></i>
+          {{ cluster.get_status_display }}
+        </div>
+      </div>
+
+      <div class="space-y-2 text-sm">
+        <div class="flex items-center justify-between p-2 rounded-lg bg-base-200/50 hover:bg-base-200 transition-colors">
+          <span class="opacity-60 flex items-center gap-2 text-xs">
+            <i class="fas fa-code-branch text-[10px] text-primary"></i>
+            K8s 版本
+          </span>
+          <span class="font-medium text-xs">{{ cluster.k8s_version|default:"-" }}</span>
+        </div>
+        <div class="flex items-center justify-between p-2 rounded-lg bg-base-200/50 hover:bg-base-200 transition-colors">
+          <span class="opacity-60 flex items-center gap-2 text-xs">
+            <i class="fas fa-server text-[10px] text-emerald-400"></i>
+            节点数
+          </span>
+          <span class="font-medium text-xs">{{ cluster.node_count }}</span>
+        </div>
+        <div class="flex items-center justify-between p-2 rounded-lg bg-base-200/50 hover:bg-base-200 transition-colors">
+          <span class="opacity-60 flex items-center gap-2 text-xs">
+            <i class="fas fa-link text-[10px] text-sky-400"></i>
+            API Server
+          </span>
+          <span class="truncate max-w-44 text-right font-mono text-[11px]" title="{{ cluster.api_server }}">{{ cluster.api_server|default:"-" }}</span>
+        </div>
+      </div>
+
+      <div class="card-actions mt-4 justify-end gap-2">
+        <a href="{% url 'clusters:select' cluster.pk %}?next=/" class="btn btn-outline btn-sm gap-1.5 h-8 min-h-0 hover:btn-primary transition-all text-xs">
+          <i class="fas fa-check-circle text-[10px]"></i> 选择
+        </a>
+        <a href="{% url 'clusters:detail' cluster.pk %}" class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 transition-all text-xs">
+          <i class="fas fa-eye text-[10px]"></i> 详情
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="flex flex-col items-center justify-center py-28 opacity-60">
+  <div class="w-20 h-20 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-5">
+    <i class="fas fa-server text-4xl text-primary"></i>
+  </div>
+  <p class="text-xl font-semibold mb-1">暂无集群</p>
+  <p class="text-sm mb-5 opacity-70">导入 Kubeconfig 以开始管理您的 Kubernetes 集群</p>
+  <a href="{% url 'clusters:add' %}" class="btn btn-primary gap-2">
+    <i class="fas fa-plus text-xs"></i> 导入集群
+  </a>
+</div>
+{% endif %}
+{% endblock %}

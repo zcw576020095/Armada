@@ -1,0 +1,45 @@
+{% extends "resources/base_list.html" %}
+
+{% block title %}Deployments - {{ cluster }} - Armada{% endblock %}
+{% block page_title %}Deployments{% endblock %}
+{% block breadcrumb %}<li><a href="{% url 'clusters:detail' cluster.pk %}">{{ cluster }}</a></li><li>Deployments</li>{% endblock %}
+{% block resource_icon %}rocket{% endblock %}
+{% block resource_title %}Deployments{% endblock %}
+{% block api_url %}{% url 'resources:deployments_api' cluster.pk %}{% endblock %}
+
+{% block table_headers %}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">命名空间</th>
+<th class="font-semibold text-xs">镜像</th>
+<th class="font-semibold text-xs">副本</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">操作</th>
+{% endblock %}
+
+{% block table_row %}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="r.namespace"></span></span></td>
+  <td class="text-xs opacity-70 max-w-56 truncate" :title="r.image" x-text="r.image"></td>
+  <td>
+    <span class="font-medium text-xs" :class="r.ready_replicas == r.replicas ? 'text-success' : r.ready_replicas == 0 ? 'text-error' : 'text-warning'" x-text="r.ready_replicas + '/' + r.replicas"></span>
+  </td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td>
+    <div class="flex gap-1 flex-nowrap">
+      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('Deployment: ' + r.name, '/resources/{{ cluster.pk }}/yaml/deployment/' + r.namespace + '/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
+        <i class="fas fa-file-code text-[10px]"></i> YAML
+      </button>
+      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="{% if can_edit %}$dispatch('open-scale-modal', {name: r.name, current: r.replicas, scaleUrl: '/resources/{{ cluster.pk }}/deployments/' + r.namespace + '/' + r.name + '/scale/'}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-expand-arrows-alt text-[10px]"></i> 扩缩
+      </button>
+      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="{% if can_edit %}confirmRestart('/resources/{{ cluster.pk }}/deployments/' + r.namespace + '/' + r.name + '/restart/', r.name){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-redo text-[10px]"></i> 重启
+      </button>
+      <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Deployment', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{ cluster.pk }}/delete/deployment/' + r.namespace + '/' + r.name + '/'}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-trash-alt text-[10px]"></i>
+      </button>
+    </div>
+  </td>
+</tr>
+{% endblock %}

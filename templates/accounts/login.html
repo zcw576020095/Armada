@@ -1,0 +1,342 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - Armada</title>
+  <link rel="stylesheet" href="{% static 'css/output.css' %}">
+  <link rel="stylesheet" href="{% static 'css/all.min.css' %}">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      background: #09090b;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      overflow: hidden;
+    }
+
+    /* 左侧视觉面板 - 参考Linear风格 */
+    .visual-panel {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0a0a0f 0%, #18181b 50%, #27272a 100%);
+      overflow: hidden;
+    }
+
+    /* 微妙的渐变光晕 */
+    .visual-panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
+      animation: breathe 8s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* 精致的网格背景 */
+    .grid-bg {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 80px 80px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 40%, transparent 100%);
+    }
+
+    /* 简化的装饰元素 */
+    .accent-line {
+      position: absolute;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.3), transparent);
+    }
+    .accent-line-1 { width: 300px; top: 25%; left: 15%; transform: rotate(-15deg); }
+    .accent-line-2 { width: 200px; bottom: 30%; right: 20%; transform: rotate(20deg); }
+
+    .visual-content {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      color: white;
+      padding: 2rem;
+      max-width: 480px;
+    }
+
+    .brand-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 2rem;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.25);
+    }
+
+    .brand-icon i {
+      font-size: 2rem;
+      color: white;
+    }
+
+    .visual-content h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.6) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .visual-content p {
+      font-size: 1.05rem;
+      color: rgba(255, 255, 255, 0.5);
+      line-height: 1.7;
+      font-weight: 400;
+    }
+
+    .feature-list {
+      margin-top: 3rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      text-align: left;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 0.9rem;
+    }
+
+    .feature-item i {
+      color: #6366f1;
+      font-size: 0.75rem;
+    }
+
+    /* 右侧登录面板 - 更现代的设计 */
+    .login-panel {
+      width: 460px;
+      min-width: 460px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 3rem 2.5rem;
+      background: #0a0a0f;
+      border-left: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .login-header {
+      margin-bottom: 2.5rem;
+    }
+
+    .login-title {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: #fafafa;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .login-subtitle {
+      font-size: 0.9rem;
+      color: #71717a;
+      font-weight: 400;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #a1a1aa;
+      margin-bottom: 0.5rem;
+    }
+
+    .form-input {
+      width: 100%;
+      height: 44px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid #27272a;
+      background: #18181b;
+      color: #fafafa;
+      font-size: 0.9rem;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .form-input::placeholder {
+      color: #52525b;
+    }
+
+    .form-input:focus {
+      border-color: #6366f1;
+      background: #1a1a1f;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .login-btn {
+      width: 100%;
+      height: 44px;
+      border: none;
+      border-radius: 8px;
+      background: #6366f1;
+      color: white;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-top: 0.5rem;
+    }
+
+    .login-btn:hover {
+      background: #5558e3;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .login-btn:active {
+      transform: translateY(0);
+    }
+
+    .error-box {
+      padding: 0.875rem 1rem;
+      border-radius: 8px;
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .error-box i {
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .login-footer {
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      text-align: center;
+      font-size: 0.8rem;
+      color: #52525b;
+    }
+
+    /* 响应式 */
+    @media (max-width: 1024px) {
+      .visual-panel { display: none; }
+      .login-panel {
+        width: 100%;
+        min-width: unset;
+        max-width: 420px;
+        margin: 0 auto;
+        background: #0a0a0f;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+      }
+      body {
+        justify-content: center;
+        background: linear-gradient(135deg, #0a0a0f 0%, #18181b 100%);
+        padding: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 左侧视觉面板 -->
+  <div class="visual-panel">
+    <div class="grid-bg"></div>
+    <div class="accent-line accent-line-1"></div>
+    <div class="accent-line accent-line-2"></div>
+
+    <div class="visual-content">
+      <div class="brand-icon">
+        <i class="fas fa-dharmachakra"></i>
+      </div>
+      <h1>Armada</h1>
+      <p>企业级 Kubernetes 多集群管理平台</p>
+
+      <div class="feature-list">
+        <div class="feature-item">
+          <i class="fas fa-check-circle"></i>
+          <span>统一管理多个 K8s 集群</span>
+        </div>
+        <div class="feature-item">
+          <i class="fas fa-check-circle"></i>
+          <span>实时监控资源与性能指标</span>
+        </div>
+        <div class="feature-item">
+          <i class="fas fa-check-circle"></i>
+          <span>细粒度权限控制与审计</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧登录面板 -->
+  <div class="login-panel">
+    <div class="login-header">
+      <div class="login-title">登录</div>
+      <div class="login-subtitle">使用您的账号访问 Armada 控制台</div>
+    </div>
+
+    {% if error %}
+    <div class="error-box">
+      <i class="fas fa-exclamation-circle"></i>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label">用户名</label>
+        <input type="text" name="username" class="form-input" placeholder="输入用户名" required autofocus>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">密码</label>
+        <input type="password" name="password" class="form-input" placeholder="输入密码" required>
+      </div>
+
+      <button type="submit" class="login-btn">
+        登录
+      </button>
+    </form>
+
+    <div class="login-footer">
+      Armada v1.0 · Kubernetes Multi-Cluster Management
+    </div>
+  </div>
+
+</body>
+</html>

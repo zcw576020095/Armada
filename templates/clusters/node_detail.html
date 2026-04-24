@@ -1,0 +1,641 @@
+{% extends "base.html" %}
+
+{% block title %}{{ node_name }} - Armada{% endblock %}
+{% block page_title %}节点详情{% endblock %}
+{% block breadcrumb %}
+<li><a href="{% url 'clusters:list' %}">集群列表</a></li>
+<li><a href="{% url 'clusters:detail' cluster.pk %}">{{ cluster }}</a></li>
+<li><a href="{% url 'clusters:nodes' cluster.pk %}">节点管理</a></li>
+<li>{{ node_name }}</li>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .dash-card {
+    position: relative; overflow: hidden; border-radius: 0.75rem; padding: 1.25rem;
+    border: 1px solid oklch(var(--bc) / 0.06);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .dash-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
+  .dash-card::before { content: ''; position: absolute; top: -25px; right: -25px; width: 100px; height: 100px; border-radius: 50%; opacity: 0.12; }
+
+  .dash-card-blue { background: linear-gradient(135deg, #1e2a4a, #172040); border-color: rgba(59,130,246,0.15); }
+  .dash-card-blue::before { background: #3b82f6; }
+  .dash-card-blue:hover { border-color: rgba(59,130,246,0.3); }
+
+  .dash-card-emerald { background: linear-gradient(135deg, #1a2e22, #152618); border-color: rgba(16,185,129,0.15); }
+  .dash-card-emerald::before { background: #10b981; }
+  .dash-card-emerald:hover { border-color: rgba(16,185,129,0.3); }
+
+  .dash-card-amber { background: linear-gradient(135deg, #2a2415, #221c10); border-color: rgba(245,158,11,0.15); }
+  .dash-card-amber::before { background: #f59e0b; }
+  .dash-card-amber:hover { border-color: rgba(245,158,11,0.3); }
+
+  .dash-card-violet { background: linear-gradient(135deg, #231e3a, #1c1730); border-color: rgba(139,92,246,0.15); }
+  .dash-card-violet::before { background: #8b5cf6; }
+  .dash-card-violet:hover { border-color: rgba(139,92,246,0.3); }
+
+  .dash-card-teal { background: linear-gradient(135deg, #1a2e2e, #152626); border-color: rgba(20,184,166,0.15); }
+  .dash-card-teal::before { background: #14b8a6; }
+  .dash-card-teal:hover { border-color: rgba(20,184,166,0.3); }
+
+  [data-theme="light"] .dash-card-blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-color: rgba(59,130,246,0.2); }
+  [data-theme="light"] .dash-card-emerald { background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-color: rgba(16,185,129,0.2); }
+  [data-theme="light"] .dash-card-amber { background: linear-gradient(135deg, #fef3c7, #fde68a); border-color: rgba(245,158,11,0.2); }
+  [data-theme="light"] .dash-card-violet { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-color: rgba(139,92,246,0.2); }
+  [data-theme="light"] .dash-card-teal { background: linear-gradient(135deg, #ccfbf1, #99f6e4); border-color: rgba(20,184,166,0.2); }
+  [data-theme="light"] .dash-card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+
+  .info-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.5rem 0.75rem; border-radius: 0.5rem;
+    background: oklch(var(--b2) / 0.5);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="nodeDetail()" x-init="load(); $watch('podSearch', () => podPage = 1)">
+
+  <!-- Loading -->
+  <div x-show="loading" class="flex items-center justify-center py-20 gap-3">
+    <span class="loading loading-spinner loading-md text-primary"></span>
+    <span class="text-sm opacity-60">正在获取节点信息...</span>
+  </div>
+
+  <!-- Error -->
+  <div x-show="!loading && error" x-cloak class="alert alert-error text-sm border border-error/20">
+    <i class="fas fa-exclamation-triangle text-sm"></i>
+    <span x-text="error"></span>
+  </div>
+
+  <div x-show="!loading && !error && node.name" x-cloak>
+
+    <!-- Action Bar -->
+    <div class="flex flex-wrap items-center gap-2 mb-5">
+      <template x-if="node.schedulable">
+        <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all"
+          @click="{% if can_edit %}cordonModal.showModal(){% else %}noPermission(){% endif %}">
+          <i class="fas fa-ban text-[10px]"></i> Cordon
+        </button>
+      </template>
+      <template x-if="!node.schedulable">
+        <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all"
+          @click="{% if can_edit %}uncordonModal.showModal(){% else %}noPermission(){% endif %}">
+          <i class="fas fa-check text-[10px]"></i> Uncordon
+        </button>
+      </template>
+      <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-amber-500/30 bg-base-100 text-amber-400 hover:bg-amber-500/10 transition-all"
+        @click="{% if can_edit %}drainModal.showModal(){% else %}noPermission(){% endif %}">
+        <i class="fas fa-water text-[10px]"></i> Drain
+      </button>
+      <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-rose-500/30 bg-base-100 text-rose-400 hover:bg-rose-500/10 transition-all"
+        @click="{% if can_edit %}deleteNodeModal.showModal(){% else %}noPermission(){% endif %}">
+        <i class="fas fa-trash-alt text-[10px]"></i> 移除节点
+      </button>
+      <!-- Schedulable warning badge -->
+      <span x-show="!node.schedulable" class="ml-2 flex items-center gap-1.5 text-[10px] text-amber-400 border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 rounded-full">
+        <i class="fas fa-ban text-[8px]"></i> 已停止调度
+      </span>
+    </div>
+
+    <!-- Top Info Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
+      <!-- Status -->
+      <div class="dash-card" :class="node.status === 'Ready' ? 'dash-card-emerald' : 'dash-card-rose'">
+        <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">状态</div>
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full" :class="node.status === 'Ready' ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+          <span class="text-lg font-bold" :class="node.status === 'Ready' ? 'text-emerald-400' : 'text-rose-400'" x-text="node.status"></span>
+        </div>
+      </div>
+      <!-- Type -->
+      <div class="dash-card" :class="node.is_gpu ? 'dash-card-violet' : 'dash-card-blue'">
+        <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">类型</div>
+        <span class="badge badge-sm font-medium"
+          :class="node.is_gpu ? 'bg-violet-500/15 text-violet-400 border-violet-500/30' : 'bg-sky-500/15 text-sky-400 border-sky-500/30'"
+          x-text="node.node_type"></span>
+      </div>
+      <!-- Role -->
+      <div class="dash-card dash-card-teal">
+        <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">角色</div>
+        <span class="text-sm font-semibold text-teal-400" x-text="node.roles"></span>
+      </div>
+      <!-- K8s Version -->
+      <div class="dash-card dash-card-blue">
+        <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">K8s 版本</div>
+        <div class="text-sm font-bold text-blue-400 truncate" x-text="node.k8s_version"></div>
+      </div>
+      <!-- Arch -->
+      <div class="dash-card dash-card-amber">
+        <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">架构</div>
+        <div class="text-sm font-bold text-amber-400" x-text="node.arch || '-'"></div>
+      </div>
+    </div>
+
+    <!-- Resource & System Info -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+      <!-- Resource Capacity -->
+      <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-5">
+        <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <i class="fas fa-microchip text-amber-400"></i> 资源容量
+        </h3>
+        <div class="space-y-2">
+          <div class="info-row">
+            <span class="text-xs opacity-50 flex items-center gap-2"><i class="fas fa-microchip text-[10px] text-amber-400"></i> CPU 容量 / 可分配</span>
+            <span class="text-xs"><span class="text-amber-400 font-medium" x-text="node.cpu_capacity + ' 核'"></span><span class="opacity-40 mx-1">/</span><span class="opacity-50" x-text="node.cpu_allocatable + ' 核'"></span></span>
+          </div>
+          <div class="info-row">
+            <span class="text-xs opacity-50 flex items-center gap-2"><i class="fas fa-memory text-[10px] text-emerald-400"></i> 内存 容量 / 可分配</span>
+            <span class="text-xs"><span class="text-emerald-400 font-medium" x-text="node.memory_capacity"></span><span class="opacity-40 mx-1">/</span><span class="opacity-50" x-text="node.memory_allocatable"></span></span>
+          </div>
+          <template x-if="node.is_gpu">
+            <div class="info-row">
+              <span class="text-xs opacity-50 flex items-center gap-2"><i class="fas fa-microchip text-[10px] text-violet-400"></i> GPU</span>
+              <span class="text-violet-400 font-medium text-xs" x-text="(node.gpu_model || 'GPU') + ' × ' + node.gpu_count"></span>
+            </div>
+          </template>
+        </div>
+        </div>
+      </div>
+
+      <!-- System Info -->
+      <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-5">
+        <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <i class="fas fa-info-circle text-sky-400"></i> 系统信息
+        </h3>
+        <div class="space-y-2">
+          <div class="info-row">
+            <span class="text-xs opacity-50 flex items-center gap-2"><i class="fas fa-desktop text-[10px] text-violet-400"></i> 操作系统</span>
+            <span class="text-xs opacity-70 truncate max-w-48" :title="node.os" x-text="node.os"></span>
+          </div>
+          <div class="info-row">
+            <span class="text-xs opacity-50 flex items-center gap-2"><i class="fas fa-terminal text-[10px] text-amber-400"></i> 内核版本</span>
+            <span class="text-xs opacity-70 font-mono truncate max-w-48" :title="node.kernel" x-text="node.kernel"></span>
+          </div>
+          <div class="info-row">
+            <span class="text-xs opacity-50 flex items-center gap-2"><i class="fas fa-box text-[10px] text-cyan-400"></i> 容器运行时</span>
+            <span class="text-xs opacity-70 font-mono" x-text="node.container_runtime"></span>
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pods Table -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <h3 class="text-xl font-bold flex items-center gap-2 text-base-content/80">
+            <i class="fas fa-cubes text-violet-500"></i> 容器组 (Pods)
+          </h3>
+          <span class="px-3 py-1 rounded-full bg-violet-500 text-white text-sm font-bold" x-text="pods.length"></span>
+        </div>
+        <input type="text" x-model="podSearch" placeholder="搜索 Pod..." class="input input-bordered input-sm h-8 min-h-0 w-52 text-xs focus:input-primary">
+      </div>
+
+      <div class="overflow-x-auto" x-show="pagedPods.length > 0">
+        <table class="table table-sm">
+          <thead>
+            <tr class="border-b border-base-300">
+              <th class="font-semibold text-xs">名称</th>
+              <th class="font-semibold text-xs">命名空间</th>
+              <th class="font-semibold text-xs">状态</th>
+              <th class="font-semibold text-xs">就绪</th>
+              <th class="font-semibold text-xs">重启</th>
+              <th class="font-semibold text-xs">IP</th>
+              <th class="font-semibold text-xs">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="pod in pagedPods" :key="pod.namespace + '/' + pod.name">
+              <tr class="hover:bg-base-200/50 border-b border-base-300/50">
+                <td class="font-mono text-xs max-w-56 truncate" :title="pod.name" x-text="pod.name"></td>
+                <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="pod.namespace"></span></span></td>
+                <td>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full"
+                      :class="{
+                        'bg-emerald-400': pod.status === 'Running' || pod.status === 'Succeeded',
+                        'bg-amber-400': pod.status === 'Pending',
+                        'bg-rose-400': pod.status === 'Failed' || pod.status === 'Unknown' || pod.status === 'CrashLoopBackOff' || pod.status === 'Error'
+                      }"></span>
+                    <span class="text-xs" x-text="pod.status"></span>
+                  </div>
+                </td>
+                <td class="text-xs opacity-70 font-mono" x-text="pod.ready"></td>
+                <td>
+                  <span :class="pod.restarts > 0 ? 'text-amber-400 font-medium' : 'opacity-40'" class="text-xs font-mono" x-text="pod.restarts"></span>
+                </td>
+                <td class="font-mono text-[10px] opacity-60" x-text="pod.ip"></td>
+                <td>
+                  <button class="btn btn-ghost btn-xs h-6 min-h-0 text-[10px] gap-1 hover:text-primary" @click="viewLogs(pod.namespace, pod.name)">
+                    <i class="fas fa-terminal"></i> 日志
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pod Pagination -->
+      <div x-show="podTotalPages > 1" class="flex items-center justify-between mt-4 pt-4 border-t border-base-300/50">
+        <span class="text-[10px] opacity-40">共 <span x-text="filteredPods.length"></span> 条，每页 <span x-text="podPageSize"></span> 条</span>
+        <div class="flex items-center gap-1">
+          <button @click="podPage = 1" :disabled="podPage === 1" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="podPage === 1 ? 'opacity-25 cursor-not-allowed' : ''">
+            <i class="fas fa-angle-double-left text-[10px]"></i>
+          </button>
+          <button @click="podPage--" :disabled="podPage === 1" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="podPage === 1 ? 'opacity-25 cursor-not-allowed' : ''">
+            <i class="fas fa-chevron-left text-[10px]"></i>
+          </button>
+          <span class="text-xs opacity-50 px-3">第 <span class="font-semibold text-primary" x-text="podPage"></span> / <span x-text="podTotalPages"></span> 页</span>
+          <button @click="podPage++" :disabled="podPage === podTotalPages" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="podPage === podTotalPages ? 'opacity-25 cursor-not-allowed' : ''">
+            <i class="fas fa-chevron-right text-[10px]"></i>
+          </button>
+          <button @click="podPage = podTotalPages" :disabled="podPage === podTotalPages" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="podPage === podTotalPages ? 'opacity-25 cursor-not-allowed' : ''">
+            <i class="fas fa-angle-double-right text-[10px]"></i>
+          </button>
+        </div>
+      </div>
+
+      <div x-show="filteredPods.length === 0" class="text-sm opacity-50 text-center py-10">
+        <i class="fas fa-search text-2xl mb-3 block text-primary/30"></i>
+        <span x-show="podSearch">没有匹配的 Pod</span>
+        <span x-show="!podSearch">该节点上没有运行中的 Pod</span>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cordon Confirmation Modal -->
+  <dialog id="cordonModal" class="modal">
+    <div class="modal-box max-w-md bg-base-100 border border-warning/20 rounded-2xl shadow-2xl">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-ban text-lg text-warning"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-warning">Cordon 节点</h3>
+          <p class="text-xs opacity-50 mt-0.5">将节点标记为不可调度</p>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <div class="bg-warning/5 border border-warning/15 rounded-xl p-4 space-y-3">
+          <p class="text-sm leading-relaxed">确定要 Cordon 节点 <code class="bg-base-200 text-warning px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code> 吗？</p>
+          <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
+            <p><i class="fas fa-info-circle text-warning mr-1.5"></i>Cordon 后，调度器将不再向该节点分配新的 Pod。</p>
+            <p><i class="fas fa-check-circle text-success mr-1.5"></i>节点上已运行的 Pod 不受影响，会继续正常运行。</p>
+            <p><i class="fas fa-undo text-info mr-1.5"></i>后续可通过 Uncordon 恢复节点调度。</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="cordonModal.close()">取消</button>
+        <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('{% url 'clusters:node_cordon' cluster.pk node_name %}', 'Cordon'); cordonModal.close();">
+          <i class="fas fa-ban text-[10px]"></i> 确认 Cordon
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <!-- Uncordon Confirmation Modal -->
+  <dialog id="uncordonModal" class="modal">
+    <div class="modal-box max-w-md bg-base-100 border border-success/20 rounded-2xl shadow-2xl">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-check-circle text-lg text-success"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-success">Uncordon 节点</h3>
+          <p class="text-xs opacity-50 mt-0.5">恢复节点调度</p>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <div class="bg-success/5 border border-success/15 rounded-xl p-4 space-y-3">
+          <p class="text-sm leading-relaxed">确定要 Uncordon 节点 <code class="bg-base-200 text-success px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code> 吗？</p>
+          <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
+            <p><i class="fas fa-info-circle text-success mr-1.5"></i>Uncordon 后，调度器将恢复向该节点分配新的 Pod。</p>
+            <p><i class="fas fa-check-circle text-success mr-1.5"></i>节点将重新参与集群的工作负载调度。</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="uncordonModal.close()">取消</button>
+        <button class="btn btn-success btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('{% url 'clusters:node_uncordon' cluster.pk node_name %}', 'Uncordon'); uncordonModal.close();">
+          <i class="fas fa-check text-[10px]"></i> 确认 Uncordon
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <!-- Drain Confirmation Modal -->
+  <dialog id="drainModal" class="modal">
+    <div class="modal-box max-w-md bg-base-100 border border-warning/20 rounded-2xl shadow-2xl">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-water text-lg text-warning"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-warning">Drain 节点</h3>
+          <p class="text-xs opacity-50 mt-0.5">驱逐 Pod 并停止调度</p>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <div class="bg-warning/5 border border-warning/15 rounded-xl p-4">
+          <p class="text-sm leading-relaxed">此操作将停止调度并驱逐节点 <code class="bg-base-200 text-warning px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code> 上的所有非 DaemonSet Pod。</p>
+          <p class="text-sm leading-relaxed mt-2.5 opacity-80">已驱逐的 Pod 会被自动调度到集群中其他可用的节点上。</p>
+        </div>
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="drainModal.close()">取消</button>
+        <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('{% url 'clusters:node_drain' cluster.pk node_name %}', 'Drain'); drainModal.close();">
+          <i class="fas fa-water text-[10px]"></i> 确认 Drain
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <!-- Delete Node Confirmation Modal -->
+  <dialog id="deleteNodeModal" class="modal">
+    <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl" x-data="{confirmName: ''}">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-error/10 flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-exclamation-triangle text-lg text-error"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-error">移除节点</h3>
+          <p class="text-xs opacity-50 mt-0.5">此操作不可撤销，请谨慎操作</p>
+        </div>
+      </div>
+      <div class="space-y-4">
+        <div class="bg-error/5 border border-error/15 rounded-xl p-4">
+          <p class="text-sm leading-relaxed">此操作将从集群中移除节点对象 <code class="bg-base-200 text-error px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code>。</p>
+          <div class="mt-3 flex items-start gap-2 bg-warning/10 border border-warning/20 rounded-lg p-3">
+            <i class="fas fa-info-circle text-warning text-sm mt-0.5 flex-shrink-0"></i>
+            <p class="text-xs leading-relaxed text-warning">如果节点上的 kubelet 仍在运行，节点可能会自动重新加入集群。建议先执行 Drain 操作。</p>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium opacity-50 mb-2">请输入节点名称以确认删除</label>
+          <input type="text" x-model="confirmName" class="input input-bordered w-full h-10 focus:input-error text-sm rounded-lg" placeholder="请输入节点名称" autocomplete="off">
+        </div>
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="deleteNodeModal.close()">取消</button>
+        <button class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-30 disabled:shadow-none disabled:hover:scale-100" :disabled="confirmName !== '{{ node_name }}'" @click="nodeAction('{% url 'clusters:node_delete' cluster.pk node_name %}', '移除节点'); deleteNodeModal.close();">
+          <i class="fas fa-trash-alt text-[10px]"></i> 确认移除
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <!-- Pod Logs Modal -->
+  <dialog id="logModal" class="modal">
+    <div class="modal-box max-w-3xl flex flex-col bg-base-100 shadow-xl rounded-xl p-0" style="height:55vh;">
+
+      <!-- Header: icon + title + pod name + close -->
+      <div class="flex items-center justify-between px-5 py-3 border-b border-base-200 flex-shrink-0">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-violet-500/15 grid place-items-center">
+            <i class="fas fa-terminal text-violet-500 text-[10px]"></i>
+          </div>
+          <span class="font-semibold text-sm">Pod 日志</span>
+          <span class="text-xs opacity-40" x-text="logPodName"></span>
+        </div>
+        <button class="btn btn-ghost btn-sm btn-circle h-7 w-7 min-h-0" @click="stopLive(); logModal.close()">
+          <i class="fas fa-times text-xs"></i>
+        </button>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="flex items-center justify-between px-5 py-2 border-b border-base-200 flex-shrink-0">
+        <div class="flex items-center gap-3">
+          <!-- Container badge -->
+          <span class="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-500 font-medium" x-text="logContainer || 'default'"></span>
+          <!-- Tail lines dropdown -->
+          <select x-model="logTailLines" @change="viewLogs(logNamespace, logPodName, false, true)"
+                  class="select select-bordered select-xs h-7 min-h-0 text-[11px] w-28 focus:select-primary">
+            <option value="100">最近 100 行</option>
+            <option value="200">最近 200 行</option>
+            <option value="500">最近 500 行</option>
+            <option value="1000">最近 1000 行</option>
+          </select>
+          <!-- Live toggle -->
+          <label class="flex items-center gap-1.5 cursor-pointer select-none">
+            <input type="checkbox" class="toggle toggle-xs toggle-success" :checked="liveMode" @change="toggleLive()">
+            <span class="text-[11px]" :class="liveMode ? 'text-emerald-500 font-medium' : 'opacity-40'">实时</span>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <!-- Refresh -->
+          <button @click="viewLogs(logNamespace, logPodName, false, true)"
+                  class="btn btn-ghost btn-xs h-7 min-h-0 gap-1 text-[11px]">
+            <i class="fas fa-sync-alt text-[9px]" :class="logLoading ? 'animate-spin' : ''"></i> 刷新
+          </button>
+          <!-- Previous logs -->
+          <button @click="if(liveMode) stopLive(); logPrevious = !logPrevious; viewLogs(logNamespace, logPodName, false, true)"
+                  class="btn btn-xs h-7 min-h-0 gap-1 text-[11px] transition-all"
+                  :class="logPrevious ? 'btn-warning' : 'btn-ghost'">
+            <i class="fas fa-history text-[9px]"></i> 上次日志
+          </button>
+        </div>
+      </div>
+
+      <!-- Log Content -->
+      <div class="flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed" id="logContainer"
+           style="background:#0d1117; color:#c9d1d9;">
+        <div x-show="logLoading && !logs" class="flex flex-col items-center justify-center h-full gap-2">
+          <span class="loading loading-spinner loading-sm text-primary"></span>
+          <span class="text-[11px] opacity-40">获取日志中...</span>
+        </div>
+        <div x-show="!logLoading && logError" class="text-error text-xs" x-text="logError"></div>
+        <pre x-show="logs" class="whitespace-pre-wrap break-all m-0" x-text="logs"></pre>
+        <div x-show="!logLoading && !logError && !logs" class="flex flex-col items-center justify-center h-full gap-2 opacity-30">
+          <i class="fas fa-file-alt text-2xl"></i>
+          <span class="text-xs">暂无日志输出</span>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-5 py-1.5 border-t border-base-200 text-[10px] opacity-40 flex-shrink-0">
+        <span x-text="logNamespace + ' / ' + logPodName"></span>
+        <div class="flex items-center gap-3">
+          <span x-show="liveMode" class="text-emerald-500 flex items-center gap-1 opacity-100">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> 每 3s 刷新
+          </span>
+          <span x-text="logs ? (logs.split('\\n').length + ' 行') : ''"></span>
+        </div>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop" @click="stopLive()"><button>close</button></form>
+  </dialog>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+{% csrf_token %}
+<script>
+function noPermission() {
+  document.getElementById('noPermModal').showModal();
+}
+
+function nodeAction(url, actionName) {
+  fetch(url, {
+    method: 'POST',
+    headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value}
+  })
+  .then(r => {
+    if (r.status === 403) {
+      return r.json().then(d => { showToast('权限不足：' + (d.error || '无权执行此操作'), 'error'); throw new Error('forbidden'); });
+    }
+    return r.json();
+  })
+  .then(d => {
+    if (d.success) {
+      location.reload();
+    } else {
+      showToast(d.error || `${actionName} 操作失败`, 'error');
+    }
+  })
+  .catch(e => {
+    if (e.message !== 'forbidden') showToast('请求失败: ' + e.message, 'error');
+  });
+}
+
+function nodeDetail() {
+  return {
+    loading: true,
+    node: {},
+    pods: [],
+    error: null,
+    podSearch: '',
+    podPage: 1,
+    podPageSize: 20,
+    logPodName: '',
+    logNamespace: '',
+    logContainer: '',
+    logs: '',
+    logLoading: false,
+    logError: null,
+    liveMode: false,
+    liveTimer: null,
+    logTailLines: '200',
+    logPrevious: false,
+    get filteredPods() {
+      if (!this.podSearch) return this.pods;
+      const q = this.podSearch.toLowerCase();
+      return this.pods.filter(p => p.name.toLowerCase().includes(q) || p.namespace.toLowerCase().includes(q));
+    },
+    get podTotalPages() {
+      return Math.ceil(this.filteredPods.length / this.podPageSize) || 1;
+    },
+    get pagedPods() {
+      const start = (this.podPage - 1) * this.podPageSize;
+      return this.filteredPods.slice(start, start + this.podPageSize);
+    },
+    load() {
+      fetch('{% url "clusters:node_info_api" cluster.pk node_name %}')
+        .then(r => r.json())
+        .then(data => {
+          this.node = data.node || {};
+          this.pods = data.pods || [];
+          this.error = data.error;
+          this.loading = false;
+        })
+        .catch(err => {
+          this.error = err.message;
+          this.loading = false;
+        });
+    },
+    viewLogs(namespace, podName, isAutoRefresh = false, skipReset = false) {
+      this.logPodName = podName;
+      this.logNamespace = namespace;
+      if (!isAutoRefresh && !skipReset) {
+        // Reset state when opening modal (but not when toggling previous/current)
+        this.logPrevious = false;
+        this.logLoading = true;
+        this.logError = null;
+        this.logs = '';
+        document.getElementById('logModal').showModal();
+      } else if (!isAutoRefresh) {
+        // Just refresh with current settings
+        this.logLoading = true;
+        this.logError = null;
+      }
+
+      fetch(`/clusters/{{ cluster.pk }}/pod/${namespace}/${podName}/logs/?tail_lines=${this.logTailLines}${this.logPrevious ? '&previous=true' : ''}`)
+        .then(r => r.json())
+        .then(data => {
+          this.logLoading = false;
+          if (data.success) {
+            if (data.no_previous) {
+              this.logs = '';
+              this.logError = '该容器没有上次日志（容器未重启过）';
+            } else {
+              this.logs = data.logs || '';
+              this.logError = null;
+            }
+            this.logContainer = data.container || 'default';
+            // Scroll to bottom
+            setTimeout(() => {
+              const container = document.getElementById('logContainer');
+              if (container) container.scrollTop = container.scrollHeight;
+            }, 100);
+          } else {
+            this.logError = data.error || '获取日志失败';
+            if (this.liveMode) this.stopLive();
+          }
+        })
+        .catch(err => {
+          this.logLoading = false;
+          this.logError = err.message;
+          if (this.liveMode) this.stopLive();
+        });
+    },
+    toggleLive() {
+      this.liveMode = !this.liveMode;
+      if (this.liveMode) {
+        // Live mode always shows current logs, not previous
+        this.logPrevious = false;
+        // Fetch immediately, then every 3s
+        this.viewLogs(this.logNamespace, this.logPodName, false, true);
+        this.liveTimer = setInterval(() => {
+          this.viewLogs(this.logNamespace, this.logPodName, true);
+        }, 3000);
+      } else {
+        this.stopLive();
+      }
+    },
+    stopLive() {
+      this.liveMode = false;
+      if (this.liveTimer) {
+        clearInterval(this.liveTimer);
+        this.liveTimer = null;
+      }
+    }
+  }
+}
+</script>
+
+<!-- 无权限弹框 -->
+<dialog id="noPermModal" class="modal">
+  <div class="modal-box max-w-sm text-center bg-base-100 border border-error/20 rounded-2xl shadow-2xl">
+    <div class="w-14 h-14 mx-auto rounded-xl bg-error/10 flex items-center justify-center mb-4">
+      <i class="fas fa-lock text-2xl text-error"></i>
+    </div>
+    <h3 class="font-semibold text-base mb-2">权限不足</h3>
+    <p class="text-sm opacity-60 mb-6">当前账号仅有查看权限，无法执行此操作。请联系管理员开通编辑权限。</p>
+    <button class="btn btn-primary btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium w-full" onclick="noPermModal.close()">我知道了</button>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endblock %}

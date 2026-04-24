@@ -1,0 +1,341 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Armada{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/output.css' %}">
+  <link rel="stylesheet" href="{% static 'css/all.min.css' %}">
+  <style>
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: oklch(var(--bc) / 0.15); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: oklch(var(--bc) / 0.25); }
+
+    /* Sidebar */
+    .sidebar { width: 15rem; transition: width 0.2s ease; }
+    .sidebar-collapsed { width: 4rem !important; }
+    .sidebar-collapsed .sidebar-label,
+    .sidebar-collapsed .sidebar-logo-text,
+    .sidebar-collapsed .sidebar-section-title,
+    .sidebar-collapsed .sidebar-footer-text { display: none; }
+    .sidebar-collapsed .sidebar-nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
+    .sidebar-collapsed .sidebar-nav-icon { margin-right: 0; }
+
+    /* Main content */
+    .main-content { transition: margin-left 0.2s ease; }
+
+    /* Card hover - subtle */
+    .card { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+
+    /* Stat card orbs */
+    .stat-card { position: relative; overflow: hidden; }
+    .stat-card::before {
+      content: ''; position: absolute; top: -20px; right: -20px;
+      width: 80px; height: 80px; border-radius: 50%; opacity: 0.06;
+    }
+    .stat-card-primary::before { background: oklch(var(--p)); }
+    .stat-card-success::before { background: oklch(var(--su)); }
+    .stat-card-error::before { background: oklch(var(--er)); }
+    .stat-card-info::before { background: oklch(var(--in)); }
+    .stat-card-violet::before { background: #8b5cf6; }
+    .stat-card-amber::before { background: #f59e0b; }
+    .stat-card-emerald::before { background: #10b981; }
+    .stat-card-blue::before { background: #3b82f6; }
+
+    /* Sidebar active */
+    .sidebar-nav-item.active {
+      background: oklch(var(--p) / 0.12) !important;
+      color: oklch(var(--p));
+    }
+    .sidebar-nav-item.active .sidebar-nav-icon { color: oklch(var(--p)); }
+
+    /* Sidebar hover */
+    .sidebar-nav-item:not(.active):hover {
+      background: oklch(var(--bc) / 0.05);
+    }
+
+    /* Table */
+    .table tbody tr { transition: background-color 0.1s ease; }
+
+    /* Page transition */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .page-content { animation: fadeIn 0.2s ease-out; }
+
+    /* Status pulse */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .status-pulse { animation: pulse-dot 2s ease-in-out infinite; }
+
+    /* Gradient text */
+    .text-gradient {
+      background: linear-gradient(135deg, oklch(var(--p)), oklch(var(--s)));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-screen bg-base-200 text-base-content" x-data="{ sidebarOpen: localStorage.getItem('sidebarOpen') !== 'false' }" x-init="$watch('sidebarOpen', val => localStorage.setItem('sidebarOpen', val))">
+
+  <!-- Top Navbar -->
+  <nav class="fixed top-0 left-0 right-0 z-50 h-14 bg-base-100 border-b border-base-300 flex items-center justify-between px-4">
+    <!-- Left: Toggle + Logo -->
+    <div class="flex items-center gap-3">
+      <button @click="sidebarOpen = !sidebarOpen" class="btn btn-ghost btn-sm btn-square">
+        <i class="fas fa-bars text-sm opacity-60"></i>
+      </button>
+      <a href="{% url 'dashboard:index' %}" class="flex items-center gap-2 no-underline">
+        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+          <i class="fas fa-dharmachakra text-white text-xs"></i>
+        </div>
+        <span class="font-semibold text-base tracking-tight text-base-content">Armada</span>
+      </a>
+    </div>
+
+    <!-- Center: Cluster Selector -->
+    <div class="flex items-center">
+      <div class="relative" x-data="{ open: false }" @click.away="open = false">
+        <button @click="open = !open" class="btn btn-sm btn-ghost gap-2 border border-base-300 rounded-lg font-normal text-sm h-8 min-h-0 px-3">
+          <span class="w-1.5 h-1.5 rounded-full {% if active_cluster and active_cluster.status == 'online' %}bg-success{% elif active_cluster and active_cluster.status == 'offline' %}bg-error{% elif active_cluster %}bg-warning{% else %}bg-base-content/30{% endif %}"></span>
+          <span>{% if active_cluster %}{{ active_cluster }}{% else %}选择集群{% endif %}</span>
+          <i class="fas fa-chevron-down text-[10px] opacity-50 transition-transform duration-150" :class="open && 'rotate-180'"></i>
+        </button>
+        <ul x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95" class="absolute left-1/2 -translate-x-1/2 mt-2 bg-base-100 rounded-lg z-10 w-56 py-1 shadow-xl border border-base-300">
+          {% if all_clusters %}
+          {% for c in all_clusters %}
+          <li>
+            <a href="{% url 'clusters:select' c.pk %}?next={{ request.path }}" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-base-200 transition-colors {% if active_cluster and active_cluster.pk == c.pk %}text-primary bg-primary/5{% endif %}">
+              <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 {% if c.status == 'online' %}bg-success{% elif c.status == 'offline' %}bg-error{% else %}bg-warning{% endif %}"></span>
+              {{ c }}
+              {% if active_cluster and active_cluster.pk == c.pk %}
+              <i class="fas fa-check text-[10px] text-primary ml-auto"></i>
+              {% endif %}
+            </a>
+          </li>
+          {% endfor %}
+          <li class="border-t border-base-300 mt-1 pt-1">
+            <a href="{% url 'clusters:add' %}" class="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-base-200 transition-colors">
+              <i class="fas fa-plus text-[10px]"></i> 导入新集群
+            </a>
+          </li>
+          {% else %}
+          <li class="px-3 py-2 text-xs opacity-50">暂无集群</li>
+          <li>
+            <a href="{% url 'clusters:add' %}" class="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-base-200 transition-colors">
+              <i class="fas fa-plus text-[10px]"></i> 导入 Kubeconfig
+            </a>
+          </li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Right: Theme + User -->
+    <div class="flex items-center gap-1">
+      <label class="swap swap-rotate btn btn-ghost btn-sm btn-square">
+        <input type="checkbox" id="themeToggle" class="theme-controller" value="light" />
+        <i class="fas fa-sun swap-on text-sm text-amber-400"></i>
+        <i class="fas fa-moon swap-off text-sm text-indigo-300"></i>
+      </label>
+
+      <div class="relative" x-data="{ open: false }" @click.away="open = false">
+        <button @click="open = !open" class="btn btn-ghost btn-sm gap-2 h-8 min-h-0">
+          <div class="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center">
+            <span class="text-[10px] font-semibold text-white leading-none mt-px">{{ request.user.username|make_list|first|upper }}</span>
+          </div>
+          <span class="text-sm hidden sm:inline">{{ request.user.username }}</span>
+        </button>
+        <ul x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" class="absolute right-0 mt-2 bg-base-100 rounded-lg z-10 w-44 py-1 shadow-xl border border-base-300">
+          <li>
+            <a href="{% url 'accounts:profile' %}" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-base-200 transition-colors">
+              <i class="fas fa-user-cog text-xs opacity-50 w-4"></i>个人设置
+            </a>
+          </li>
+          <li class="border-t border-base-300 mt-1 pt-1">
+            <a href="{% url 'accounts:logout' %}" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-base-200 transition-colors text-error/80">
+              <i class="fas fa-sign-out-alt text-xs w-4"></i>退出登录
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Sidebar -->
+  <aside
+    class="sidebar fixed top-14 left-0 bottom-0 z-40 bg-base-100 border-r border-base-300 overflow-y-auto flex flex-col"
+    :class="sidebarOpen ? '' : 'sidebar-collapsed'"
+  >
+    <nav class="flex-1 py-2 px-2">
+      <!-- Dashboard -->
+      <a href="{% url 'dashboard:index' %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {% if request.resolver_match.url_name == 'index' %}active{% endif %}">
+        <i class="sidebar-nav-icon fas fa-th-large text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">仪表盘</span>
+      </a>
+
+      <!-- Cluster Management -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">集群</span>
+      </div>
+      <a href="{% url 'clusters:list' %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-server text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">集群列表</span>
+      </a>
+      <a href="{% if active_cluster %}{% url 'clusters:nodes' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-cube text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">节点管理</span>
+      </a>
+      <a href="{% if active_cluster %}{% url 'resources:namespaces' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-layer-group text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">命名空间</span>
+      </a>
+
+      <!-- Workloads -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">工作负载</span>
+      </div>
+      <a href="{% if active_cluster %}{% url 'resources:deployments' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-rocket text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Deployments</span>
+      </a>
+      <a href="{% if active_cluster %}{% url 'resources:statefulsets' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-database text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">StatefulSets</span>
+      </a>
+      <a href="{% if active_cluster %}{% url 'resources:daemonsets' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-clone text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">DaemonSets</span>
+      </a>
+      <a href="{% if active_cluster %}{% url 'resources:pods' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-cubes text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Pods</span>
+      </a>
+
+      <!-- Network & Storage -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">网络与存储</span>
+      </div>
+      <a href="{% if active_cluster %}{% url 'resources:services' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-network-wired text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Services</span>
+      </a>
+      <a href="{% if active_cluster %}{% url 'resources:ingresses' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-globe text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Ingress</span>
+      </a>
+      <a href="{% if active_cluster %}{% url 'resources:pvcs' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-hdd text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">PV / PVC</span>
+      </a>
+
+      <!-- Config -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">配置</span>
+      </div>
+      <a href="{% if active_cluster %}{% url 'resources:configmaps' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-file-code text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">ConfigMaps</span>
+      </a>
+      <a href="{% if active_cluster %}{% url 'resources:secrets' active_cluster.pk %}{% else %}{% url 'clusters:list' %}{% endif %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-key text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Secrets</span>
+      </a>
+
+      <!-- System -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">系统</span>
+      </div>
+      <a href="{% url 'accounts:user_list' %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-users-cog text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">用户管理</span>
+      </a>
+      <a href="{% url 'accounts:permission_list' %}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-shield-alt text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">权限管理</span>
+      </a>
+    </nav>
+
+    <!-- Sidebar Footer -->
+    <div class="p-3 border-t border-base-300">
+      <div class="sidebar-footer-text text-[10px] opacity-30 text-center">Armada v1.0</div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main
+    class="main-content pt-14 min-h-screen"
+    :class="sidebarOpen ? 'ml-60' : 'ml-16'"
+  >
+    <!-- Page Header -->
+    <div class="px-6 py-4 border-b border-base-300 bg-base-100">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-xl font-semibold text-base-content">{% block page_title %}Dashboard{% endblock %}</h1>
+          <div class="text-sm breadcrumbs opacity-50 py-0 text-xs">
+            <ul>
+              <li><a href="{% url 'dashboard:index' %}" class="hover:text-primary transition-colors">首页</a></li>
+              {% block breadcrumb %}{% endblock %}
+            </ul>
+          </div>
+        </div>
+        <div>{% block page_actions %}{% endblock %}</div>
+      </div>
+    </div>
+
+    <!-- Toast Messages -->
+    {% if messages %}
+    <div class="px-6 pt-4 space-y-2">
+      {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} shadow-sm border border-base-300" x-data="{ show: true }" x-show="show" x-transition>
+        <span class="text-sm">{{ message }}</span>
+        <button @click="show = false" class="btn btn-ghost btn-xs">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Page Content -->
+    <div class="p-6 page-content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <!-- Alpine.js -->
+  <script defer src="{% static 'js/alpine.min.js' %}"></script>
+  <script>
+    // Theme persistence
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+        const toggle = document.getElementById('themeToggle');
+        if (toggle) toggle.checked = (saved === 'light');
+      }
+    })();
+    document.addEventListener('DOMContentLoaded', function() {
+      const toggle = document.getElementById('themeToggle');
+      if (toggle) {
+        toggle.addEventListener('change', function() {
+          const theme = this.checked ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', theme);
+          localStorage.setItem('theme', theme);
+        });
+      }
+    });
+  </script>
+  {% include 'components/toast.html' %}
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

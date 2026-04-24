@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cluster }} - Armada{% endblock %}
+{% block page_title %}{{ cluster }}{% endblock %}
+{% block breadcrumb %}<li><a href="{% url 'clusters:list' %}">集群列表</a></li><li>{{ cluster }}</li>{% endblock %}
+
+{% block page_actions %}
+<div class="flex gap-2">
+  <form method="post" action="{% url 'clusters:refresh' cluster.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-ghost btn-sm gap-1.5 h-8 min-h-0 text-xs">
+      <i class="fas fa-sync-alt text-[10px]"></i> 刷新
+    </button>
+  </form>
+  <a href="{% url 'clusters:edit' cluster.pk %}" class="btn btn-ghost btn-sm gap-1.5 h-8 min-h-0 text-xs">
+    <i class="fas fa-edit text-[10px]"></i> 编辑
+  </a>
+  <a href="{% url 'clusters:select' cluster.pk %}?next=/" class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs">
+    <i class="fas fa-check text-[10px]"></i> 选择此集群
+  </a>
+  <button class="btn btn-ghost btn-sm gap-1.5 h-8 min-h-0 text-xs text-error" onclick="deleteModal.showModal()">
+    <i class="fas fa-trash-alt text-[10px]"></i> 删除
+  </button>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .info-card {
+    position: relative; overflow: hidden; border-radius: 0.75rem; padding: 1.25rem;
+    border: 1px solid oklch(var(--bc) / 0.06);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .info-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
+  .info-card::before { content: ''; position: absolute; top: -25px; right: -25px; width: 100px; height: 100px; border-radius: 50%; opacity: 0.12; }
+
+  .info-card-blue { background: linear-gradient(135deg, #1e2a4a, #172040); border-color: rgba(59,130,246,0.15); }
+  .info-card-blue::before { background: #3b82f6; }
+  .info-card-blue:hover { border-color: rgba(59,130,246,0.3); }
+
+  .info-card-green { background: linear-gradient(135deg, #1a2e22, #152618); border-color: rgba(34,197,94,0.15); }
+  .info-card-green::before { background: #22c55e; }
+  .info-card-green:hover { border-color: rgba(34,197,94,0.3); }
+
+  .info-card-amber { background: linear-gradient(135deg, #2a2415, #221c10); border-color: rgba(245,158,11,0.15); }
+  .info-card-amber::before { background: #f59e0b; }
+  .info-card-amber:hover { border-color: rgba(245,158,11,0.3); }
+
+  .info-card-violet { background: linear-gradient(135deg, #231e3a, #1c1730); border-color: rgba(139,92,246,0.15); }
+  .info-card-violet::before { background: #8b5cf6; }
+  .info-card-violet:hover { border-color: rgba(139,92,246,0.3); }
+
+  .info-card-red { background: linear-gradient(135deg, #2d1a1a, #261414); border-color: rgba(239,68,68,0.15); }
+  .info-card-red::before { background: #ef4444; }
+  .info-card-red:hover { border-color: rgba(239,68,68,0.3); }
+
+  .info-card-purple { background: linear-gradient(135deg, #271e38, #20172e); border-color: rgba(168,85,247,0.15); }
+  .info-card-purple::before { background: #a855f7; }
+  .info-card-purple:hover { border-color: rgba(168,85,247,0.3); }
+
+  [data-theme="light"] .info-card-blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-color: rgba(59,130,246,0.2); }
+  [data-theme="light"] .info-card-green { background: linear-gradient(135deg, #dcfce7, #bbf7d0); border-color: rgba(34,197,94,0.2); }
+  [data-theme="light"] .info-card-amber { background: linear-gradient(135deg, #fef3c7, #fde68a); border-color: rgba(245,158,11,0.2); }
+  [data-theme="light"] .info-card-violet { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-color: rgba(139,92,246,0.2); }
+  [data-theme="light"] .info-card-red { background: linear-gradient(135deg, #fee2e2, #fecaca); border-color: rgba(239,68,68,0.2); }
+  [data-theme="light"] .info-card-purple { background: linear-gradient(135deg, #f3e8ff, #e9d5ff); border-color: rgba(168,85,247,0.2); }
+  [data-theme="light"] .info-card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+
+  .nav-card { transition: all 0.15s ease; }
+  .nav-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="clusterOverview()" x-init="load()">
+
+  <!-- 集群基本信息 -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="info-card info-card-blue">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">状态</div>
+          <div class="flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full {% if cluster.status == 'online' %}bg-green-400{% elif cluster.status == 'offline' %}bg-red-400{% else %}bg-yellow-400{% endif %} animate-pulse"></div>
+            <span class="text-sm font-semibold">{{ cluster.get_status_display }}</span>
+          </div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-blue-500/15 grid place-items-center">
+          <i class="fas fa-heartbeat text-blue-400 text-sm"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card info-card-amber">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">K8s 版本</div>
+          <div class="text-sm font-mono font-semibold">{{ cluster.k8s_version|default:"-" }}</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-amber-500/15 grid place-items-center">
+          <i class="fas fa-code-branch text-amber-400 text-sm"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card info-card-violet">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">节点数</div>
+          <div class="text-lg font-bold">{{ cluster.node_count }}</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-violet-500/15 grid place-items-center">
+          <i class="fas fa-server text-violet-400 text-sm"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card info-card-green">
+      <div class="flex items-center justify-between">
+        <div class="flex-1 min-w-0 mr-3">
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">API Server</div>
+          <code class="text-[10px] opacity-60 break-all leading-relaxed">{{ cluster.api_server|default:"-" }}</code>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-emerald-500/15 grid place-items-center flex-shrink-0">
+          <i class="fas fa-link text-emerald-400 text-sm"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 节点状态 -->
+  <div class="grid grid-cols-3 gap-4 mb-5">
+    <div class="info-card info-card-green">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-md bg-green-500/15 grid place-items-center">
+            <i class="fas fa-check-circle text-green-400 text-xs"></i>
+          </div>
+          <span class="text-xs opacity-50">Ready</span>
+        </div>
+        <span class="text-2xl font-bold text-green-400" x-text="loading ? '-' : stats.ready">-</span>
+      </div>
+      <div x-show="!loading && stats.total > 0" class="w-full bg-black/10 rounded-full h-1.5 overflow-hidden">
+        <div class="bg-green-400 h-full rounded-full transition-all duration-500" :style="`width: ${stats.total > 0 ? (stats.ready / stats.total * 100) : 0}%`"></div>
+      </div>
+    </div>
+
+    <div class="info-card info-card-red">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-md bg-red-500/15 grid place-items-center">
+            <i class="fas fa-exclamation-circle text-red-400 text-xs"></i>
+          </div>
+          <span class="text-xs opacity-50">NotReady</span>
+        </div>
+        <span class="text-2xl font-bold" :class="stats.not_ready > 0 ? 'text-red-400' : 'opacity-20'" x-text="loading ? '-' : stats.not_ready">-</span>
+      </div>
+      <div x-show="!loading && stats.not_ready > 0" class="w-full bg-black/10 rounded-full h-1.5 overflow-hidden">
+        <div class="bg-red-400 h-full rounded-full transition-all duration-500" :style="`width: ${stats.total > 0 ? (stats.not_ready / stats.total * 100) : 0}%`"></div>
+      </div>
+    </div>
+
+    <div class="info-card info-card-purple">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-md bg-purple-500/15 grid place-items-center">
+            <i class="fas fa-microchip text-purple-400 text-xs"></i>
+          </div>
+          <span class="text-xs opacity-50">GPU 节点</span>
+        </div>
+        <span class="text-2xl font-bold text-purple-400" x-text="loading ? '-' : stats.gpu_nodes">-</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <!-- 快速导航 -->
+    <div class="card bg-base-100 border border-base-300">
+      <div class="card-body p-4">
+        <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">快速导航</h3>
+        <div class="grid grid-cols-4 gap-2.5">
+          <a href="{% url 'clusters:nodes' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-sky-500/5 border border-sky-500/10 hover:border-sky-500/30">
+            <div class="w-9 h-9 rounded-lg bg-sky-500/10 grid place-items-center">
+              <i class="fas fa-cube text-sky-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-sky-300/80">节点</span>
+          </a>
+          <a href="{% url 'resources:namespaces' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 hover:border-amber-500/30">
+            <div class="w-9 h-9 rounded-lg bg-amber-500/10 grid place-items-center">
+              <i class="fas fa-layer-group text-amber-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-amber-300/80">命名空间</span>
+          </a>
+          <a href="{% url 'resources:deployments' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10 hover:border-emerald-500/30">
+            <div class="w-9 h-9 rounded-lg bg-emerald-500/10 grid place-items-center">
+              <i class="fas fa-rocket text-emerald-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-emerald-300/80">Deployments</span>
+          </a>
+          <a href="{% url 'resources:statefulsets' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-indigo-500/5 border border-indigo-500/10 hover:border-indigo-500/30">
+            <div class="w-9 h-9 rounded-lg bg-indigo-500/10 grid place-items-center">
+              <i class="fas fa-database text-indigo-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-indigo-300/80">StatefulSets</span>
+          </a>
+          <a href="{% url 'resources:daemonsets' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10 hover:border-cyan-500/30">
+            <div class="w-9 h-9 rounded-lg bg-cyan-500/10 grid place-items-center">
+              <i class="fas fa-clone text-cyan-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-cyan-300/80">DaemonSets</span>
+          </a>
+          <a href="{% url 'resources:pods' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-violet-500/5 border border-violet-500/10 hover:border-violet-500/30">
+            <div class="w-9 h-9 rounded-lg bg-violet-500/10 grid place-items-center">
+              <i class="fas fa-cubes text-violet-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-violet-300/80">Pods</span>
+          </a>
+          <a href="{% url 'resources:services' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-rose-500/5 border border-rose-500/10 hover:border-rose-500/30">
+            <div class="w-9 h-9 rounded-lg bg-rose-500/10 grid place-items-center">
+              <i class="fas fa-network-wired text-rose-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-rose-300/80">Services</span>
+          </a>
+          <a href="{% url 'resources:ingresses' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-orange-500/5 border border-orange-500/10 hover:border-orange-500/30">
+            <div class="w-9 h-9 rounded-lg bg-orange-500/10 grid place-items-center">
+              <i class="fas fa-globe text-orange-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-orange-300/80">Ingress</span>
+          </a>
+          <a href="{% url 'resources:configmaps' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-teal-500/5 border border-teal-500/10 hover:border-teal-500/30">
+            <div class="w-9 h-9 rounded-lg bg-teal-500/10 grid place-items-center">
+              <i class="fas fa-file-code text-teal-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-teal-300/80">ConfigMaps</span>
+          </a>
+          <a href="{% url 'resources:secrets' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/10 hover:border-yellow-500/30">
+            <div class="w-9 h-9 rounded-lg bg-yellow-500/10 grid place-items-center">
+              <i class="fas fa-key text-yellow-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-yellow-300/80">Secrets</span>
+          </a>
+          <a href="{% url 'resources:pvcs' cluster.pk %}" class="nav-card flex flex-col items-center gap-2 p-3 rounded-lg bg-pink-500/5 border border-pink-500/10 hover:border-pink-500/30">
+            <div class="w-9 h-9 rounded-lg bg-pink-500/10 grid place-items-center">
+              <i class="fas fa-hdd text-pink-400 text-sm"></i>
+            </div>
+            <span class="text-[11px] text-pink-300/80">PV / PVC</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧 -->
+    <div class="space-y-5">
+      {% if cluster.description %}
+      <div class="card bg-base-100 border border-base-300">
+        <div class="card-body p-4">
+          <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-2">集群描述</h3>
+          <p class="text-sm opacity-60 leading-relaxed">{{ cluster.description }}</p>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card bg-base-100 border border-base-300">
+        <div class="card-body p-4">
+          <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">监控配置</h3>
+          <form method="post" action="{% url 'clusters:update_prometheus' cluster.pk %}">
+            {% csrf_token %}
+            <label class="block text-xs opacity-50 mb-2">Prometheus 地址</label>
+            <div class="flex gap-2">
+              <input type="text" name="prometheus_url" value="{{ cluster.prometheus_url }}" class="input input-bordered input-sm flex-1 h-9 focus:input-primary text-xs" placeholder="http://prometheus:9090">
+              <button type="submit" class="btn btn-primary btn-sm h-9 min-h-0 text-xs px-4">保存</button>
+            </div>
+            <p class="text-[10px] mt-2 flex items-center gap-1">
+              {% if cluster.prometheus_url %}
+              <i class="fas fa-check-circle text-green-400 text-[10px]"></i>
+              <span class="text-green-400/70">已配置 Prometheus</span>
+              {% else %}
+              <i class="fas fa-info-circle text-amber-400 text-[10px]"></i>
+              <span class="text-amber-400/70">未配置，使用 Metrics Server</span>
+              {% endif %}
+            </p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<dialog id="deleteModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-error/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-exclamation-triangle text-lg text-error"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base text-error">删除集群</h3>
+        <p class="text-xs opacity-50 mt-0.5">此操作不可撤销，请谨慎操作</p>
+      </div>
+    </div>
+    <div class="space-y-4">
+      <div class="bg-error/5 border border-error/15 rounded-xl p-4 space-y-2.5">
+        <p class="text-sm leading-relaxed">此操作仅移除本地存储的集群连接信息，不会影响远端 Kubernetes 集群。</p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">请输入集群名称 <code class="bg-base-200 px-1.5 py-0.5 rounded text-xs font-bold">{{ cluster.name }}</code> 以确认</label>
+        <form method="post" action="{% url 'clusters:delete' cluster.pk %}">
+          {% csrf_token %}
+          <input type="text" name="confirm_name" class="input input-bordered w-full h-10 focus:input-error text-sm rounded-lg" placeholder="输入集群名称..." autocomplete="off">
+          <div class="modal-action mt-6 gap-2.5">
+            <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="deleteModal.close()">取消</button>
+            <button type="submit" class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105">
+              <i class="fas fa-trash-alt text-[10px]"></i> 确认删除
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function clusterOverview() {
+  return {
+    loading: true,
+    stats: { total: 0, ready: 0, not_ready: 0, gpu_nodes: 0 },
+    load() {
+      fetch('{% url "clusters:nodes_api" cluster.pk %}')
+        .then(r => r.json())
+        .then(data => {
+          this.stats = data.stats || this.stats;
+          this.loading = false;
+        })
+        .catch(() => { this.loading = false; });
+    }
+  }
+}
+</script>
+{% endblock %}

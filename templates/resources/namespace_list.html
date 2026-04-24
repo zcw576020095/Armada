@@ -1,0 +1,92 @@
+{% extends "resources/base_list.html" %}
+
+{% block title %}Namespaces - {{ cluster }} - Armada{% endblock %}
+{% block page_title %}命名空间{% endblock %}
+{% block breadcrumb %}<li><a href="{% url 'clusters:detail' cluster.pk %}">{{ cluster }}</a></li><li>Namespaces</li>{% endblock %}
+{% block resource_icon %}layer-group{% endblock %}
+{% block resource_title %}Namespaces{% endblock %}
+{% block api_url %}{% url 'resources:namespaces_api' cluster.pk %}{% endblock %}
+
+{% block extra_actions %}
+<button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="{% if can_edit %}document.getElementById('createNsModal').showModal(){% else %}noPermModal.showModal(){% endif %}">
+  <i class="fas fa-plus text-[10px]"></i> 新建
+</button>
+{% endblock %}
+
+{% block table_headers %}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">状态</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">操作</th>
+{% endblock %}
+
+{% block table_row %}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td>
+    <span class="badge badge-xs" :class="r.status == 'Active' ? 'badge-success' : 'badge-warning'" x-text="r.status"></span>
+  </td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td class="flex gap-1">
+    <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('Namespace: ' + r.name, '/resources/{{ cluster.pk }}/yaml/namespace/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
+      <i class="fas fa-file-code text-[10px]"></i> YAML
+    </button>
+    <template x-if="r.name != 'default' && r.name != 'kube-system' && r.name != 'kube-public' && r.name != 'kube-node-lease'">
+      <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Namespace', name: r.name, namespace: '', deleteUrl: '/resources/{{ cluster.pk }}/namespaces/' + r.name + '/delete/'}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-trash-alt text-[10px]"></i>
+      </button>
+    </template>
+  </td>
+</tr>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+
+<!-- 创建命名空间弹窗 -->
+<dialog id="createNsModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-primary/20 rounded-2xl shadow-2xl">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-plus-circle text-lg text-primary"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base">创建命名空间</h3>
+        <p class="text-xs opacity-50 mt-0.5">在当前集群中创建新的命名空间</p>
+      </div>
+    </div>
+    <form x-data="{ submitting: false }" @submit.prevent="
+      submitting = true;
+      const fd = new FormData($el);
+      fetch('{% url 'resources:namespace_create' cluster.pk %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value},
+        body: fd
+      })
+      .then(r => r.json())
+      .then(d => { if(d.success) location.reload(); else { showToast(d.error, 'error'); submitting=false; } })
+      .catch(e => { showToast(e, 'error'); submitting=false; });
+    ">
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">命名空间名称</label>
+        <input type="text" name="name" class="input input-bordered w-full h-10 focus:input-primary text-sm rounded-lg" placeholder="my-namespace" required pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]">
+        <p class="text-[11px] opacity-40 mt-1">只能包含小写字母、数字和连字符</p>
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="createNsModal.close()">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" :disabled="submitting">
+          <i class="fas fa-check text-[10px]"></i> 创建
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+// Override load for namespace (different JSON structure)
+document.addEventListener('alpine:init', () => {
+  const original = Alpine.evaluate;
+});
+</script>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}无权限 - Armada{% endblock %}
+{% block page_title %}访问被拒绝{% endblock %}
+
+{% block content %}
+<div class="flex flex-col items-center justify-center py-24">
+  <div class="w-16 h-16 rounded-full bg-error/10 flex items-center justify-center mb-5">
+    <i class="fas fa-ban text-3xl text-error"></i>
+  </div>
+  <h2 class="text-xl font-semibold mb-1">无权访问</h2>
+  <p class="text-sm opacity-50 mb-5">你没有权限访问此页面，请联系管理员。</p>
+  <a href="{% url 'dashboard:index' %}" class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs">
+    <i class="fas fa-arrow-left text-[10px]"></i> 返回首页
+  </a>
+</div>
+{% endblock %}

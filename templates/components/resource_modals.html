@@ -1,0 +1,372 @@
+<!-- YAML Editor Modal - 全屏风格 -->
+<dialog id="yamlModal" class="modal">
+  <div class="modal-box flex flex-col p-0 shadow-2xl" style="width: 90vw; max-width: 90vw; height: 90vh; max-height: 90vh; border-radius: 16px; background: #1e1e2e; color: #d4d4d4; border: 1px solid rgba(139,92,246,0.2);">
+    <!-- 顶部标题栏 -->
+    <div class="flex items-center justify-between px-6 py-4" style="border-bottom: 1px solid rgba(139,92,246,0.15); background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg" style="background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(59,130,246,0.2));">
+          <i class="fas fa-file-code text-base" style="color: #a78bfa;"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base" id="yamlModalTitle" style="color: #f0f0f0;">YAML 编辑器</h3>
+          <p class="text-[11px] mt-0.5" id="yamlModalPath" style="color: #9ca3af;">资源配置</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2.5 cursor-pointer px-3 py-1.5 rounded-lg transition-all hover:bg-white/5">
+          <span class="text-xs font-medium" style="color: #9ca3af;">编辑模式</span>
+          <input type="checkbox" id="yamlReadonlyToggle" class="toggle toggle-primary toggle-sm" checked>
+        </label>
+        <button class="btn btn-ghost btn-sm btn-circle w-9 h-9 min-h-0 hover:bg-white/10 transition-all" style="color: #9ca3af;" onclick="yamlModal.close()">
+          <i class="fas fa-times text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- 提示条 -->
+    <div class="px-6 py-3 flex items-center gap-3" style="background: rgba(59,130,246,0.1); border-bottom: 1px solid rgba(59,130,246,0.2);">
+      <i class="fas fa-info-circle text-sm" style="color: #60a5fa;"></i>
+      <span class="text-xs leading-relaxed" style="color: #93c5fd;">修改 YAML 后点击「应用到集群」将直接更新资源配置，请确认修改内容无误后再提交。</span>
+    </div>
+
+    <!-- Monaco 编辑器区域 -->
+    <div id="monacoContainer" class="flex-1" style="min-height: 0;"></div>
+
+    <!-- 错误提示 -->
+    <div id="yamlError" class="hidden px-6 py-3 text-xs flex items-center gap-2.5" style="background: rgba(239,68,68,0.1); border-top: 1px solid rgba(239,68,68,0.25); color: #fca5a5;">
+      <i class="fas fa-exclamation-circle text-sm"></i>
+      <span id="yamlErrorText" class="leading-relaxed"></span>
+    </div>
+
+    <!-- 成功提示 -->
+    <div id="yamlSuccess" class="hidden px-6 py-3 text-xs flex items-center gap-2.5" style="background: rgba(34,197,94,0.1); border-top: 1px solid rgba(34,197,94,0.25); color: #86efac;">
+      <i class="fas fa-check-circle text-sm"></i>
+      <span id="yamlSuccessText" class="leading-relaxed"></span>
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div class="flex items-center justify-between px-6 py-4" style="border-top: 1px solid rgba(139,92,246,0.15); background: #1a1a2e;">
+      <span class="text-xs font-medium" id="yamlStatus" style="color: #6b7280;">就绪</span>
+      <div class="flex gap-2.5">
+        <button class="btn btn-sm h-9 min-h-0 px-5 text-xs font-medium rounded-lg transition-all hover:scale-105" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #d1d5db;" onclick="yamlModal.close()">
+          <i class="fas fa-times mr-1.5 text-[10px]"></i> 取消
+        </button>
+        <button class="btn btn-sm h-9 min-h-0 px-5 text-xs font-medium rounded-lg transition-all hover:scale-105" id="yamlValidateBtn" style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa;" onclick="validateYaml()">
+          <i class="fas fa-check-double mr-1.5 text-[10px]"></i> 验证语法
+        </button>
+        <button class="btn btn-primary btn-sm h-9 min-h-0 px-5 text-xs font-medium rounded-lg shadow-lg transition-all hover:scale-105" id="yamlApplyBtn" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none;" onclick="applyYaml()">
+          <i class="fas fa-cloud-upload-alt mr-1.5 text-[10px]"></i> 应用到集群
+        </button>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Delete Confirm Modal -->
+<dialog id="deleteModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl" x-data="{ confirmInput: '' }" @open-delete-modal.window="
+    $el.querySelector('#deleteResourceType').textContent = $event.detail.type;
+    $el.querySelector('#deleteResourceName').textContent = $event.detail.name;
+    $el.querySelector('#deleteResourceNs').textContent = $event.detail.namespace || '';
+    $el.dataset.deleteUrl = $event.detail.deleteUrl;
+    confirmInput = '';
+    deleteModal.showModal();
+  ">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-error/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-exclamation-triangle text-lg text-error"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base text-error">确认删除</h3>
+        <p class="text-xs opacity-50 mt-0.5">此操作不可撤销，请谨慎操作</p>
+      </div>
+    </div>
+    <div class="space-y-4">
+      <div class="bg-error/5 border border-error/15 rounded-xl p-4 space-y-2.5">
+        <div class="flex items-center gap-3"><span class="text-[11px] opacity-40 w-14">类型</span> <span id="deleteResourceType" class="font-semibold text-sm"></span></div>
+        <div class="flex items-center gap-3"><span class="text-[11px] opacity-40 w-14">名称</span> <span id="deleteResourceName" class="font-bold text-sm text-error font-mono"></span></div>
+        <div class="flex items-center gap-3" x-show="$el.closest('.modal-box').querySelector('#deleteResourceNs').textContent">
+          <span class="text-[11px] opacity-40 w-14">命名空间</span> <span id="deleteResourceNs" class="font-medium text-sm"></span>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">请输入资源名称以确认删除</label>
+        <input type="text" x-model="confirmInput" class="input input-bordered w-full h-10 focus:input-error text-sm rounded-lg" placeholder="输入资源名称..." autocomplete="off">
+      </div>
+    </div>
+    <div class="modal-action mt-6 gap-2.5">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="deleteModal.close()">取消</button>
+      <button class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-30 disabled:shadow-none disabled:hover:scale-100"
+        :disabled="confirmInput !== $el.closest('.modal-box').querySelector('#deleteResourceName').textContent"
+        @click="
+          fetch($el.closest('.modal-box').dataset.deleteUrl, {
+            method: 'POST',
+            headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value}
+          })
+          .then(r => r.json())
+          .then(d => { if(d.success) location.reload(); else showToast(d.error, 'error'); })
+          .catch(e => showToast(e), 'error');
+          deleteModal.close();
+        ">
+        <i class="fas fa-trash-alt text-[10px]"></i> 确认删除
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Scale Modal -->
+<dialog id="scaleModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-primary/20 rounded-2xl shadow-2xl" x-data="{ replicas: 0, current: 0 }" @open-scale-modal.window="
+    current = $event.detail.current;
+    replicas = $event.detail.current;
+    $el.querySelector('#scaleResourceName').textContent = $event.detail.name;
+    $el.dataset.scaleUrl = $event.detail.scaleUrl;
+    scaleModal.showModal();
+  ">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-expand-arrows-alt text-lg text-primary"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base">扩缩容</h3>
+        <p class="text-xs opacity-50 mt-0.5">调整 <span id="scaleResourceName" class="font-semibold text-primary"></span> 的副本数</p>
+      </div>
+    </div>
+    <div class="space-y-5">
+      <div class="flex items-center justify-center gap-5 py-4 bg-base-200/50 rounded-xl">
+        <div class="text-center">
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1">当前</div>
+          <div class="text-2xl font-bold opacity-60" x-text="current"></div>
+        </div>
+        <i class="fas fa-arrow-right text-primary opacity-60"></i>
+        <div class="text-center">
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1">目标</div>
+          <div class="text-2xl font-bold text-primary" x-text="replicas"></div>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <input type="range" min="0" max="50" x-model.number="replicas" class="range range-primary range-sm">
+        <div class="flex items-center gap-3">
+          <input type="number" min="0" max="999" x-model.number="replicas" class="input input-bordered w-28 h-10 text-center text-sm font-semibold rounded-lg focus:input-primary">
+          <span class="text-xs opacity-40">个副本</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-action mt-6 gap-2.5">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="scaleModal.close()">取消</button>
+      <button class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" @click="
+        fetch($el.closest('.modal-box').dataset.scaleUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify({replicas: replicas})
+        })
+        .then(r => r.json())
+        .then(d => { if(d.success) location.reload(); else showToast(d.error, 'error'); })
+        .catch(e => showToast(e), 'error');
+        scaleModal.close();
+      ">
+        <i class="fas fa-check text-[10px]"></i> 确认调整
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Restart Confirm Modal -->
+<dialog id="restartModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-warning/20 rounded-2xl shadow-2xl" x-data @open-restart-modal.window="
+    $el.querySelector('#restartResourceName').textContent = $event.detail.name;
+    $el.dataset.restartUrl = $event.detail.restartUrl;
+    restartModal.showModal();
+  ">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-redo text-lg text-warning"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base text-warning">确认重启</h3>
+        <p class="text-xs opacity-50 mt-0.5">将触发滚动更新以重启所有 Pod</p>
+      </div>
+    </div>
+    <div class="bg-warning/5 border border-warning/15 rounded-xl p-4 space-y-2.5">
+      <p class="text-sm leading-relaxed">确定要重启 <span id="restartResourceName" class="font-bold text-warning font-mono"></span> 吗？</p>
+      <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
+        <p><i class="fas fa-info-circle text-warning mr-1.5"></i>重启将通过滚动更新方式逐步替换所有 Pod。</p>
+        <p><i class="fas fa-check-circle text-success mr-1.5"></i>服务不会中断，新 Pod 就绪后旧 Pod 才会被终止。</p>
+      </div>
+    </div>
+    <div class="modal-action mt-6 gap-2.5">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="restartModal.close()">取消</button>
+      <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" @click="
+        fetch($el.closest('.modal-box').dataset.restartUrl, {
+          method: 'POST',
+          headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value}
+        })
+        .then(r => r.json())
+        .then(d => { if(d.success) location.reload(); else showToast(d.error, 'error'); })
+        .catch(e => showToast(e), 'error');
+        restartModal.close();
+      ">
+        <i class="fas fa-redo text-[10px]"></i> 确认重启
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- CSRF Token -->
+{% csrf_token %}
+
+<!-- Monaco Editor CDN -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+<script>
+let monacoEditor = null;
+let currentYamlUrl = '';
+
+require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' }});
+
+function openYaml(title, url, canEdit) {
+  if (canEdit === undefined) canEdit = true;
+  currentYamlUrl = url;
+  document.getElementById('yamlModalTitle').textContent = title;
+  document.getElementById('yamlModalPath').textContent = url.replace(/.*\/yaml\//, '').replace(/\/$/, '').replace(/\//g, ' / ');
+  document.getElementById('yamlError').classList.add('hidden');
+  document.getElementById('yamlSuccess').classList.add('hidden');
+  document.getElementById('yamlStatus').textContent = '加载中...';
+
+  const toggle = document.getElementById('yamlReadonlyToggle');
+  const applyBtn = document.getElementById('yamlApplyBtn');
+  const validateBtn = document.getElementById('yamlValidateBtn');
+  if (canEdit) {
+    toggle.parentElement.style.display = '';
+    applyBtn.style.display = '';
+    validateBtn.style.display = '';
+    toggle.checked = true;
+  } else {
+    toggle.parentElement.style.display = 'none';
+    applyBtn.style.display = 'none';
+    validateBtn.style.display = 'none';
+    toggle.checked = false;
+  }
+
+  yamlModal.showModal();
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        document.getElementById('yamlStatus').textContent = '加载失败';
+        document.getElementById('yamlError').classList.remove('hidden');
+        document.getElementById('yamlErrorText').textContent = data.error;
+        return;
+      }
+      const container = document.getElementById('monacoContainer');
+      const readOnly = !canEdit;
+      if (monacoEditor) {
+        monacoEditor.setValue(data.yaml);
+        monacoEditor.updateOptions({ readOnly: readOnly });
+        monaco.editor.setTheme('vs-dark');
+        setTimeout(() => monacoEditor.layout(), 50);
+      } else {
+        require(['vs/editor/editor.main'], function() {
+          monacoEditor = monaco.editor.create(container, {
+            value: data.yaml,
+            language: 'yaml',
+            theme: 'vs-dark',
+            readOnly: readOnly,
+            minimap: { enabled: true, maxColumn: 80 },
+            fontSize: 13,
+            lineNumbers: 'on',
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            padding: { top: 10, bottom: 10 },
+            renderLineHighlight: 'all',
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            folding: true,
+            bracketPairColorization: { enabled: true },
+          });
+          setTimeout(() => monacoEditor.layout(), 100);
+        });
+      }
+      document.getElementById('yamlStatus').textContent = '就绪';
+    })
+    .catch(e => {
+      document.getElementById('yamlStatus').textContent = '加载失败';
+      document.getElementById('yamlError').classList.remove('hidden');
+      document.getElementById('yamlErrorText').textContent = '网络请求失败: ' + e.message;
+    });
+}
+
+document.getElementById('yamlReadonlyToggle').addEventListener('change', function() {
+  if (monacoEditor) monacoEditor.updateOptions({ readOnly: !this.checked });
+});
+
+function validateYaml() {
+  if (!monacoEditor) return;
+  const yaml = monacoEditor.getValue();
+  document.getElementById('yamlError').classList.add('hidden');
+  document.getElementById('yamlSuccess').classList.add('hidden');
+
+  try {
+    const lines = yaml.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trim() === '' || line.trim().startsWith('#')) continue;
+      if (line.includes('\t')) {
+        throw new Error(`第 ${i+1} 行: YAML 不允许使用 Tab 缩进，请使用空格`);
+      }
+    }
+    document.getElementById('yamlSuccess').classList.remove('hidden');
+    document.getElementById('yamlSuccessText').textContent = '语法验证通过，YAML 格式正确';
+    document.getElementById('yamlStatus').textContent = '验证通过';
+  } catch (e) {
+    document.getElementById('yamlError').classList.remove('hidden');
+    document.getElementById('yamlErrorText').textContent = e.message;
+    document.getElementById('yamlStatus').textContent = '验证失败';
+  }
+}
+
+function applyYaml() {
+  if (!monacoEditor || !currentYamlUrl) return;
+  const yaml = monacoEditor.getValue();
+  document.getElementById('yamlStatus').textContent = '正在应用...';
+  document.getElementById('yamlError').classList.add('hidden');
+  document.getElementById('yamlSuccess').classList.add('hidden');
+  document.getElementById('yamlApplyBtn').classList.add('loading');
+
+  fetch(currentYamlUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+    },
+    body: JSON.stringify({ yaml: yaml })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('yamlApplyBtn').classList.remove('loading');
+    if (data.success) {
+      document.getElementById('yamlSuccess').classList.remove('hidden');
+      document.getElementById('yamlSuccessText').textContent = data.message || '资源配置已成功应用到集群';
+      document.getElementById('yamlStatus').textContent = '应用成功';
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      document.getElementById('yamlError').classList.remove('hidden');
+      document.getElementById('yamlErrorText').textContent = data.error;
+      document.getElementById('yamlStatus').textContent = '应用失败';
+    }
+  })
+  .catch(e => {
+    document.getElementById('yamlApplyBtn').classList.remove('loading');
+    document.getElementById('yamlError').classList.remove('hidden');
+    document.getElementById('yamlErrorText').textContent = '请求失败: ' + e.message;
+    document.getElementById('yamlStatus').textContent = '应用失败';
+  });
+}
+</script>

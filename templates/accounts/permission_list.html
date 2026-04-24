@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}权限管理 - Armada{% endblock %}
+{% block page_title %}权限管理{% endblock %}
+{% block breadcrumb %}<li>权限管理</li>{% endblock %}
+
+{% include "components/resource_modals.html" %}
+{% block content %}
+<div class="card bg-base-100 border border-base-300">
+  <div class="card-body p-5">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="flex items-center gap-3">
+        <h3 class="text-xl font-bold flex items-center gap-2 text-base-content/80">
+          <i class="fas fa-shield-alt text-violet-500"></i>
+          权限规则
+        </h3>
+        <span class="px-3 py-1 rounded-full bg-violet-500 text-white text-sm font-bold">{{ permissions|length }}</span>
+      </div>
+      <button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="document.getElementById('createPermModal').showModal()">
+        <i class="fas fa-plus text-[10px]"></i> 添加权限
+      </button>
+    </div>
+
+    <!-- 提示条 -->
+    <div class="flex items-center gap-2 px-3 py-2 mb-4 rounded-lg bg-info/10 border border-info/20">
+      <i class="fas fa-info-circle text-info text-xs"></i>
+      <span class="text-xs text-info">管理员拥有所有模块的完全控制权限，无需额外配置。以下规则仅对普通用户生效。</span>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr class="border-b border-base-300">
+            <th class="font-semibold text-xs">用户</th>
+            <th class="font-semibold text-xs">集群</th>
+            <th class="font-semibold text-xs">模块</th>
+            <th class="font-semibold text-xs">权限</th>
+            <th class="font-semibold text-xs">创建时间</th>
+            <th class="font-semibold text-xs">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in permissions %}
+          <tr class="hover:bg-base-200/50 border-b border-base-300/50">
+            <td>
+              <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500/20 to-violet-500/20 flex items-center justify-center">
+                  <span class="text-[10px] font-semibold text-primary">{{ p.user.username|make_list|first|upper }}</span>
+                </div>
+                <span class="text-xs font-medium">{{ p.user.username }}</span>
+              </div>
+            </td>
+            <td><span class="badge badge-xs badge-outline">{{ p.cluster }}</span></td>
+            <td><span class="badge badge-xs badge-ghost">{{ p.get_module_display }}</span></td>
+            <td>
+              {% if p.permission == 'edit' %}
+              <span class="badge badge-xs badge-warning">编辑</span>
+              {% else %}
+              <span class="badge badge-xs badge-info">查看</span>
+              {% endif %}
+            </td>
+            <td class="text-xs opacity-70">{{ p.created_at|date:"Y-m-d H:i" }}</td>
+            <td>
+              <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" onclick="deletePerm({{ p.pk }})">
+                <i class="fas fa-trash-alt text-[10px]"></i>
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-12 opacity-50">
+              <i class="fas fa-shield-alt text-2xl mb-2 block text-primary/30"></i>
+              <p class="text-sm">暂无权限规则</p>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 创建权限模态框 -->
+<dialog id="createPermModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-primary/20 rounded-2xl shadow-2xl">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-shield-alt text-lg text-primary"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base">添加权限规则</h3>
+        <p class="text-xs opacity-50 mt-0.5">为用户配置集群资源访问权限</p>
+      </div>
+    </div>
+    <form method="POST" action="{% url 'accounts:permission_create' %}" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">用户</label>
+        <select name="user" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary" required>
+          <option value="">选择用户</option>
+          {% for u in users %}
+          <option value="{{ u.pk }}">{{ u.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">集群</label>
+        <input type="text" name="cluster" class="input input-bordered w-full h-10 text-sm rounded-lg focus:input-primary" placeholder="输入集群名称" required />
+      </div>
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">模块</label>
+        <select name="module" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary">
+          {% for val, label in module_choices %}
+          <option value="{{ val }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p class="text-[11px] opacity-40 mt-1">选择此权限适用的模块</p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">权限级别</label>
+        <select name="permission" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary">
+          {% for val, label in permission_choices %}
+          <option value="{{ val }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p class="text-[11px] opacity-40 mt-1">查看：只能浏览数据；编辑：可以修改、删除、创建</p>
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="createPermModal.close()">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105">
+          <i class="fas fa-check text-[10px]"></i> 添加
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- 删除权限确认弹框 -->
+<dialog id="deletePermModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-error/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-exclamation-triangle text-lg text-error"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base text-error">删除权限规则</h3>
+        <p class="text-xs opacity-50 mt-0.5">此操作不可撤销</p>
+      </div>
+    </div>
+    <div class="bg-error/5 border border-error/15 rounded-xl p-4">
+      <p class="text-sm leading-relaxed">确定要删除此权限规则吗？删除后该用户将失去对应的访问权限。</p>
+    </div>
+    <div class="modal-action mt-6 gap-2.5">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="deletePermModal.close()">取消</button>
+      <button id="confirmDeletePermBtn" class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105">
+        <i class="fas fa-trash-alt text-[10px]"></i> 确认删除
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{% csrf_token %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function deletePerm(id) {
+  window.dispatchEvent(new CustomEvent('open-delete-modal', {
+    detail: {
+      type: '权限规则',
+      name: 'ID: ' + id,
+      deleteUrl: `/accounts/permissions/${id}/delete/`
+    }
+  }));
+}
+</script>
+{% endblock %}
