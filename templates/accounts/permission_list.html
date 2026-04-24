@@ -92,29 +92,46 @@
         <p class="text-xs opacity-50 mt-0.5">为用户配置集群资源访问权限</p>
       </div>
     </div>
-    <form method="POST" action="{% url 'accounts:permission_create' %}" class="space-y-4">
+    <form id="createPermForm" class="space-y-4">
       {% csrf_token %}
       <div>
         <label class="block text-xs font-medium opacity-50 mb-2">用户</label>
-        <select name="user" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary" required>
+        <select name="user_id" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary" required>
           <option value="">选择用户</option>
           {% for u in users %}
-          <option value="{{ u.pk }}">{{ u.username }}</option>
+          <option value="{{ u.pk }}">{{ u.username }}{% if u.profile.department %} · {{ u.profile.department }}{% endif %}</option>
           {% endfor %}
         </select>
       </div>
       <div>
         <label class="block text-xs font-medium opacity-50 mb-2">集群</label>
-        <input type="text" name="cluster" class="input input-bordered w-full h-10 text-sm rounded-lg focus:input-primary" placeholder="输入集群名称" required />
-      </div>
-      <div>
-        <label class="block text-xs font-medium opacity-50 mb-2">模块</label>
-        <select name="module" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary">
-          {% for val, label in module_choices %}
-          <option value="{{ val }}">{{ label }}</option>
+        <select name="cluster_id" class="select select-bordered w-full h-10 min-h-0 text-sm rounded-lg focus:select-primary" required>
+          <option value="">选择集群</option>
+          {% for c in clusters %}
+          <option value="{{ c.pk }}">{{ c.name }}</option>
+          {% empty %}
+          <option value="" disabled>暂无集群，请先在"集群管理"中添加</option>
           {% endfor %}
         </select>
-        <p class="text-[11px] opacity-40 mt-1">选择此权限适用的模块</p>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-xs font-medium opacity-50">模块（可多选）</label>
+          <div class="flex gap-2 text-[11px]">
+            <button type="button" class="text-primary hover:underline" onclick="togglePermModules(true)">全选</button>
+            <span class="opacity-30">|</span>
+            <button type="button" class="text-primary hover:underline" onclick="togglePermModules(false)">清空</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5 p-3 rounded-lg border border-base-300 bg-base-200/30 max-h-48 overflow-y-auto">
+          {% for val, label in module_choices %}
+          <label class="flex items-center gap-2 cursor-pointer hover:bg-base-300/50 rounded px-1.5 py-1 transition-colors">
+            <input type="checkbox" name="modules" value="{{ val }}" class="checkbox checkbox-xs checkbox-primary">
+            <span class="text-xs">{{ label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <p class="text-[11px] opacity-40 mt-1.5">同一用户 + 集群下可同时授予多个模块，同级权限</p>
       </div>
       <div>
         <label class="block text-xs font-medium opacity-50 mb-2">权限级别</label>
@@ -127,7 +144,7 @@
       </div>
       <div class="modal-action mt-6 gap-2.5">
         <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="createPermModal.close()">取消</button>
-        <button type="submit" class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105">
+        <button type="submit" id="createPermSubmitBtn" class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105">
           <i class="fas fa-check text-[10px]"></i> 添加
         </button>
       </div>
@@ -175,5 +192,45 @@ function deletePerm(id) {
     }
   }));
 }
+
+function togglePermModules(checked) {
+  document.querySelectorAll('#createPermForm input[name="modules"]').forEach(cb => cb.checked = checked);
+}
+
+document.getElementById('createPermForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = document.getElementById('createPermSubmitBtn');
+
+  const checkedModules = form.querySelectorAll('input[name="modules"]:checked');
+  if (checkedModules.length === 0) {
+    showToast('请至少选择一个模块', 'error');
+    return;
+  }
+
+  const formData = new FormData(form);
+  btn.disabled = true;
+
+  fetch('{% url "accounts:permission_create" %}', {
+    method: 'POST',
+    body: formData,
+    headers: {'X-Requested-With': 'XMLHttpRequest'},
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      showToast(`已添加 ${d.created || 0} 条新规则，更新 ${d.updated || 0} 条`, 'success');
+      createPermModal.close();
+      setTimeout(() => location.reload(), 600);
+    } else {
+      showToast(d.error || '添加失败', 'error');
+      btn.disabled = false;
+    }
+  })
+  .catch(err => {
+    showToast('网络错误: ' + err, 'error');
+    btn.disabled = false;
+  });
+});
 </script>
 {% endblock %}

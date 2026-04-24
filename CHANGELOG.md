@@ -21,6 +21,12 @@
 ### 修复
 - **用户管理 - 编辑按钮无响应**：`openEditUser` 使用了 Alpine.js v2 的私有属性 `__x.$data`，但项目实际使用的是 Alpine v3（该属性已移除），导致点击编辑按钮静默抛 `TypeError`。改为 v3 公开 API `Alpine.$data(el)`
 - **用户管理 / 权限管理 - 删除按钮无响应、不弹框**：`{% include "components/resource_modals.html" %}` 位置错误地放在 `{% extends %}` 之后、`{% block content %}` 之外。Django 模板继承规则下 block 外的内容会被完全忽略，导致删除弹框 DOM 根本没被渲染，事件派发后无人监听。修复为将 include 移到 `{% block content %}` 内部
+- **添加权限功能完全不可用（致命）**：权限管理页的新增表单存在多处字段不对齐，以及集群字段是文本输入（没法选择集群）
+  - `name="user"` vs 后端 `user_id` → 用户 ID 丢失
+  - `name="cluster"`（文本输入 + 让用户手打）vs 后端 `cluster_id` → 集群 ID 丢失
+  - `name="module"`（单选 select）vs 后端 `modules`（`getlist` 多选）→ 模块全丢
+  - 表单直接 `form POST`，但 view 返回 JSON → 成功/失败页面都显示 JSON 原文
+  - 修复：集群改为下拉 `<select cluster_id>`、用户字段改为 `user_id`、模块改为多选 checkbox 组（带全选/清空快捷按钮）、表单改为 AJAX 提交 + toast 反馈
 - **权限系统多处漏拦（严重安全漏洞）**：原 `PermissionMiddleware` 只覆盖 `/resources/` 与 `/clusters/<pk>/nodes|node` 路径，以下场景全部漏拦，**任何登录用户都可访问**（包括被取消权限的用户）：
   - 根路径 `/`（仪表盘）— 未做 `dashboard` 模块权限校验
   - `/clusters/<pk>/` 详情、`/edit`、`/delete`、`/refresh`、`/prometheus`、`/metrics`、`/debug-prom` — 全部未做 `cluster` 模块校验
