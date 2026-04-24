@@ -21,11 +21,12 @@
 ### 修复
 - **用户管理 - 编辑按钮无响应**：`openEditUser` 使用了 Alpine.js v2 的私有属性 `__x.$data`，但项目实际使用的是 Alpine v3（该属性已移除），导致点击编辑按钮静默抛 `TypeError`。改为 v3 公开 API `Alpine.$data(el)`
 - **用户管理 / 权限管理 - 删除按钮无响应、不弹框**：`{% include "components/resource_modals.html" %}` 位置错误地放在 `{% extends %}` 之后、`{% block content %}` 之外。Django 模板继承规则下 block 外的内容会被完全忽略，导致删除弹框 DOM 根本没被渲染，事件派发后无人监听。修复为将 include 移到 `{% block content %}` 内部
-- **删除 Pod 后列表仍然显示（K8s 优雅退出期导致的前端抖动）**：
-  - 根因：K8s 删除 Pod 时默认有 30 秒 `terminationGracePeriodSeconds`，期间 Pod 处于 `Terminating` 状态但 `list` API 仍会返回它。前端乐观移除 → 1.5s 后 `load()` 又把它拉回来 → 30s 后才真正消失，观感极差
-  - 方案 A（强制删除 `grace_period_seconds=0`）会破坏 StatefulSet / 带 PV 的 Pod 安全性，放弃
-  - **采用方案 B：前端"墓碑机制"**。在 `resourceList` 中新增 `tombstones` 字典，登记最近删除的 `(namespace, name)` 对并保留 60 秒。`load()` 从后端拿到的资源列表先经过 `_applyTombstones` 过滤，跳过仍在墓碑期的项。60 秒足以覆盖 K8s 优雅退出期，同时不影响真正正常存在的同名资源（新 Pod 名字不同）
-  - 乐观更新和延迟校验（500ms → 1500ms）保留
+- **删除资源的状态反馈重做：显示真实 Terminating 状态，废弃墓碑机制**：
+  - 原先的前端墓碑方案是"视觉欺骗"：删除后直接隐藏，但刷新页面/列表同步重新拉取后资源又出现，用户质疑"我到底删成功没？"
+  - 改为与 kubectl 一致的行为：**后端同步时检测 `metadata.deletion_timestamp`**，若有则将 `status_phase` / `status` 标记为 `Terminating`；前端据此展示橙色徽章 + 旋转 spinner 图标
+  - Pod / Namespace（有 K8s 优雅退出期）：删除后**乐观改状态为 Terminating**，1.5s 后后端真实数据覆盖；刷新页面也能正确显示 Terminating（不再消失又出现）；若删除卡住（finalizer 等原因），用户能一直看到 Terminating 知道"有问题"
+  - Deployment / Service / ConfigMap / Secret / PVC / Ingress 等无优雅期资源：删除后立即从列表移除（删除弹框事件携带 `type` 让 `base_list` 区分处理）
+  - `resourceList` 暴露两个方法：`markTerminating(name, ns)` 改状态 / `markRemoved(name, ns)` 移除
 - **新增集群后资源永远不显示（致命）**：`resources/apps.py:ready()` 仅在 Django 启动时一次性扫描 `status='online'` 的集群并启动各自的同步线程，**通过 Web 界面新加的集群永远不会被纳入同步**，必须重启 Django 才能看到资源 —— 这就是用户反馈"导入集群 20 分钟后 Deployment / Namespace 等仍为空"的原因。修复：在 `_refresh_cluster_info` 中检测到集群上线时立即调用 `start_sync_for_cluster`（重复调用安全，内部有 `is_alive()` 判断）。同时 `cluster_delete` 调用 `stop_sync_for_cluster` 清理线程，避免被删除集群的同步线程持续报错
 - **添加权限功能完全不可用（致命）**：权限管理页的新增表单存在多处字段不对齐，以及集群字段是文本输入（没法选择集群）
   - `name="user"` vs 后端 `user_id` → 用户 ID 丢失

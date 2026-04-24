@@ -20,6 +20,43 @@ _sync_threads: Dict[int, threading.Thread] = {}
 _sync_locks: Dict[int, threading.Lock] = {}
 
 
+def _list_func_for(cluster, resource_type):
+    """根据资源类型返回对应的 K8s list 函数（调用时延迟解析 k8s_pool 和 cluster）。"""
+    from clusters.k8s_client import k8s_pool
+
+    # (api_attr, list_method, timeout)
+    mapping = {
+        'namespace':             ('core_v1',       'list_namespace',                                30),
+        'pod':                   ('core_v1',       'list_pod_for_all_namespaces',                  120),
+        'deployment':            ('apps_v1',       'list_deployment_for_all_namespaces',            60),
+        'statefulset':           ('apps_v1',       'list_stateful_set_for_all_namespaces',          60),
+        'daemonset':             ('apps_v1',       'list_daemon_set_for_all_namespaces',            60),
+        'service':               ('core_v1',       'list_service_for_all_namespaces',               60),
+        'configmap':             ('core_v1',       'list_config_map_for_all_namespaces',            60),
+        'secret':                ('core_v1',       'list_secret_for_all_namespaces',                60),
+        'ingress':               ('networking_v1', 'list_ingress_for_all_namespaces',               60),
+        'persistentvolumeclaim': ('core_v1',       'list_persistent_volume_claim_for_all_namespaces', 60),
+    }
+    entry = mapping.get(resource_type)
+    if not entry:
+        return None
+    api_attr, method_name, timeout = entry
+
+    def _call():
+        api = getattr(k8s_pool, api_attr)(cluster)
+        return getattr(api, method_name)(_request_timeout=timeout)
+
+    return _call
+
+
+# 同步优先级顺序（先同步的会先被用户看到）
+SYNC_ORDER = [
+    'namespace', 'pod', 'deployment', 'service',
+    'configmap', 'secret', 'ingress',
+    'persistentvolumeclaim', 'statefulset', 'daemonset',
+]
+
+
 def start_sync_for_cluster(cluster):
     """为集群启动后台同步线程"""
     cluster_id = cluster.pk
@@ -59,8 +96,6 @@ def _sync_loop(cluster):
 
 def _sync_all_resources(cluster):
     """同步所有资源类型（串行执行）"""
-    from clusters.k8s_client import k8s_pool
-
     cluster_id = cluster.pk
     lock = _sync_locks.get(cluster_id)
 
@@ -71,21 +106,10 @@ def _sync_all_resources(cluster):
         logger.info(f'[Cluster {cluster.name}] Starting sync cycle...')
         start_time = time.time()
 
-        # 按优先级顺序同步
-        resource_configs = [
-            ('namespace', lambda: k8s_pool.core_v1(cluster).list_namespace(_request_timeout=30)),
-            ('pod', lambda: k8s_pool.core_v1(cluster).list_pod_for_all_namespaces(_request_timeout=120)),
-            ('deployment', lambda: k8s_pool.apps_v1(cluster).list_deployment_for_all_namespaces(_request_timeout=60)),
-            ('service', lambda: k8s_pool.core_v1(cluster).list_service_for_all_namespaces(_request_timeout=60)),
-            ('configmap', lambda: k8s_pool.core_v1(cluster).list_config_map_for_all_namespaces(_request_timeout=60)),
-            ('secret', lambda: k8s_pool.core_v1(cluster).list_secret_for_all_namespaces(_request_timeout=60)),
-            ('ingress', lambda: k8s_pool.networking_v1(cluster).list_ingress_for_all_namespaces(_request_timeout=60)),
-            ('persistentvolumeclaim', lambda: k8s_pool.core_v1(cluster).list_persistent_volume_claim_for_all_namespaces(_request_timeout=60)),
-            ('statefulset', lambda: k8s_pool.apps_v1(cluster).list_stateful_set_for_all_namespaces(_request_timeout=60)),
-            ('daemonset', lambda: k8s_pool.apps_v1(cluster).list_daemon_set_for_all_namespaces(_request_timeout=60)),
-        ]
-
-        for resource_type, list_func in resource_configs:
+        for resource_type in SYNC_ORDER:
+            list_func = _list_func_for(cluster, resource_type)
+            if not list_func:
+                continue
             try:
                 _sync_resource(cluster, resource_type, list_func)
             except Exception as e:
@@ -167,15 +191,23 @@ def _serialize_item(resource_type, item):
     }
 
     if resource_type == 'namespace':
-        base['status'] = item.status.phase if item.status else '-'
+        # Namespace 被删除时 Terminating 状态可能持续很久（finalizer 清理所有资源）
+        is_terminating = getattr(item.metadata, 'deletion_timestamp', None) is not None
+        if is_terminating:
+            base['status'] = 'Terminating'
+        else:
+            base['status'] = item.status.phase if item.status else '-'
 
     elif resource_type == 'pod':
         status = item.status or {}
         containers = item.spec.containers if item.spec else []
         ready = sum(1 for cs in (status.container_statuses or []) if cs.ready)
         restarts = sum(cs.restart_count for cs in (status.container_statuses or []))
+        # Pod 被删除但仍在优雅退出期时，metadata.deletion_timestamp 有值，
+        # 此时 status.phase 可能还是 Running/Pending，但实际已在终止
+        is_terminating = getattr(item.metadata, 'deletion_timestamp', None) is not None
         base.update({
-            'status_phase': status.phase or 'Unknown',
+            'status_phase': 'Terminating' if is_terminating else (status.phase or 'Unknown'),
             'ready_str': f'{ready}/{len(containers)}',
             'restarts': restarts,
             'node': item.spec.node_name or '-',
@@ -288,8 +320,6 @@ def stop_sync_for_cluster(cluster_id):
 
 def trigger_immediate_sync(cluster, resource_type):
     """触发指定资源类型的立即同步（用户操作后调用）"""
-    from clusters.k8s_client import k8s_pool
-
     cluster_id = cluster.pk
     lock = _sync_locks.get(cluster_id)
 
@@ -297,35 +327,14 @@ def trigger_immediate_sync(cluster, resource_type):
         logger.warning(f'No sync lock found for cluster {cluster.name}')
         return
 
-    # 在后台线程中执行，避免阻塞用户请求
+    list_func = _list_func_for(cluster, resource_type)
+    if not list_func:
+        logger.warning(f'Unknown resource type: {resource_type}')
+        return
+
     def _do_sync():
         with lock:
             try:
-                # 根据资源类型选择对应的 list 函数
-                if resource_type == 'namespace':
-                    list_func = lambda: k8s_pool.core_v1(cluster).list_namespace(_request_timeout=30)
-                elif resource_type == 'pod':
-                    list_func = lambda: k8s_pool.core_v1(cluster).list_pod_for_all_namespaces(_request_timeout=120)
-                elif resource_type == 'deployment':
-                    list_func = lambda: k8s_pool.apps_v1(cluster).list_deployment_for_all_namespaces(_request_timeout=60)
-                elif resource_type == 'service':
-                    list_func = lambda: k8s_pool.core_v1(cluster).list_service_for_all_namespaces(_request_timeout=60)
-                elif resource_type == 'statefulset':
-                    list_func = lambda: k8s_pool.apps_v1(cluster).list_stateful_set_for_all_namespaces(_request_timeout=60)
-                elif resource_type == 'configmap':
-                    list_func = lambda: k8s_pool.core_v1(cluster).list_config_map_for_all_namespaces(_request_timeout=60)
-                elif resource_type == 'secret':
-                    list_func = lambda: k8s_pool.core_v1(cluster).list_secret_for_all_namespaces(_request_timeout=60)
-                elif resource_type == 'ingress':
-                    list_func = lambda: k8s_pool.networking_v1(cluster).list_ingress_for_all_namespaces(_request_timeout=60)
-                elif resource_type == 'persistentvolumeclaim':
-                    list_func = lambda: k8s_pool.core_v1(cluster).list_persistent_volume_claim_for_all_namespaces(_request_timeout=60)
-                elif resource_type == 'daemonset':
-                    list_func = lambda: k8s_pool.apps_v1(cluster).list_daemon_set_for_all_namespaces(_request_timeout=60)
-                else:
-                    logger.warning(f'Unknown resource type: {resource_type}')
-                    return
-
                 _sync_resource(cluster, resource_type, list_func)
                 logger.info(f'[Cluster {cluster.name}] Immediate sync triggered for {resource_type}')
             except Exception as e:

@@ -95,6 +95,7 @@
           const modalBox = $el.closest('.modal-box');
           const deletedName = modalBox.querySelector('#deleteResourceName').textContent;
           const deletedNs = modalBox.querySelector('#deleteResourceNs').textContent;
+          const deletedType = modalBox.querySelector('#deleteResourceType').textContent;
           fetch(modalBox.dataset.deleteUrl, {
             method: 'POST',
             headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value}
@@ -103,9 +104,11 @@
           .then(d => {
             if(d.success) {
               showToast('删除成功', 'success');
-              // 携带 detail 供列表页做乐观移除，无需等后台同步完成
+              // 携带 detail 供列表页做真实状态更新：
+              // Pod/Namespace 有优雅退出期 -> 状态变 Terminating 让用户看到过程；
+              // 其他资源删除后立即从 K8s 消失 -> 直接从列表移除
               window.dispatchEvent(new CustomEvent('resource-updated', {
-                detail: {action: 'delete', name: deletedName, namespace: deletedNs}
+                detail: {action: 'delete', type: deletedType, name: deletedName, namespace: deletedNs}
               }));
             } else {
               showToast(d.error, 'error');

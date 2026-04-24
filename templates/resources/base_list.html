@@ -8,11 +8,15 @@
   @resource-updated.window="
     const d = $event.detail;
     if (d && d.action === 'delete') {
-      // 登记墓碑：60s 内即使后端 list 还返回这个资源（Pod 的 Terminating 状态最长 30s），
-      // load() 都会本地过滤掉它
-      markDeleted(d.name, d.namespace);
+      // Pod / Namespace 有 K8s 优雅退出期 → 乐观改状态为 Terminating（与 kubectl 行为一致）；
+      // 其他资源删除后立即从 K8s 消失 → 直接从列表移除
+      if (d.type === 'Pod' || d.type === 'Namespace') {
+        markTerminating(d.name, d.namespace);
+      } else {
+        markRemoved(d.name, d.namespace);
+      }
     }
-    // 1.5s 后再拉一次后端数据做最终校验
+    // 1.5s 后再拉一次后端数据做最终校验（后端已识别 deletion_timestamp 返回真实 Terminating 状态）
     setTimeout(() => load(), 1500);
   ">
   <div class="card-body p-5">
@@ -134,12 +138,6 @@ function resourceList() {
     search: '',
     page: 1,
     pageSize: 20,
-    // 最近删除的资源清单：{key: 'ns|name', until: timestamp}
-    // K8s 删除 Pod 有 30s 优雅退出期，期间 list API 仍会返回 Terminating 状态的 Pod。
-    // 即便前端做了乐观移除，随后的 load() 会把它们"复活"。
-    // 这里保留 60 秒的"墓碑期"，期间从 API 返回的资源里本地过滤掉这些已删除项。
-    tombstones: {},
-    TOMBSTONE_TTL: 60 * 1000,
     get filteredRows() {
       if (!this.search) return this.rows;
       const q = this.search.toLowerCase();
@@ -152,23 +150,23 @@ function resourceList() {
       const start = (this.page - 1) * this.pageSize;
       return this.filteredRows.slice(start, start + this.pageSize);
     },
-    _resourceKey(r) {
-      return (r.namespace || '') + '|' + (r.name || '');
-    },
-    markDeleted(name, namespace) {
-      const key = (namespace || '') + '|' + (name || '');
-      this.tombstones[key] = Date.now() + this.TOMBSTONE_TTL;
-      // 立即从当前列表移除
-      this.rows = this.rows.filter(r => this._resourceKey(r) !== key);
-    },
-    _applyTombstones(items) {
-      // 清理已过期的墓碑
-      const now = Date.now();
-      Object.keys(this.tombstones).forEach(k => {
-        if (this.tombstones[k] < now) delete this.tombstones[k];
+    // 乐观更新：删除请求返回 success 后立即把该行状态改为 Terminating。
+    // 用于 Pod / Namespace 等有 K8s 优雅退出期的资源。
+    // 1.5s 后 load() 会用后端真实数据覆盖（后端已检测 deletion_timestamp，返回 Terminating）。
+    // 刷新页面也能看到正确状态（非临时前端状态），不再"欺骗"用户。
+    markTerminating(name, namespace) {
+      const ns = namespace || '';
+      this.rows = this.rows.map(r => {
+        if (r.name === name && (r.namespace || '') === ns) {
+          return {...r, status_phase: 'Terminating', status: 'Terminating'};
+        }
+        return r;
       });
-      // 过滤掉仍在墓碑期内的资源
-      return items.filter(r => !this.tombstones[this._resourceKey(r)]);
+    },
+    // 删除后立即从列表移除（用于 Deployment / Service / ConfigMap 等无优雅期的资源）
+    markRemoved(name, namespace) {
+      const ns = namespace || '';
+      this.rows = this.rows.filter(r => !(r.name === name && (r.namespace || '') === ns));
     },
     load() {
       this.loading = true;
@@ -178,10 +176,8 @@ function resourceList() {
         .then(r => r.json())
         .then(data => {
           if (data.error) { this.error = data.error; this.loading = false; return; }
-          let items = data.resources || data.namespaces || [];
-          if (data.resources) items = data.resources;
-          // 本地过滤最近删除的资源，抵消 K8s 优雅退出期导致的"已删除但仍返回"
-          this.rows = this._applyTombstones(items);
+          this.rows = data.resources || data.namespaces || [];
+          if (data.resources) this.rows = data.resources;
           // 从实际资源中提取命名空间列表（只显示有资源的命名空间）
           if (!this.nsFilter && this.rows.length > 0) {
             const nsSet = new Set(this.rows.map(r => r.namespace).filter(Boolean));

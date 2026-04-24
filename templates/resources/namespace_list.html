@@ -24,7 +24,15 @@
 <tr class="hover:bg-base-200/50 border-b border-base-300/50">
   <td class="font-mono text-xs font-medium" x-text="r.name"></td>
   <td>
-    <span class="badge badge-xs" :class="r.status == 'Active' ? 'badge-success' : 'badge-warning'" x-text="r.status"></span>
+    <template x-if="r.status == 'Terminating'">
+      <span class="badge badge-xs gap-1 bg-orange-500/15 border border-orange-500/30 text-orange-400">
+        <i class="fas fa-spinner fa-spin text-[8px]"></i>
+        <span x-text="r.status"></span>
+      </span>
+    </template>
+    <template x-if="r.status != 'Terminating'">
+      <span class="badge badge-xs" :class="r.status == 'Active' ? 'badge-success' : 'badge-warning'" x-text="r.status"></span>
+    </template>
   </td>
   <td class="font-medium text-xs text-primary" x-text="r.age"></td>
   <td class="flex gap-1">
@@ -64,7 +72,18 @@
         body: fd
       })
       .then(r => r.json())
-      .then(d => { if(d.success) location.reload(); else { showToast(d.error, 'error'); submitting=false; } })
+      .then(d => {
+        if(d.success) {
+          showToast('命名空间创建成功', 'success');
+          window.dispatchEvent(new CustomEvent('resource-updated'));
+          createNsModal.close();
+          $el.reset();
+          submitting = false;
+        } else {
+          showToast(d.error, 'error');
+          submitting = false;
+        }
+      })
       .catch(e => { showToast(e, 'error'); submitting=false; });
     ">
       <div>
