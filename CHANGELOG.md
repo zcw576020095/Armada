@@ -10,6 +10,7 @@
 - **禁用账户登录明确提示**：密码正确但账户已被禁用时，登录页将显示「该账户已被禁用，请联系管理员」，不再与"密码错误"混淆（其他失败情况仍保持模糊提示以防用户名探测）
 - **密码框显示/隐藏切换**：登录页密码输入框右侧新增小眼睛图标，可切换密码明文/密文显示
 - **CSRF 失败友好处理**：CSRF 校验失败时自动清理 session 并跳回登录页提示"会话已过期，请重新登录"，不再露出 Django 默认 403 错误页（`CSRF_FAILURE_VIEW = 'accounts.views.csrf_failure_view'`）
+- **资源列表搜索框回车快捷键 = 静默刷新**：聚焦搜索框后按 Enter 触发 `load({silent: true})`，从后端拉最新数据校验；搜索关键字、分页、命名空间过滤全部保留；阻止默认行为防止冒泡到外层 form。Placeholder 改为"搜索名称（回车刷新）"提示该功能
 
 ### 改进
 - 登录失败时 **保留用户名输入**，不再清空表单（此前每次失败用户都要重新输入用户名）
@@ -43,8 +44,17 @@
 - **加快删除资源后的轮询频率**：检测到 Terminating 资源时，前 30 秒以 2.5 秒间隔轮询（密集观察 K8s 清理进度），30 秒后转 6 秒间隔降低 API 负载，最长持续 120 秒。原 5 秒固定间隔在 K8s 实际清理完成后还要再等 5 秒才能感知到资源消失，体感拖沓
 - **删除/扩缩容/重启等弹框间歇性"点击没反应"**：
   - 触发场景：上一次操作中途出问题（网络错误、ESC 关闭、用户切换标签等）导致 `<dialog>` 的 open 状态没正确同步；下次再点击删除按钮时 `dialog.showModal()` 因 dialog 已是 open 状态而抛 `InvalidStateError` → 事件处理器静默失败 → 用户感觉"按钮没反应"
-  - 修复：所有 `@open-xxx-modal.window` 监听器在 `showModal()` 前先 `if (modal.open) modal.close()`（已关闭时 close 是 no-op），并用 try/catch + console.error 兜底，避免静默吞错
+  - 修复：所有 `@open-xxx-modal.window` 监听器在 `showModal()` 前先 `if (modal.open) modal.close()`（已关闭时 close 是 no-op）
   - 覆盖：`deleteModal` / `scaleModal` / `restartModal` / `forceFinalizeModal`
+- **Alpine.js 表达式不支持 try/catch 导致弹框监听器全部哑火（致命）**：
+  - 现象：控制台报 `Alpine Expression Error: Unexpected token 'try'` + `Uncaught SyntaxError: Unexpected token 'try' at new AsyncFunction`，所有删除/扩缩容/重启按钮点击无反应
+  - 根因：Alpine v3 用 `new AsyncFunction(...args, expression)` 编译指令表达式，并把 expression 当成"返回值表达式"包装。`try {} catch {}` 是 statement 不是 expression，因此整个监听器编译失败、不会绑定到事件
+  - 修复：去掉所有 `@open-xxx-modal.window` 内联表达式里的 try/catch；普通 `<script>` 标签内的 JS 函数（如 `validateYaml`）保留 try/catch（合法 JS 函数体）
+  - 同时去掉了内联表达式里的 `//` 注释 —— 在某些 Alpine 编译路径下多行 `//` 可能吞掉后续代码
+- **搜索框「✕ 清空」按钮定位错乱，浮在搜索框下方**：
+  - 第一版用 `top-1/2 -translate-y-1/2`，在 flex 父容器嵌套场景下 `.relative` 高度计算异常
+  - 第二版改 `inset-y-0 my-auto inline-block`，但 Tailwind CSS 4 是预编译模式（README 里的 `npx @tailwindcss/cli ... --watch`）：开发者若没在跑 watch，新加的 class 不在 `output.css` 里，浏览器无法识别，按钮失去定位样式 → 退化为普通 block 元素显示在 input 下方
+  - 最终：改用**内联 `style`** 直接写 `position:absolute + right + top:50% + transform: translateY(-50%)`，不依赖 Tailwind 编译，CSS reset / 编译流程都不会再影响
 - **YAML 编辑器修改 metadata.name 后新建项不显示**（解决"改 name 后必须刷新页面才看到新建项"）：
   - 触发场景：在 YAML 编辑器把 namespace 的 `metadata.name` 改成新名字 → K8s 视为创建新资源（name 不可变）→ 走 apply_yaml 的 create 分支。但 yaml 编辑器以前没区分"创建"还是"更新"，前端只派发空的 resource-updated 事件，列表 silent load 拿到的还是后端老 cache → 新建项不可见，必须 F5
   - 后端 `apply_yaml` 增加返回值 `actions: [{kind, name, namespace, action: 'created'|'updated', resource?}]`，namespace 类型的 created action 同时返回简化的 resource 数据（name/status/age/created）
