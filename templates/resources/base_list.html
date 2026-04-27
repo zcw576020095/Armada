@@ -40,8 +40,15 @@
             <option :value="ns" x-text="ns"></option>
           </template>
         </select>
-        <input type="text" id="searchInput" placeholder="搜索名称..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary"
-          x-model="search" @input="page = 1">
+        <div class="relative">
+          <input type="text" id="searchInput" placeholder="搜索名称..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary pr-7"
+            x-model="search" @input="page = 1">
+          <button x-show="search" x-cloak @click="search = ''" type="button"
+            class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full hover:bg-base-300 flex items-center justify-center opacity-50 hover:opacity-100"
+            title="清空">
+            <i class="fas fa-times text-[10px]"></i>
+          </button>
+        </div>
         <!-- 静默刷新指示器：自动刷新期间淡入 -->
         <span x-show="refreshing" x-cloak class="text-[11px] text-primary flex items-center gap-1 opacity-70">
           <i class="fas fa-sync-alt fa-spin text-[10px]"></i> 刷新中
@@ -113,7 +120,17 @@
     <!-- Empty -->
     <div x-show="!loading && !error && filteredRows.length === 0" x-cloak class="text-center py-16 opacity-50">
       <i class="fas fa-inbox text-3xl mb-3 block text-primary/30"></i>
-      <p class="text-sm">暂无数据</p>
+      <template x-if="rows.length > 0 && search">
+        <div>
+          <p class="text-sm">没有匹配 "<span class="text-primary font-mono" x-text="search"></span>" 的结果</p>
+          <button class="btn btn-ghost btn-xs mt-3 h-7 min-h-0 text-[11px] gap-1" @click="search = ''">
+            <i class="fas fa-times text-[9px]"></i> 清空搜索
+          </button>
+        </div>
+      </template>
+      <template x-if="!(rows.length > 0 && search)">
+        <p class="text-sm">暂无数据</p>
+      </template>
     </div>
   </div>
 </div>
@@ -212,8 +229,17 @@ function resourceList() {
       if (!resource || !resource.name) return;
       const k = this._key(resource.name, resource.namespace);
       this._pendingOps[k] = {action: 'add', resource, until: Date.now() + this.PENDING_TTL};
-      if (this.rows.some(r => this._key(r.name, r.namespace) === k)) return;
-      this.rows = [resource, ...this.rows];
+      if (!this.rows.some(r => this._key(r.name, r.namespace) === k)) {
+        this.rows = [resource, ...this.rows];
+      }
+      // 如果当前搜索条件不会匹配新建项，自动清空搜索让它立即可见
+      // （避免"创建成功但看不见"的迷惑性体验）
+      if (this.search && !(resource.name || '').toLowerCase().includes(this.search.toLowerCase())) {
+        this.search = '';
+        if (typeof showToast === 'function') showToast('已清空搜索条件以显示新建项', 'info');
+      }
+      // 跳回第一页确保新建项立即可见
+      this.page = 1;
     },
 
     // 把后端返回的 items 与 _pendingOps 合并：

@@ -103,9 +103,10 @@
         <p class="text-[11px] opacity-40 mt-1">只能包含小写字母、数字和连字符</p>
       </div>
       <div class="modal-action mt-6 gap-2.5">
-        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="createNsModal.close()">取消</button>
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" :disabled="submitting" onclick="createNsModal.close()">取消</button>
         <button type="submit" class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" :disabled="submitting">
-          <i class="fas fa-check text-[10px]"></i> 创建
+          <i :class="submitting ? 'fas fa-spinner fa-spin' : 'fas fa-check'" class="text-[10px]"></i>
+          <span x-text="submitting ? '创建中...' : '创建'"></span>
         </button>
       </div>
     </form>
