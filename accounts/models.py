@@ -3,6 +3,14 @@ from django.db import models
 from clusters.models import Cluster
 
 
+def is_admin_user(user):
+    """Return True if the given Django user is an admin (via profile role or superuser)."""
+    profile = getattr(user, 'profile', None)
+    if profile:
+        return profile.is_admin()
+    return user.is_superuser
+
+
 class UserProfile(models.Model):
     """用户扩展信息"""
     ROLE_CHOICES = [

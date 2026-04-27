@@ -1,0 +1,42 @@
+<!-- Global Toast Container -->
+<div id="toastContainer" class="toast toast-top toast-end z-[9999]" style="pointer-events: none;"></div>
+
+<script>
+  (function() {
+    window.showToast = function(message, type) {
+      type = type || 'info';
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+
+      const alertClass = {
+        success: 'alert-success',
+        error: 'alert-error',
+        warning: 'alert-warning',
+        info: 'alert-info'
+      }[type] || 'alert-info';
+
+      const iconClass = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        warning: 'fa-exclamation-triangle',
+        info: 'fa-info-circle'
+      }[type] || 'fa-info-circle';
+
+      const el = document.createElement('div');
+      el.className = `alert ${alertClass} shadow-lg text-sm py-2 px-3 min-h-0 border border-base-300/30`;
+      el.style.pointerEvents = 'auto';
+      el.style.transition = 'opacity 0.3s, transform 0.3s';
+      el.innerHTML = `
+        <i class="fas ${iconClass} text-xs"></i>
+        <span class="text-xs">${String(message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+      `;
+      container.appendChild(el);
+
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(20px)';
+        setTimeout(() => el.remove(), 300);
+      }, 3500);
+    };
+  })();
+</script>
