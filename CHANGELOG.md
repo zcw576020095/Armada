@@ -21,6 +21,20 @@
 ### 修复
 - **用户管理 - 编辑按钮无响应**：`openEditUser` 使用了 Alpine.js v2 的私有属性 `__x.$data`，但项目实际使用的是 Alpine v3（该属性已移除），导致点击编辑按钮静默抛 `TypeError`。改为 v3 公开 API `Alpine.$data(el)`
 - **用户管理 / 权限管理 - 删除按钮无响应、不弹框**：`{% include "components/resource_modals.html" %}` 位置错误地放在 `{% extends %}` 之后、`{% block content %}` 之外。Django 模板继承规则下 block 外的内容会被完全忽略，导致删除弹框 DOM 根本没被渲染，事件派发后无人监听。修复为将 include 移到 `{% block content %}` 内部
+- **应用 YAML 后报错"resourceVersion should not be set on objects to be created"（致命）**：
+  - 触发场景：在 YAML 编辑器修改 `metadata.name`（K8s 中 name 不可变，相当于创建新对象），原对象的 `resourceVersion` / `uid` / `creationTimestamp` 等服务端字段仍残留在 YAML 里，K8s 拒绝创建
+  - 根因：`apply_yaml` 没有在 create 前清理服务端管理字段
+  - 修复：新增 `_strip_server_managed_fields(doc)`，在 apply 前移除 `resourceVersion` / `uid` / `creationTimestamp` / `generation` / `managedFields` / `selfLink` / `deletionTimestamp` / `deletionGracePeriodSeconds` / `ownerReferences` 以及整个 `status` 块。replace 时再单独注入 `resourceVersion` 用作乐观锁
+  - 效果：改 name、新建资源、原地更新都能正常工作
+
+### 改进（基础设施）
+- **抽出 `accounts.models.is_admin_user(user)` 工具函数**，供 views / 中间件共用，替代各处重复的内联 `_is_admin` 实现
+- **修复 K8s Client Pool 的临时 kubeconfig 文件泄漏**：原实现 `tempfile.NamedTemporaryFile(delete=False)` 写完即遗留在 `/tmp/`（**含明文 kubeconfig，安全隐患**）。改为加载完毕后在 `finally` 立即 `os.unlink`
+- **修复 K8s Client Pool 的并发竞态**：多线程同时拉取同一集群 client 时可能重复加载，加 `_load_lock` + double-check 模式确保只加载一次
+- **新增 `clusters/pod_logs.py`**：抽出共享的 Pod 日志获取逻辑，给 clusters / resources 两个视图复用
+- **新增 `templates/components/toast.html`**：全站 toast 提示组件，由 `base.html` 统一 include，所有页面 `showToast(msg, type)` 即可调用
+
+### 新增
 - **Pod 强制删除选项（可选，默认关闭）**：
   - 删除 Pod 的确认框里新增「强制删除」复选框（仅 Pod 类型展示），勾选后传 `grace_period_seconds=0` + `propagation_policy=Background`，跳过 30 秒优雅退出期立即清除
   - 默认不勾，保留 K8s 标准 30 秒优雅期（显示 Terminating 状态）—— 保护 StatefulSet / 带 PV / 有状态服务的数据安全

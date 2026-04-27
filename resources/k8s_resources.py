@@ -187,11 +187,33 @@ class K8sResourceManager:
                 raise Exception(f"{resource_type.capitalize()} '{name}' not found")
             raise Exception(f"Failed to delete {resource_type}: {e.reason}")
 
+    @staticmethod
+    def _strip_server_managed_fields(doc):
+        """移除 K8s 服务端维护的只读字段。
+
+        - 创建对象时这些字段不能出现（否则 K8s 拒绝："resourceVersion should not be set on objects to be created"）
+        - 更新对象时 resourceVersion 会被重新注入（用于乐观锁），其他字段保持移除
+        - status 整块由 K8s 管理，apply 时不应包含
+        """
+        metadata = doc.get('metadata') or {}
+        for key in (
+            'resourceVersion', 'uid', 'creationTimestamp', 'generation',
+            'managedFields', 'selfLink', 'deletionTimestamp',
+            'deletionGracePeriodSeconds', 'ownerReferences',
+        ):
+            metadata.pop(key, None)
+        if 'metadata' in doc and not metadata:
+            doc['metadata'] = {}
+        doc.pop('status', None)
+
     def apply_yaml(self, yaml_content):
         """应用 YAML 配置（整体替换，不存在则创建）。
 
         使用 replace 而非 patch —— patch 是 strategic merge，删除的字段不会生效，
         而 replace 会整体替换资源，符合"应用"的语义。
+
+        注意：先 strip 掉 K8s 服务端字段，否则改 name 后走创建流程会被 K8s 拒绝；
+        replace 时再单独注入 resourceVersion 作为乐观锁。
         """
         try:
             docs = list(yaml.safe_load_all(yaml_content))
@@ -212,16 +234,20 @@ class K8sResourceManager:
                 if not config:
                     raise Exception(f"Unsupported resource type: {kind}")
 
+                # 清理服务端管理字段，避免 create 时报错或 replace 时冲突
+                self._strip_server_managed_fields(doc)
+
                 api_client = self._get_api_client(config['api'])
 
                 try:
-                    # 整体替换：先读取现有资源拿到 resourceVersion，再做 replace
+                    # 检查资源是否存在：存在则 replace，不存在则 create
                     get_method = getattr(api_client, config['get'])
                     if config['namespaced']:
                         existing = get_method(name, namespace, _request_timeout=5)
                     else:
                         existing = get_method(name, _request_timeout=5)
 
+                    # 资源已存在 → 整体替换，注入 resourceVersion 作为乐观锁
                     doc.setdefault('metadata', {})
                     doc['metadata']['resourceVersion'] = existing.metadata.resource_version
 
@@ -237,7 +263,7 @@ class K8sResourceManager:
 
                 except ApiException as e:
                     if e.status == 404 and config.get('create'):
-                        # 资源不存在，创建
+                        # 资源不存在 → create（doc 已清理过服务端字段，安全）
                         create_method = getattr(api_client, config['create'])
                         if config['namespaced']:
                             create_method(namespace, doc, _request_timeout=10)
