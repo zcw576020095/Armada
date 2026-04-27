@@ -40,11 +40,11 @@
             <option :value="ns" x-text="ns"></option>
           </template>
         </select>
-        <div class="relative">
+        <div class="relative inline-block">
           <input type="text" id="searchInput" placeholder="搜索名称..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary pr-7"
             x-model="search" @input="page = 1">
           <button x-show="search" x-cloak @click="search = ''" type="button"
-            class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full hover:bg-base-300 flex items-center justify-center opacity-50 hover:opacity-100"
+            class="absolute right-1.5 inset-y-0 my-auto w-5 h-5 rounded-full hover:bg-base-300 flex items-center justify-center opacity-50 hover:opacity-100"
             title="清空">
             <i class="fas fa-times text-[10px]"></i>
           </button>
