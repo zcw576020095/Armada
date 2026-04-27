@@ -151,9 +151,12 @@ function resourceList() {
     pageSize: 20,
     _pollTimer: null,
     _pollDeadline: 0,
+    // 乐观操作存档：让 load() 不会瞬间覆盖最近用户操作的状态
+    // key: "ns|name" -> {action: 'add'|'remove'|'terminate', resource?, until: timestamp}
+    _pendingOps: {},
+    PENDING_TTL: 30 * 1000,
 
     init() {
-      // URL 状态同步：search / page / nsFilter 变化时写回 URL（replaceState 不新增历史）
       this.$watch('search', () => { this.page = 1; this._syncUrl(); });
       this.$watch('page', () => this._syncUrl());
       this.$watch('nsFilter', () => this._syncUrl());
@@ -182,28 +185,86 @@ function resourceList() {
       return this.filteredRows.slice(start, start + this.pageSize);
     },
 
-    // 乐观更新：Pod / Namespace 删除后立即把该行改成 Terminating，与 kubectl 行为一致
+    _key(name, namespace) {
+      return (namespace || '') + '|' + (name || '');
+    },
+
+    // Pod / Namespace 删除后立即标记为 Terminating（K8s 优雅期内还会出现在 list 里，
+    // 但前端通过 _pendingOps 强制覆盖状态显示，直到后端真返回 Terminating 状态）
     markTerminating(name, namespace) {
-      const ns = namespace || '';
+      const k = this._key(name, namespace);
+      this._pendingOps[k] = {action: 'terminate', until: Date.now() + this.PENDING_TTL};
       this.rows = this.rows.map(r => {
-        if (r.name === name && (r.namespace || '') === ns) {
+        if (this._key(r.name, r.namespace) === k) {
           return {...r, status_phase: 'Terminating', status: 'Terminating'};
         }
         return r;
       });
     },
-    // 其他资源删除后立即从列表移除（K8s 无优雅期）
+    // 其他资源删除后立即移除（_pendingOps 防止 load 拿到老 cache 时把它复活）
     markRemoved(name, namespace) {
-      const ns = namespace || '';
-      this.rows = this.rows.filter(r => !(r.name === name && (r.namespace || '') === ns));
+      const k = this._key(name, namespace);
+      this._pendingOps[k] = {action: 'remove', until: Date.now() + this.PENDING_TTL};
+      this.rows = this.rows.filter(r => this._key(r.name, r.namespace) !== k);
     },
-    // 创建资源后立即插入到列表顶部（去重防止重复添加）；后端 trigger_immediate_sync(wait=True)
-    // 几乎已确保 1.5s 后 load 能拿到，但乐观插入让用户感知是即时的
+    // 创建资源后立即插入到列表顶部（_pendingOps 防止 load 拿到老 cache 时把它清掉）
     markAdded(resource) {
       if (!resource || !resource.name) return;
-      const key = (resource.namespace || '') + '|' + resource.name;
-      if (this.rows.some(r => ((r.namespace || '') + '|' + r.name) === key)) return;
+      const k = this._key(resource.name, resource.namespace);
+      this._pendingOps[k] = {action: 'add', resource, until: Date.now() + this.PENDING_TTL};
+      if (this.rows.some(r => this._key(r.name, r.namespace) === k)) return;
       this.rows = [resource, ...this.rows];
+    },
+
+    // 把后端返回的 items 与 _pendingOps 合并：
+    // - remove 操作：从 items 过滤掉；后端不返回 = 真删了 → 清理 op
+    // - terminate 操作：把后端返回的同 key 项改写为 Terminating；后端已返回 Terminating → 清理 op
+    // - add 操作：后端缺这个项时合并回来；后端已包含 = 同步完成 → 清理 op
+    _mergePendingOps(items) {
+      const now = Date.now();
+      Object.keys(this._pendingOps).forEach(k => {
+        if (this._pendingOps[k].until < now) delete this._pendingOps[k];
+      });
+
+      const itemKey = r => this._key(r.name, r.namespace);
+
+      // remove 处理：从 items 过滤；后端已经不返回的，pendingOp 也清掉
+      items = items.filter(r => {
+        const op = this._pendingOps[itemKey(r)];
+        return !(op && op.action === 'remove');
+      });
+      Object.keys(this._pendingOps).forEach(k => {
+        const op = this._pendingOps[k];
+        if (op.action !== 'remove') return;
+        if (!items.some(r => itemKey(r) === k)) delete this._pendingOps[k];
+      });
+
+      // terminate 处理：覆盖 status；后端已经标记 Terminating 则清理 op
+      items = items.map(r => {
+        const op = this._pendingOps[itemKey(r)];
+        if (op && op.action === 'terminate') {
+          if (r.status_phase === 'Terminating' || r.status === 'Terminating') {
+            delete this._pendingOps[itemKey(r)];
+            return r;
+          }
+          return {...r, status_phase: 'Terminating', status: 'Terminating'};
+        }
+        return r;
+      });
+
+      // add 处理：补回缺失的项；已存在则清理 op
+      Object.keys(this._pendingOps).forEach(k => {
+        const op = this._pendingOps[k];
+        if (op.action !== 'add') return;
+        const exists = items.some(r => itemKey(r) === k);
+        if (!exists) {
+          items = [op.resource, ...items];
+        } else {
+          delete this._pendingOps[k];
+        }
+      });
+
+      return items;
     },
 
     _hasTerminating() {
@@ -243,15 +304,15 @@ function resourceList() {
         .then(r => r.json())
         .then(data => {
           if (data.error) { this.error = data.error; return; }
-          this.rows = data.resources || data.namespaces || [];
-          if (data.resources) this.rows = data.resources;
+          let items = data.resources || data.namespaces || [];
+          if (data.resources) items = data.resources;
+          // 合并最近的乐观操作，防止后端老 cache 把刚做的操作覆盖回去
+          this.rows = this._mergePendingOps(items);
           if (!this.nsFilter && this.rows.length > 0) {
             const nsSet = new Set(this.rows.map(r => r.namespace).filter(Boolean));
             this.namespaces = [...nsSet].sort();
           }
-          // 分页越界保护：数据变少时自动回退到最后一页
           if (this.page > this.totalPages) this.page = this.totalPages;
-          // 根据是否还有 Terminating 资源决定是否继续轮询
           if (this._hasTerminating()) this._startPolling();
           else this._stopPolling();
         })

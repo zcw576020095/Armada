@@ -28,12 +28,18 @@
   - 效果：改 name、新建资源、原地更新都能正常工作
 
 ### 改进
-- **写操作后列表更新延迟问题**：
-  - 根因：`trigger_immediate_sync` 是异步线程，前端 1.5s 后 `load()` 时同步可能还没完成 → 拿到的是老 cache → 新建的 namespace 短时间不可见
-  - `trigger_immediate_sync` 新增 `wait=True` 模式：阻塞等同步完成（最多 5 秒），完成后才返回 HTTP 响应；如果 lock 被定时 sync 占用太久则降级为异步（不卡死请求）
-  - 关键写操作（namespace 创建/删除、资源删除）改用 `wait=True`，前端紧接着的 list API 拿到的就是最新 cache
-  - `namespace_create` 同时返回新建项数据（`{success, resource}`），前端 `markAdded(resource)` 乐观插入到列表顶部 —— 即使 wait 超时也能立即显示
-  - `base_list.markAdded(resource)`：去重后将资源插入 `rows` 顶部
+- **写操作后列表更新延迟 + 乐观更新被 load 覆盖（致命体验问题）**：
+  - 用户反馈："点创建后按钮卡好几秒，最后页面还看不到新建的 namespace"
+  - 根因 1：先前的 `wait=True` 改动让 HTTP 请求阻塞等待 sync 完成（最长 5s），这是按钮卡死的来源；当后台定时同步占用了 cluster lock，等待时间被放大
+  - 根因 2：前端乐观插入新 ns 后，1.5s 后 `load()` 拿到的是后端**老 cache**（trigger_immediate_sync 异步还没完成），并且 load 直接 `this.rows = items` 全量覆盖，**乐观插入项被冲掉了**
+  - 修复：
+    - 后端取消所有写操作的 `wait=True`（恢复异步），HTTP 立刻返回（毫秒级）
+    - 前端引入"乐观操作存档"机制 `_pendingOps`：每次 `markAdded` / `markRemoved` / `markTerminating` 都同时登记一条 op（30s TTL）
+    - `load()` 拿到后端数据后，在赋值给 `rows` 之前先经过 `_mergePendingOps`：
+      - `remove` op：从后端 items 中过滤掉同 key 项；后端已不返回则清理 op
+      - `terminate` op：把后端同 key 项强制覆盖为 Terminating；后端已返回 Terminating 则清理 op
+      - `add` op：后端缺这个项时合并回来；后端已包含则清理 op
+  - 效果：HTTP 响应立即（不卡）、用户操作立即可见（乐观插入不被覆盖）、最终状态正确（后端真同步好后 op 自动退出）
 - **加快删除资源后的轮询频率**：检测到 Terminating 资源时，前 30 秒以 2.5 秒间隔轮询（密集观察 K8s 清理进度），30 秒后转 6 秒间隔降低 API 负载，最长持续 120 秒。原 5 秒固定间隔在 K8s 实际清理完成后还要再等 5 秒才能感知到资源消失，体感拖沓
 - 注：Namespace 删除后 Terminating 持续 5-30 秒是 K8s 本身行为（清理内部 Pod / Service / Secret / ConfigMap / ServiceAccount 的 finalizer 链），与 kubectl delete ns 完全一致；Armada 不提供"强制删除 Namespace"选项以避免遗留孤儿资源
 

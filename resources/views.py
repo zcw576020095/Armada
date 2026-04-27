@@ -72,11 +72,10 @@ def namespace_create(request, pk):
         from kubernetes import client
         body = client.V1Namespace(metadata=client.V1ObjectMeta(name=name))
         created = mgr.core_v1.create_namespace(body, _request_timeout=10)
-        # wait=True：等同步完成再返回，保证前端紧接着 list 能拿到新建项
-        trigger_immediate_sync(cluster, 'namespace', wait=True)
+        # 异步触发同步，不阻塞 HTTP 响应；前端用 markAdded + 乐观存档机制立即显示
+        trigger_immediate_sync(cluster, 'namespace')
         return JsonResponse({
             'success': True,
-            # 返回新建项供前端乐观插入（即使 sync wait 超时也能立即显示）
             'resource': {
                 'name': created.metadata.name,
                 'namespace': '',
@@ -94,8 +93,7 @@ def namespace_delete(request, pk, name):
     cluster, mgr = _get_mgr(pk)
     try:
         mgr.delete_resource('namespace', name)
-        # wait=True：等同步完成再返回，前端 list 能立即看到 Terminating 状态
-        trigger_immediate_sync(cluster, 'namespace', wait=True)
+        trigger_immediate_sync(cluster, 'namespace')
         return JsonResponse({'success': True})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -339,8 +337,7 @@ def resource_delete_api(request, pk, resource_type, name, ns=None):
     force = request.GET.get('force') == '1' or request.POST.get('force') == '1'
     try:
         mgr.delete_resource(resource_type, name, ns, force=force)
-        # wait=True：删除是关键写操作，等同步完成再返回让前端立即看到结果
-        trigger_immediate_sync(cluster, resource_type, wait=True)
+        trigger_immediate_sync(cluster, resource_type)
         return JsonResponse({'success': True})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
