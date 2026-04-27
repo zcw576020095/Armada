@@ -8,6 +8,7 @@ urlpatterns = [
     path('<int:pk>/namespaces/', views.namespace_list, name='namespaces'),
     path('<int:pk>/namespaces/create/', views.namespace_create, name='namespace_create'),
     path('<int:pk>/namespaces/<str:name>/delete/', views.namespace_delete, name='namespace_delete'),
+    path('<int:pk>/namespaces/<str:name>/force-finalize/', views.namespace_force_finalize, name='namespace_force_finalize'),
 
     # Deployments
     path('<int:pk>/deployments/', views.deployment_list, name='deployments'),

@@ -99,6 +99,43 @@ def namespace_delete(request, pk, name):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_POST
+def namespace_force_finalize(request, pk, name):
+    """强制清空 namespace 的 finalizers，让 K8s 立即从 etcd 删除该 namespace。
+
+    应急操作：当 namespace 长时间卡在 Terminating 状态（通常因为 APIService
+    不可用、controller 卡死、或 finalizer hook 不响应）时使用。
+    ⚠️ 副作用：K8s 不会再清理 namespace 内部资源，可能产生孤儿对象。
+    仅当 namespace 内确实没有重要资源、且确认是 K8s 集群层面的清理卡死时使用。
+    """
+    cluster, mgr = _get_mgr(pk)
+    try:
+        ns = mgr.core_v1.read_namespace(name, _request_timeout=5)
+        if not ns.spec or not ns.spec.finalizers:
+            return JsonResponse({
+                'success': True,
+                'message': 'Namespace 没有 finalizers，应该很快从 etcd 消失（如未消失说明是其他控制器问题）',
+            })
+
+        # 调 /finalize 子资源 PUT 一个 finalizers=[] 的 spec —— 等价于 kubectl edit ns 后清空
+        ns.spec.finalizers = []
+        api_client = mgr.core_v1.api_client
+        api_client.call_api(
+            f'/api/v1/namespaces/{name}/finalize',
+            'PUT',
+            body=api_client.sanitize_for_serialization(ns),
+            response_type='object',
+            header_params={'Content-Type': 'application/json', 'Accept': 'application/json'},
+            auth_settings=['BearerToken'],
+            _return_http_data_only=True,
+            _request_timeout=10,
+        )
+        trigger_immediate_sync(cluster, 'namespace')
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': f'强制完成失败：{e}'}, status=500)
+
+
 # ─── Generic resource list helper ────────────────────────────
 
 def _workload_list(request, pk, template):

@@ -39,7 +39,15 @@
     <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('Namespace: ' + r.name, '/resources/{{ cluster.pk }}/yaml/namespace/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
       <i class="fas fa-file-code text-[10px]"></i> YAML
     </button>
-    <template x-if="r.name != 'default' && r.name != 'kube-system' && r.name != 'kube-public' && r.name != 'kube-node-lease'">
+    <!-- Terminating 状态下的应急按钮：移除 finalizer 强制完成删除 -->
+    <template x-if="r.status == 'Terminating' && {{ can_delete|yesno:'true,false' }}">
+      <button class="btn btn-ghost btn-xs text-warning gap-1 h-7 min-h-0 text-[11px]"
+        @click="$dispatch('open-force-finalize', {name: r.name})"
+        title="移除 finalizer 强制完成（卡住超过 1 分钟时使用）">
+        <i class="fas fa-bolt text-[10px]"></i> 强制完成
+      </button>
+    </template>
+    <template x-if="r.status != 'Terminating' && r.name != 'default' && r.name != 'kube-system' && r.name != 'kube-public' && r.name != 'kube-node-lease'">
       <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Namespace', name: r.name, namespace: '', deleteUrl: '/resources/{{ cluster.pk }}/namespaces/' + r.name + '/delete/'}){% else %}noPermModal.showModal(){% endif %}">
         <i class="fas fa-trash-alt text-[10px]"></i>
       </button>
@@ -105,10 +113,68 @@
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
-<script>
-// Override load for namespace (different JSON structure)
-document.addEventListener('alpine:init', () => {
-  const original = Alpine.evaluate;
-});
-</script>
+<!-- 强制完成 Terminating 弹窗 -->
+<dialog id="forceFinalizeModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-warning/30 rounded-2xl shadow-2xl"
+    x-data="{nsName: '', submitting: false}"
+    @open-force-finalize.window="nsName = $event.detail.name; submitting = false; forceFinalizeModal.showModal()">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-bolt text-lg text-warning"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base text-warning">强制完成 Terminating</h3>
+        <p class="text-xs opacity-50 mt-0.5">移除 namespace finalizer 让 K8s 立即删除</p>
+      </div>
+    </div>
+    <div class="bg-warning/5 border border-warning/20 rounded-xl p-4 space-y-2.5 text-xs leading-relaxed">
+      <div class="flex items-center gap-2">
+        <span class="opacity-50 w-12 shrink-0">名称</span>
+        <span class="font-mono font-bold text-warning" x-text="nsName"></span>
+      </div>
+      <div class="space-y-1.5 mt-2 pt-2 border-t border-warning/15">
+        <p class="font-medium opacity-80">⚠️ 此操作不可逆，仅在以下场景使用：</p>
+        <ul class="space-y-1 ml-4 list-disc opacity-70">
+          <li>namespace 已 Terminating 超过 1 分钟仍未消失</li>
+          <li>已确认 namespace 内无重要资源</li>
+          <li>常因集群侧 APIService 不可用 / controller 卡死导致</li>
+        </ul>
+        <p class="opacity-70 mt-2">
+          原理：<code class="bg-base-200 px-1 rounded">PUT /api/v1/namespaces/{name}/finalize</code>
+          清空 spec.finalizers，K8s 会立刻把它从 etcd 删除（不再清理内部资源）。
+        </p>
+      </div>
+    </div>
+    <div class="modal-action mt-6 gap-2.5">
+      <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium"
+        @click="forceFinalizeModal.close()">取消</button>
+      <button type="button" class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105"
+        :disabled="submitting"
+        @click="
+          submitting = true;
+          fetch('/resources/{{ cluster.pk }}/namespaces/' + nsName + '/force-finalize/', {
+            method: 'POST',
+            headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value}
+          })
+          .then(r => r.json())
+          .then(d => {
+            if(d.success) {
+              showToast(d.message || '已发送强制完成请求', 'success');
+              window.dispatchEvent(new CustomEvent('resource-updated', {
+                detail: {action: 'delete', type: 'Namespace', name: nsName, namespace: '', force: true}
+              }));
+              forceFinalizeModal.close();
+            } else {
+              showToast(d.error || '操作失败', 'error');
+              submitting = false;
+            }
+          })
+          .catch(e => { showToast(e, 'error'); submitting = false; });
+        ">
+        <i class="fas fa-bolt text-[10px]"></i> 确认强制完成
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
 {% endblock %}

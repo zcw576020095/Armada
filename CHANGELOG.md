@@ -41,6 +41,12 @@
       - `add` op：后端缺这个项时合并回来；后端已包含则清理 op
   - 效果：HTTP 响应立即（不卡）、用户操作立即可见（乐观插入不被覆盖）、最终状态正确（后端真同步好后 op 自动退出）
 - **加快删除资源后的轮询频率**：检测到 Terminating 资源时，前 30 秒以 2.5 秒间隔轮询（密集观察 K8s 清理进度），30 秒后转 6 秒间隔降低 API 负载，最长持续 120 秒。原 5 秒固定间隔在 K8s 实际清理完成后还要再等 5 秒才能感知到资源消失，体感拖沓
+- **Namespace 卡 Terminating 时新增「强制完成」应急按钮**：
+  - 场景：namespace 长时间停在 Terminating 状态（常见原因：集群里某个 APIService 不可用、namespace controller 卡死、finalizer hook 不响应），观感上像"删不掉"
+  - 触发条件：仅 Terminating 状态的 namespace 行才显示「⚡ 强制完成」按钮（与正常的删除按钮互斥）
+  - 实现：调 `PUT /api/v1/namespaces/{name}/finalize` 清空 `spec.finalizers`，K8s 立即从 etcd 删除该 namespace
+  - 弹窗有明显警告：操作不可逆、可能产生孤儿资源、应先排查集群侧问题
+  - 提供给用户对应的诊断思路：先 `kubectl get apiservices` 找 `Available=False` 的服务
 - 注：Namespace 删除后 Terminating 持续 5-30 秒是 K8s 本身行为（清理内部 Pod / Service / Secret / ConfigMap / ServiceAccount 的 finalizer 链），与 kubectl delete ns 完全一致；Armada 不提供"强制删除 Namespace"选项以避免遗留孤儿资源
 
 ### 改进（基础设施）
