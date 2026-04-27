@@ -27,6 +27,10 @@
   - 修复：新增 `_strip_server_managed_fields(doc)`，在 apply 前移除 `resourceVersion` / `uid` / `creationTimestamp` / `generation` / `managedFields` / `selfLink` / `deletionTimestamp` / `deletionGracePeriodSeconds` / `ownerReferences` 以及整个 `status` 块。replace 时再单独注入 `resourceVersion` 用作乐观锁
   - 效果：改 name、新建资源、原地更新都能正常工作
 
+### 改进
+- **加快删除资源后的轮询频率**：检测到 Terminating 资源时，前 30 秒以 2.5 秒间隔轮询（密集观察 K8s 清理进度），30 秒后转 6 秒间隔降低 API 负载，最长持续 120 秒。原 5 秒固定间隔在 K8s 实际清理完成后还要再等 5 秒才能感知到资源消失，体感拖沓
+- 注：Namespace 删除后 Terminating 持续 5-30 秒是 K8s 本身行为（清理内部 Pod / Service / Secret / ConfigMap / ServiceAccount 的 finalizer 链），与 kubectl delete ns 完全一致；Armada 不提供"强制删除 Namespace"选项以避免遗留孤儿资源
+
 ### 改进（基础设施）
 - **抽出 `accounts.models.is_admin_user(user)` 工具函数**，供 views / 中间件共用，替代各处重复的内联 `_is_admin` 实现
 - **修复 K8s Client Pool 的临时 kubeconfig 文件泄漏**：原实现 `tempfile.NamedTemporaryFile(delete=False)` 写完即遗留在 `/tmp/`（**含明文 kubeconfig，安全隐患**）。改为加载完毕后在 `finally` 立即 `os.unlink`

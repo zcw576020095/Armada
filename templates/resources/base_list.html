@@ -198,20 +198,24 @@ function resourceList() {
     _hasTerminating() {
       return this.rows.some(r => r.status_phase === 'Terminating' || r.status === 'Terminating');
     },
-    // 检测到 Terminating 资源时启动 5s 一次的后台轮询，直到资源真正消失或 90s 超时
+    // 检测到 Terminating 资源时启动后台轮询，让用户尽快感知到资源真正消失
+    // 前 30s 用 2.5s 间隔（密集观察 K8s 清理过程），之后转 6s 间隔降低负载
+    // 整体最长轮询 120s（覆盖 Pod 30s 优雅期 + Namespace 含较多资源的清理）
     _startPolling() {
       if (this._pollTimer) return;
-      this._pollDeadline = Date.now() + 90000;
+      this._pollDeadline = Date.now() + 120000;
+      const denseUntil = Date.now() + 30000;
       const tick = () => {
         if (Date.now() > this._pollDeadline || !this._hasTerminating()) {
           this._stopPolling();
           return;
         }
         this.load({silent: true}).finally(() => {
-          this._pollTimer = setTimeout(tick, 5000);
+          const interval = Date.now() < denseUntil ? 2500 : 6000;
+          this._pollTimer = setTimeout(tick, interval);
         });
       };
-      this._pollTimer = setTimeout(tick, 5000);
+      this._pollTimer = setTimeout(tick, 2500);
     },
     _stopPolling() {
       if (this._pollTimer) clearTimeout(this._pollTimer);
