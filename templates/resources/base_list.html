@@ -16,6 +16,9 @@
       } else {
         markTerminating(d.name, d.namespace);
       }
+    } else if (d && d.action === 'create' && d.resource) {
+      // 乐观插入新建项，无需等后端 sync 完成
+      markAdded(d.resource);
     }
     // 1.5s 后静默刷新拉后端真实数据；若仍有 Terminating 资源会自动轮询直到消失
     setTimeout(() => load({silent: true}), 1500);
@@ -193,6 +196,14 @@ function resourceList() {
     markRemoved(name, namespace) {
       const ns = namespace || '';
       this.rows = this.rows.filter(r => !(r.name === name && (r.namespace || '') === ns));
+    },
+    // 创建资源后立即插入到列表顶部（去重防止重复添加）；后端 trigger_immediate_sync(wait=True)
+    // 几乎已确保 1.5s 后 load 能拿到，但乐观插入让用户感知是即时的
+    markAdded(resource) {
+      if (!resource || !resource.name) return;
+      const key = (resource.namespace || '') + '|' + resource.name;
+      if (this.rows.some(r => ((r.namespace || '') + '|' + r.name) === key)) return;
+      this.rows = [resource, ...this.rows];
     },
 
     _hasTerminating() {

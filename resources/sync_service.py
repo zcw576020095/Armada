@@ -318,8 +318,13 @@ def stop_sync_for_cluster(cluster_id):
     logger.info(f'Stopped sync for cluster {cluster_id}')
 
 
-def trigger_immediate_sync(cluster, resource_type):
-    """触发指定资源类型的立即同步（用户操作后调用）"""
+def trigger_immediate_sync(cluster, resource_type, wait=False, timeout=5):
+    """触发指定资源类型的立即同步（用户操作后调用）。
+
+    wait=False（默认）: 异步启动线程，立即返回 —— 适合 scale/restart 等读取频繁的场景
+    wait=True: 阻塞等待同步完成（最多 timeout 秒）—— 适合 create/delete 等关键写操作，
+              确保前端紧接着的 list API 能拿到最新数据，无需等 60s 周期或乐观更新兜底
+    """
     cluster_id = cluster.pk
     lock = _sync_locks.get(cluster_id)
 
@@ -336,9 +341,13 @@ def trigger_immediate_sync(cluster, resource_type):
         with lock:
             try:
                 _sync_resource(cluster, resource_type, list_func)
-                logger.info(f'[Cluster {cluster.name}] Immediate sync triggered for {resource_type}')
+                logger.info(f'[Cluster {cluster.name}] Immediate sync done for {resource_type}')
             except Exception as e:
                 logger.error(f'[Cluster {cluster.name}] Immediate sync failed for {resource_type}: {e}')
 
     thread = threading.Thread(target=_do_sync, daemon=True, name=f'ImmediateSync-{resource_type}')
     thread.start()
+    if wait:
+        # 阻塞等待最多 timeout 秒；若 lock 被定时 sync 占用太久则放弃，
+        # 让定时 sync 自然兜底（避免 HTTP 请求卡死）
+        thread.join(timeout=timeout)

@@ -75,7 +75,10 @@
       .then(d => {
         if(d.success) {
           showToast('命名空间创建成功', 'success');
-          window.dispatchEvent(new CustomEvent('resource-updated'));
+          // 携带后端返回的新建项，列表页可立即乐观插入到顶部
+          window.dispatchEvent(new CustomEvent('resource-updated', {
+            detail: {action: 'create', resource: d.resource}
+          }));
           createNsModal.close();
           $el.reset();
           submitting = false;

@@ -28,6 +28,12 @@
   - 效果：改 name、新建资源、原地更新都能正常工作
 
 ### 改进
+- **写操作后列表更新延迟问题**：
+  - 根因：`trigger_immediate_sync` 是异步线程，前端 1.5s 后 `load()` 时同步可能还没完成 → 拿到的是老 cache → 新建的 namespace 短时间不可见
+  - `trigger_immediate_sync` 新增 `wait=True` 模式：阻塞等同步完成（最多 5 秒），完成后才返回 HTTP 响应；如果 lock 被定时 sync 占用太久则降级为异步（不卡死请求）
+  - 关键写操作（namespace 创建/删除、资源删除）改用 `wait=True`，前端紧接着的 list API 拿到的就是最新 cache
+  - `namespace_create` 同时返回新建项数据（`{success, resource}`），前端 `markAdded(resource)` 乐观插入到列表顶部 —— 即使 wait 超时也能立即显示
+  - `base_list.markAdded(resource)`：去重后将资源插入 `rows` 顶部
 - **加快删除资源后的轮询频率**：检测到 Terminating 资源时，前 30 秒以 2.5 秒间隔轮询（密集观察 K8s 清理进度），30 秒后转 6 秒间隔降低 API 负载，最长持续 120 秒。原 5 秒固定间隔在 K8s 实际清理完成后还要再等 5 秒才能感知到资源消失，体感拖沓
 - 注：Namespace 删除后 Terminating 持续 5-30 秒是 K8s 本身行为（清理内部 Pod / Service / Secret / ConfigMap / ServiceAccount 的 finalizer 链），与 kubectl delete ns 完全一致；Armada 不提供"强制删除 Namespace"选项以避免遗留孤儿资源
 
