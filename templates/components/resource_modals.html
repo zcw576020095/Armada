@@ -68,19 +68,14 @@
   <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl"
     x-data="{resType: '', forceDelete: false}"
     @open-delete-modal.window="
-      try {
-        resType = $event.detail.type;
-        forceDelete = false;
-        $el.querySelector('#deleteResourceType').textContent = $event.detail.type;
-        $el.querySelector('#deleteResourceName').textContent = $event.detail.name;
-        $el.querySelector('#deleteResourceNs').textContent = $event.detail.namespace || '';
-        $el.dataset.deleteUrl = $event.detail.deleteUrl;
-        if (deleteModal.open) deleteModal.close();
-        deleteModal.showModal();
-      } catch (e) {
-        console.error('[deleteModal] open failed:', e);
-        if (typeof showToast === 'function') showToast('打开删除框失败：' + e.message, 'error');
-      }
+      resType = $event.detail.type;
+      forceDelete = false;
+      $el.querySelector('#deleteResourceType').textContent = $event.detail.type;
+      $el.querySelector('#deleteResourceName').textContent = $event.detail.name;
+      $el.querySelector('#deleteResourceNs').textContent = $event.detail.namespace || '';
+      $el.dataset.deleteUrl = $event.detail.deleteUrl;
+      if (deleteModal.open) deleteModal.close();
+      deleteModal.showModal();
     ">
     <div class="flex items-center gap-3 mb-5">
       <div class="w-11 h-11 rounded-xl bg-error/10 flex items-center justify-center flex-shrink-0">
@@ -152,14 +147,12 @@
 <!-- Scale Modal -->
 <dialog id="scaleModal" class="modal">
   <div class="modal-box max-w-md bg-base-100 border border-primary/20 rounded-2xl shadow-2xl" x-data="{ replicas: 0, current: 0 }" @open-scale-modal.window="
-    try {
-      current = $event.detail.current;
-      replicas = $event.detail.current;
-      $el.querySelector('#scaleResourceName').textContent = $event.detail.name;
-      $el.dataset.scaleUrl = $event.detail.scaleUrl;
-      if (scaleModal.open) scaleModal.close();
-      scaleModal.showModal();
-    } catch (e) { console.error('[scaleModal] open failed:', e); }
+    current = $event.detail.current;
+    replicas = $event.detail.current;
+    $el.querySelector('#scaleResourceName').textContent = $event.detail.name;
+    $el.dataset.scaleUrl = $event.detail.scaleUrl;
+    if (scaleModal.open) scaleModal.close();
+    scaleModal.showModal();
   ">
     <div class="flex items-center gap-3 mb-5">
       <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -223,12 +216,10 @@
 <!-- Restart Confirm Modal -->
 <dialog id="restartModal" class="modal">
   <div class="modal-box max-w-md bg-base-100 border border-warning/20 rounded-2xl shadow-2xl" x-data @open-restart-modal.window="
-    try {
-      $el.querySelector('#restartResourceName').textContent = $event.detail.name;
-      $el.dataset.restartUrl = $event.detail.restartUrl;
-      if (restartModal.open) restartModal.close();
-      restartModal.showModal();
-    } catch (e) { console.error('[restartModal] open failed:', e); }
+    $el.querySelector('#restartResourceName').textContent = $event.detail.name;
+    $el.dataset.restartUrl = $event.detail.restartUrl;
+    if (restartModal.open) restartModal.close();
+    restartModal.showModal();
   ">
     <div class="flex items-center gap-3 mb-5">
       <div class="w-11 h-11 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0">
