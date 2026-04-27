@@ -75,8 +75,6 @@
         $el.querySelector('#deleteResourceName').textContent = $event.detail.name;
         $el.querySelector('#deleteResourceNs').textContent = $event.detail.namespace || '';
         $el.dataset.deleteUrl = $event.detail.deleteUrl;
-        // 防御：上次操作可能未正确关闭（网络错误/ESC 等），先无条件 close 再 showModal
-        // 已关闭状态调 close() 是 no-op，不会抛错；但 already-open 调 showModal() 会抛 InvalidStateError
         if (deleteModal.open) deleteModal.close();
         deleteModal.showModal();
       } catch (e) {
