@@ -41,6 +41,13 @@
       - `add` op：后端缺这个项时合并回来；后端已包含则清理 op
   - 效果：HTTP 响应立即（不卡）、用户操作立即可见（乐观插入不被覆盖）、最终状态正确（后端真同步好后 op 自动退出）
 - **加快删除资源后的轮询频率**：检测到 Terminating 资源时，前 30 秒以 2.5 秒间隔轮询（密集观察 K8s 清理进度），30 秒后转 6 秒间隔降低 API 负载，最长持续 120 秒。原 5 秒固定间隔在 K8s 实际清理完成后还要再等 5 秒才能感知到资源消失，体感拖沓
+- **YAML 编辑器修改 metadata.name 后新建项不显示**（解决"改 name 后必须刷新页面才看到新建项"）：
+  - 触发场景：在 YAML 编辑器把 namespace 的 `metadata.name` 改成新名字 → K8s 视为创建新资源（name 不可变）→ 走 apply_yaml 的 create 分支。但 yaml 编辑器以前没区分"创建"还是"更新"，前端只派发空的 resource-updated 事件，列表 silent load 拿到的还是后端老 cache → 新建项不可见，必须 F5
+  - 后端 `apply_yaml` 增加返回值 `actions: [{kind, name, namespace, action: 'created'|'updated', resource?}]`，namespace 类型的 created action 同时返回简化的 resource 数据（name/status/age/created）
+  - 前端 `applyYaml`：根据 `actions` 区分派发事件
+    - `created` + 带 resource：派发 `{action:'create', resource}` 触发 base_list.markAdded 立即插入
+    - `updated`：派发空事件让列表 silent load 拉最新数据
+  - YAML 弹窗关闭延迟从 1500ms 缩短到 600ms（更顺畅）
 - **新建资源时的体验优化**（解决"点确认 3 秒后才退出 + 新建项搜不到"）：
   - 创建按钮在请求中显示 spinner 图标 + "创建中..." 文案 —— K8s API 本身需要 1-3 秒（admission webhook、etcd 同步等），给出明确的等待反馈避免误以为卡死
   - `markAdded` 检测到新建项不匹配当前搜索条件时**自动清空搜索 + toast 提示**，避免"创建成功但被搜索过滤掉看不见"

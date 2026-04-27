@@ -396,12 +396,28 @@ function applyYaml() {
       document.getElementById('yamlSuccess').classList.remove('hidden');
       document.getElementById('yamlSuccessText').textContent = data.message || '资源配置已成功应用到集群';
       document.getElementById('yamlStatus').textContent = '应用成功';
-      // 通知列表组件重新拉取数据（等后端 sync 完成）
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('resource-updated'));
-        if (typeof showToast === 'function') showToast(data.message || '已应用', 'success');
-        yamlModal.close();
-      }, 1500);
+
+      // 根据后端返回的 actions 触发列表的乐观更新
+      // - created（如改 name 后走创建路径）：携带 resource，让列表 markAdded 立即可见
+      // - updated：派发空事件，让列表 silent load 拉最新数据
+      const actions = data.actions || [];
+      if (actions.length === 0) {
+        window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}));
+      } else {
+        actions.forEach(a => {
+          if (a.action === 'created' && a.resource) {
+            window.dispatchEvent(new CustomEvent('resource-updated', {
+              detail: {action: 'create', resource: a.resource}
+            }));
+          } else {
+            window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}));
+          }
+        });
+      }
+
+      if (typeof showToast === 'function') showToast(data.message || '已应用', 'success');
+      // 立刻关闭 YAML 弹窗，体验更顺畅；若需要让用户看到成功提示可缩短延迟
+      setTimeout(() => yamlModal.close(), 600);
     } else {
       document.getElementById('yamlError').classList.remove('hidden');
       document.getElementById('yamlErrorText').textContent = data.error;

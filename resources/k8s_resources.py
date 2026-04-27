@@ -214,10 +214,19 @@ class K8sResourceManager:
 
         注意：先 strip 掉 K8s 服务端字段，否则改 name 后走创建流程会被 K8s 拒绝；
         replace 时再单独注入 resourceVersion 作为乐观锁。
+
+        返回值结构：
+        {
+          'success': bool,
+          'message': str,
+          'actions': [{'kind', 'name', 'namespace', 'action': 'created'|'updated', 'resource'?: {...}}]
+        }
+        前端可据此触发列表的乐观更新，避免整页 reload。
         """
         try:
             docs = list(yaml.safe_load_all(yaml_content))
             results = []
+            actions = []
 
             for doc in docs:
                 if not doc or not isinstance(doc, dict):
@@ -234,20 +243,17 @@ class K8sResourceManager:
                 if not config:
                     raise Exception(f"Unsupported resource type: {kind}")
 
-                # 清理服务端管理字段，避免 create 时报错或 replace 时冲突
                 self._strip_server_managed_fields(doc)
 
                 api_client = self._get_api_client(config['api'])
 
                 try:
-                    # 检查资源是否存在：存在则 replace，不存在则 create
                     get_method = getattr(api_client, config['get'])
                     if config['namespaced']:
                         existing = get_method(name, namespace, _request_timeout=5)
                     else:
                         existing = get_method(name, _request_timeout=5)
 
-                    # 资源已存在 → 整体替换，注入 resourceVersion 作为乐观锁
                     doc.setdefault('metadata', {})
                     doc['metadata']['resourceVersion'] = existing.metadata.resource_version
 
@@ -260,22 +266,47 @@ class K8sResourceManager:
                     else:
                         replace_method(name, doc, _request_timeout=10)
                     results.append(f"Updated {kind} '{name}'")
+                    actions.append({
+                        'kind': kind,
+                        'name': name,
+                        'namespace': namespace if config['namespaced'] else '',
+                        'action': 'updated',
+                    })
 
                 except ApiException as e:
                     if e.status == 404 and config.get('create'):
-                        # 资源不存在 → create（doc 已清理过服务端字段，安全）
                         create_method = getattr(api_client, config['create'])
                         if config['namespaced']:
-                            create_method(namespace, doc, _request_timeout=10)
+                            created = create_method(namespace, doc, _request_timeout=10)
                         else:
-                            create_method(doc, _request_timeout=10)
+                            created = create_method(doc, _request_timeout=10)
                         results.append(f"Created {kind} '{name}'")
+
+                        action_entry = {
+                            'kind': kind,
+                            'name': name,
+                            'namespace': namespace if config['namespaced'] else '',
+                            'action': 'created',
+                        }
+                        # Namespace 是常见的 yaml-apply 改名场景，给前端足够的乐观插入数据
+                        if kind == 'namespace':
+                            action_entry['resource'] = {
+                                'name': name,
+                                'namespace': '',
+                                'status': 'Active',
+                                'age': '0s',
+                                'created': (
+                                    created.metadata.creation_timestamp.strftime('%Y-%m-%d %H:%M')
+                                    if hasattr(created, 'metadata') and created.metadata.creation_timestamp
+                                    else ''
+                                ),
+                            }
+                        actions.append(action_entry)
                     else:
-                        # 把 K8s 的详细报错传给上层
                         detail = e.body or e.reason or str(e)
                         raise Exception(f"{e.reason}: {detail[:500]}")
 
-            return {'success': True, 'message': '; '.join(results)}
+            return {'success': True, 'message': '; '.join(results), 'actions': actions}
         except yaml.YAMLError as e:
             return {'success': False, 'error': f'Invalid YAML: {str(e)}'}
         except Exception as e:
