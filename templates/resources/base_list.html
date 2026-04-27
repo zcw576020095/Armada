@@ -41,9 +41,9 @@
           </template>
         </select>
         <div style="position: relative; display: inline-block;">
-          <input type="text" id="searchInput" placeholder="搜索名称..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary"
+          <input type="text" id="searchInput" placeholder="搜索名称（回车刷新）" class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary"
             style="padding-right: 28px;"
-            x-model="search" @input="page = 1">
+            x-model="search" @input="page = 1" @keydown.enter.prevent="load({silent: true})">
           <button x-show="search" x-cloak @click="search = ''" type="button"
             style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; opacity: 0.5; cursor: pointer; background: transparent; border: none; color: inherit;"
             onmouseover="this.style.opacity='1'; this.style.background='rgba(127,127,127,0.15)'"
