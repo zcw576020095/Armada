@@ -7,6 +7,12 @@
 {% block resource_title %}StatefulSets{% endblock %}
 {% block api_url %}{% url 'resources:statefulsets_api' cluster.pk %}{% endblock %}
 
+{% block extra_actions %}
+<button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="{% if can_edit %}openYamlCreate('statefulset', '{% url 'resources:resource_apply' cluster.pk %}'){% else %}noPermModal.showModal(){% endif %}">
+  <i class="fas fa-plus text-[10px]"></i> 新建
+</button>
+{% endblock %}
+
 {% block table_headers %}
 <th class="font-semibold text-xs">名称</th>
 <th class="font-semibold text-xs">命名空间</th>

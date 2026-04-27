@@ -1,9 +1,12 @@
 """K8s 资源操作管理类"""
+import logging
 import yaml
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
 from clusters.k8s_client import k8s_pool
+
+logger = logging.getLogger(__name__)
 
 
 class K8sResourceManager:
@@ -288,18 +291,17 @@ class K8sResourceManager:
                             'namespace': namespace if config['namespaced'] else '',
                             'action': 'created',
                         }
-                        # Namespace 是常见的 yaml-apply 改名场景，给前端足够的乐观插入数据
-                        if kind == 'namespace':
+                        # 复用 sync_service 的统一序列化函数生成 resource 数据，
+                        # 让前端 markAdded 插入的乐观项与正常列表数据格式完全一致
+                        try:
+                            from resources.sync_service import _serialize_item
+                            action_entry['resource'] = _serialize_item(kind, created)
+                        except Exception as serr:
+                            logger.warning(f'Failed to serialize new {kind} {name}: {serr}')
                             action_entry['resource'] = {
                                 'name': name,
-                                'namespace': '',
-                                'status': 'Active',
+                                'namespace': namespace if config['namespaced'] else '',
                                 'age': '0s',
-                                'created': (
-                                    created.metadata.creation_timestamp.strftime('%Y-%m-%d %H:%M')
-                                    if hasattr(created, 'metadata') and created.metadata.creation_timestamp
-                                    else ''
-                                ),
                             }
                         actions.append(action_entry)
                     else:

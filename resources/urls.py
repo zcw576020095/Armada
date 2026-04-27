@@ -54,6 +54,9 @@ urlpatterns = [
     path('<int:pk>/api/secrets/', views.secret_list_api, name='secrets_api'),
     path('<int:pk>/api/pvcs/', views.pvc_list_api, name='pvcs_api'),
 
+    # ─── Generic Apply (通用 YAML 创建/更新) ─────────────────
+    path('<int:pk>/apply/', views.resource_apply_api, name='resource_apply'),
+
     # ─── Generic YAML & Delete ───────────────────────────────
     path('<int:pk>/yaml/<str:resource_type>/<str:ns>/<str:name>/', views.resource_yaml_api, name='resource_yaml'),
     path('<int:pk>/yaml/<str:resource_type>/<str:name>/', views.resource_yaml_api, name='resource_yaml_cluster'),

@@ -7,6 +7,12 @@
 ## [Unreleased]
 
 ### 新增
+- **所有 K8s 资源类型支持「+ 新建」**：原本只有 Namespace 有创建按钮，现在 Deployment / StatefulSet / DaemonSet / Pod / Service / Ingress / ConfigMap / Secret / PVC 全部支持
+  - 后端：新增 `POST /resources/<pk>/apply/` 通用 API，从 YAML 内容自身解析 `kind/name/namespace`，复用 `apply_yaml`（已支持 create/replace/改名场景）
+  - 前端：每种资源给一份**默认 YAML 模板**（包含必填字段示例），点"+ 新建"按钮 → 弹 Monaco YAML 编辑器，用户改完点"创建"即可
+  - 复用现有 `yamlModal`（区分 `yamlMode = 'edit' | 'create'`），创建模式下隐藏"编辑模式"开关，按钮文案改为"创建"
+  - `apply_yaml` 创建后用 `sync_service._serialize_item` 序列化新资源 → 返回完整 resource 数据 → 前端 `markAdded` 立即可见，与正常列表数据格式一致
+  - 权限：复用现有 `can_edit`，无 edit 权限的用户点"+ 新建"会弹"权限不足"提示
 - **禁用账户登录明确提示**：密码正确但账户已被禁用时，登录页将显示「该账户已被禁用，请联系管理员」，不再与"密码错误"混淆（其他失败情况仍保持模糊提示以防用户名探测）
 - **密码框显示/隐藏切换**：登录页密码输入框右侧新增小眼睛图标，可切换密码明文/密文显示
 - **CSRF 失败友好处理**：CSRF 校验失败时自动清理 session 并跳回登录页提示"会话已过期，请重新登录"，不再露出 Django 默认 403 错误页（`CSRF_FAILURE_VIEW = 'accounts.views.csrf_failure_view'`）

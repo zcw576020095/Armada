@@ -365,6 +365,32 @@ def resource_yaml_api(request, pk, resource_type, name, ns=None):
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 
+# ─── Generic Apply API（通用 YAML 创建/更新）──────────────────
+
+@require_POST
+def resource_apply_api(request, pk):
+    """通用 apply YAML：从 YAML 内容自身解析 kind/name/namespace。
+
+    给前端"+ 新建"按钮使用 —— 用户粘贴或修改 YAML 模板即可创建任意类型资源。
+    底层复用 apply_yaml（已支持 create + replace + 改名等场景）。
+    """
+    cluster, mgr = _get_mgr(pk)
+    try:
+        data = json.loads(request.body)
+        yaml_content = (data.get('yaml') or '').strip()
+        if not yaml_content:
+            return JsonResponse({'success': False, 'error': 'YAML 内容不能为空'}, status=400)
+        result = mgr.apply_yaml(yaml_content)
+        if result.get('success'):
+            # 根据 actions 触发对应资源类型的立即同步
+            for action in result.get('actions', []):
+                trigger_immediate_sync(cluster, action.get('kind'))
+            return JsonResponse(result)
+        return JsonResponse(result, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 # ─── Generic Delete API ──────────────────────────────────────
 
 @require_POST
