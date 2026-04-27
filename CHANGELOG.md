@@ -41,6 +41,10 @@
       - `add` op：后端缺这个项时合并回来；后端已包含则清理 op
   - 效果：HTTP 响应立即（不卡）、用户操作立即可见（乐观插入不被覆盖）、最终状态正确（后端真同步好后 op 自动退出）
 - **加快删除资源后的轮询频率**：检测到 Terminating 资源时，前 30 秒以 2.5 秒间隔轮询（密集观察 K8s 清理进度），30 秒后转 6 秒间隔降低 API 负载，最长持续 120 秒。原 5 秒固定间隔在 K8s 实际清理完成后还要再等 5 秒才能感知到资源消失，体感拖沓
+- **删除/扩缩容/重启等弹框间歇性"点击没反应"**：
+  - 触发场景：上一次操作中途出问题（网络错误、ESC 关闭、用户切换标签等）导致 `<dialog>` 的 open 状态没正确同步；下次再点击删除按钮时 `dialog.showModal()` 因 dialog 已是 open 状态而抛 `InvalidStateError` → 事件处理器静默失败 → 用户感觉"按钮没反应"
+  - 修复：所有 `@open-xxx-modal.window` 监听器在 `showModal()` 前先 `if (modal.open) modal.close()`（已关闭时 close 是 no-op），并用 try/catch + console.error 兜底，避免静默吞错
+  - 覆盖：`deleteModal` / `scaleModal` / `restartModal` / `forceFinalizeModal`
 - **YAML 编辑器修改 metadata.name 后新建项不显示**（解决"改 name 后必须刷新页面才看到新建项"）：
   - 触发场景：在 YAML 编辑器把 namespace 的 `metadata.name` 改成新名字 → K8s 视为创建新资源（name 不可变）→ 走 apply_yaml 的 create 分支。但 yaml 编辑器以前没区分"创建"还是"更新"，前端只派发空的 resource-updated 事件，列表 silent load 拿到的还是后端老 cache → 新建项不可见，必须 F5
   - 后端 `apply_yaml` 增加返回值 `actions: [{kind, name, namespace, action: 'created'|'updated', resource?}]`，namespace 类型的 created action 同时返回简化的 resource 数据（name/status/age/created）
