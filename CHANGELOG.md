@@ -48,6 +48,11 @@
       - `add` op：后端缺这个项时合并回来；后端已包含则清理 op
   - 效果：HTTP 响应立即（不卡）、用户操作立即可见（乐观插入不被覆盖）、最终状态正确（后端真同步好后 op 自动退出）
 - **加快删除资源后的轮询频率**：检测到 Terminating 资源时，前 30 秒以 2.5 秒间隔轮询（密集观察 K8s 清理进度），30 秒后转 6 秒间隔降低 API 负载，最长持续 120 秒。原 5 秒固定间隔在 K8s 实际清理完成后还要再等 5 秒才能感知到资源消失，体感拖沓
+- **YAML 编辑器更新资源后列表显示老 cache 数据**（用户场景：把 deployment 的 replicas 改成 2，列表/扩缩容弹框还显示 1）：
+  - 根因：`apply_yaml` 的 update 路径只触发了异步 `trigger_immediate_sync`，1.5s 后 silent load 拿的是 cache，cache 还没追上 K8s 最新值 → 列表/弹框显示老数据
+  - 后端：`apply_yaml` 的 update 路径保存 `replace_method` 返回的最新对象，用 `_serialize_item` 序列化后放进 `actions[].resource`
+  - 前端：`base_list.markUpdated(resource)` 直接用最新数据替换 `rows` 里的对应项（不依赖 cache 同步窗口）；`applyYaml` 收到 `updated + resource` 派发 `{action:'update', resource}`，`base_list` 事件分发器据此调 `markUpdated`
+  - 效果：YAML 改完后列表立即显示新值（replicas / image / 任何字段），扩缩容弹框打开也是最新值
 - **删除/扩缩容/重启等弹框间歇性"点击没反应"**：
   - 触发场景：上一次操作中途出问题（网络错误、ESC 关闭、用户切换标签等）导致 `<dialog>` 的 open 状态没正确同步；下次再点击删除按钮时 `dialog.showModal()` 因 dialog 已是 open 状态而抛 `InvalidStateError` → 事件处理器静默失败 → 用户感觉"按钮没反应"
   - 修复：所有 `@open-xxx-modal.window` 监听器在 `showModal()` 前先 `if (modal.open) modal.close()`（已关闭时 close 是 no-op）

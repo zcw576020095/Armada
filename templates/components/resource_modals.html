@@ -607,8 +607,9 @@ function applyYaml() {
       document.getElementById('yamlStatus').textContent = '应用成功';
 
       // 根据后端返回的 actions 触发列表的乐观更新
-      // - created（如改 name 后走创建路径）：携带 resource，让列表 markAdded 立即可见
-      // - updated：派发空事件，让列表 silent load 拉最新数据
+      // - created：派发 create + resource，让列表 markAdded 立即插入
+      // - updated：派发 update + resource，让列表 markUpdated 用真实值刷新对应行
+      //   （避免改 deployment.replicas 等场景列表显示 cache 老数据）
       const actions = data.actions || [];
       if (actions.length === 0) {
         window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}));
@@ -617,6 +618,10 @@ function applyYaml() {
           if (a.action === 'created' && a.resource) {
             window.dispatchEvent(new CustomEvent('resource-updated', {
               detail: {action: 'create', resource: a.resource}
+            }));
+          } else if (a.action === 'updated' && a.resource) {
+            window.dispatchEvent(new CustomEvent('resource-updated', {
+              detail: {action: 'update', resource: a.resource}
             }));
           } else {
             window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}));

@@ -265,16 +265,26 @@ class K8sResourceManager:
                         raise Exception(f"Resource type {kind} does not support replace")
                     replace_method = getattr(api_client, replace_name)
                     if config['namespaced']:
-                        replace_method(name, namespace, doc, _request_timeout=10)
+                        updated = replace_method(name, namespace, doc, _request_timeout=10)
                     else:
-                        replace_method(name, doc, _request_timeout=10)
+                        updated = replace_method(name, doc, _request_timeout=10)
                     results.append(f"Updated {kind} '{name}'")
-                    actions.append({
+
+                    # 序列化最新数据返回给前端，让 markUpdated 立即用真实值刷新列表
+                    # （否则前端只能等 trigger_immediate_sync 异步完成 + silent load，时序窗口里
+                    #  会看到 cache 老数据，例如改完 replicas=2 还显示 1）
+                    update_action = {
                         'kind': kind,
                         'name': name,
                         'namespace': namespace if config['namespaced'] else '',
                         'action': 'updated',
-                    })
+                    }
+                    try:
+                        from resources.sync_service import _serialize_item
+                        update_action['resource'] = _serialize_item(kind, updated)
+                    except Exception as serr:
+                        logger.warning(f'Failed to serialize updated {kind} {name}: {serr}')
+                    actions.append(update_action)
 
                 except ApiException as e:
                     if e.status == 404 and config.get('create'):
