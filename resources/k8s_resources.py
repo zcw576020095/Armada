@@ -180,6 +180,20 @@ class K8sResourceManager:
             anns.pop('kubectl.kubernetes.io/last-applied-configuration', None)
             if not anns and 'annotations' in metadata:
                 metadata.pop('annotations', None)
+            # 剥掉 selector / spec.template 上的 pod-template-hash —— 这是 controller
+            # 自己加的，用户编辑时看到也没意义，提交回来还会让 K8s 误判每次都是新版本，
+            # 生成多余 ReplicaSet（影响 Deployment / StatefulSet / DaemonSet 等所有
+            # 带 spec.template 的资源类型）
+            spec = doc.get('spec')
+            if isinstance(spec, dict):
+                tmpl = spec.get('template')
+                if isinstance(tmpl, dict):
+                    self._strip_pod_template_hash(tmpl)
+                sel = spec.get('selector')
+                if isinstance(sel, dict):
+                    ml = sel.get('matchLabels')
+                    if isinstance(ml, dict):
+                        ml.pop(self.POD_TEMPLATE_HASH_LABEL, None)
         return yaml.dump(doc, default_flow_style=False)
 
     def delete_resource(self, resource_type, name, namespace=None, force=False):
@@ -235,6 +249,23 @@ class K8sResourceManager:
                 'status 字段是 K8s 控制面维护的只读子资源，对它的修改不会生效，已自动忽略'
             )
             doc.pop('status', None)
+        # 剥掉 spec.template / spec.selector 上的 pod-template-hash —— 这是 K8s
+        # controller 自己维护的 label，用户写了反而会让 K8s 每次更新都生成新 RS，
+        # 影响 Deployment / StatefulSet / DaemonSet 等所有带 spec.template 的资源
+        spec_raw = doc.get('spec')
+        if isinstance(spec_raw, dict):
+            tmpl = spec_raw.get('template')
+            if isinstance(tmpl, dict):
+                tmpl_md = tmpl.get('metadata')
+                if isinstance(tmpl_md, dict):
+                    labels = tmpl_md.get('labels')
+                    if isinstance(labels, dict):
+                        labels.pop('pod-template-hash', None)
+            sel = spec_raw.get('selector')
+            if isinstance(sel, dict):
+                ml = sel.get('matchLabels')
+                if isinstance(ml, dict):
+                    ml.pop('pod-template-hash', None)
         return warnings
 
     def apply_yaml(self, yaml_content):
@@ -885,6 +916,36 @@ class K8sResourceManager:
         revisions.sort(key=lambda r: int(r['revision']), reverse=True)
         return {'current_revision': current_rev, 'revisions': revisions}
 
+    # ReplicaSet 上 controller 自己维护的 pod-template-hash label。
+    # 回滚 / 复制 RS template 时必须剥掉它，否则 K8s 会把它当用户写的 label 跟
+    # 新算的 hash 一起塞进新 RS，导致每次回滚都生成一个新 RS（revision 一直涨）。
+    # kubectl rollout undo 也是同样的处理。
+    POD_TEMPLATE_HASH_LABEL = 'pod-template-hash'
+
+    @classmethod
+    def _strip_pod_template_hash(cls, template):
+        """从 spec.template 上剥掉 controller-owned 的 pod-template-hash label。
+
+        template 可以是 V1PodTemplateSpec 对象，也可以是 dict（apply_yaml 的场景）。
+        直接修改入参，无返回值。
+        """
+        if template is None:
+            return
+        # SDK 对象路径
+        meta = getattr(template, 'metadata', None)
+        if meta is not None:
+            labels = getattr(meta, 'labels', None)
+            if isinstance(labels, dict):
+                labels.pop(cls.POD_TEMPLATE_HASH_LABEL, None)
+            return
+        # dict 路径（apply_yaml 解析的 yaml doc）
+        if isinstance(template, dict):
+            md = template.get('metadata')
+            if isinstance(md, dict):
+                labels = md.get('labels')
+                if isinstance(labels, dict):
+                    labels.pop(cls.POD_TEMPLATE_HASH_LABEL, None)
+
     def rollback_deployment(self, name, namespace, target_revision):
         """把 deployment 的 spec.template 回滚到指定 revision 对应的 ReplicaSet template。
 
@@ -922,9 +983,11 @@ class K8sResourceManager:
         if str(current_rev) == target_rev:
             raise Exception(f"Already at revision {target_rev}, no rollback needed")
 
-        # 整体替换 spec.template（保留 RS 上的 pod-template-hash label，让 controller
-        # 重新识别这是已有 revision 的复用，给出新 revision number 但不创建新 RS）
+        # 整体替换 spec.template；剥掉旧 RS 的 pod-template-hash label——
+        # 这是 controller 自己加的，不剥的话 K8s 会把它当用户 label，每次回滚都
+        # 生成一个新 RS（revision 一直涨，即便实质内容一致）
         dep.spec.template = target_rs.spec.template
+        self._strip_pod_template_hash(dep.spec.template)
 
         if dep.metadata.annotations is None:
             dep.metadata.annotations = {}

@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### 修复
+- **回滚 / YAML 编辑后产生多余 ReplicaSet**（致命）：用户场景"我只改一个端口号 / 只点了一次回滚，结果出现 3 个版本"
+  - 根因：`rollback_deployment` 把目标 RS 的 `spec.template` 整体复制给当前 deployment，连同 `spec.template.metadata.labels.pod-template-hash` 这个 controller-only label 一起带过去；K8s deployment controller 收到带 hash 的 template 后，会把它当成"用户层 label"跟新算的 hash 合并 → 新 RS 的 labels 跟历史 RS 不再一致 → 创建新 RS、revision 一直涨
+  - 同样问题在 `apply_yaml` / `get_resource_yaml` 路径也存在：用户编辑 yaml 时如果带着这个 hash 提交回来，每次更新都生成新 RS
+  - 修法：新增 `K8sResourceManager._strip_pod_template_hash()` 通用工具；`rollback_deployment` / `_strip_server_managed_fields`（apply_yaml + validate 共用）/ `get_resource_yaml` 三条路径都剥掉 `spec.template.metadata.labels.pod-template-hash` 和 `spec.selector.matchLabels.pod-template-hash`
+  - 横向覆盖：所有带 `spec.template` 的资源类型 —— Deployment / StatefulSet / DaemonSet
+
 ### 新增
 - **README 加入「功能截图」章节 + 新建 `docs/screenshots/` 目录**：用于集中展示平台功能截图（登录、集群、节点、仪表盘、Deployment 详情/回滚/扩缩、Pod 日志/exec、各资源列表、YAML 编辑/新建/校验、用户权限等），让浏览者一眼看清项目实现的功能。`docs/screenshots/README.md` 给出文件命名规范，方便后续按规范补图，README 引用稳定不需要改动
 - **Pod 容器层卡点显式展示**（用户场景：deployment 显示 Pending 看不出为什么）：
