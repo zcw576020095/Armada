@@ -23,10 +23,18 @@
       </div>
     </div>
 
-    <!-- 提示条 -->
-    <div class="px-6 py-3 flex items-center gap-3" style="background: rgba(59,130,246,0.1); border-bottom: 1px solid rgba(59,130,246,0.2);">
+    <!-- 提示条：根据 edit / create / readonly 三种模式切换文案 -->
+    <div id="yamlEditTip" class="px-6 py-3 flex items-center gap-3" style="background: rgba(59,130,246,0.1); border-bottom: 1px solid rgba(59,130,246,0.2);">
       <i class="fas fa-info-circle text-sm" style="color: #60a5fa;"></i>
       <span class="text-xs leading-relaxed" style="color: #93c5fd;">修改 YAML 后点击「应用到集群」将直接更新资源配置，请确认修改内容无误后再提交。</span>
+    </div>
+    <div id="yamlCreateTip" class="hidden px-6 py-3 flex items-center gap-3" style="background: rgba(139,92,246,0.1); border-bottom: 1px solid rgba(139,92,246,0.2);">
+      <i class="fas fa-plus-circle text-sm" style="color: #a78bfa;"></i>
+      <span class="text-xs leading-relaxed" style="color: #c4b5fd;">编辑 YAML 模板（已预填示例），确认 name / namespace / image 等字段正确后点击「创建」即可。</span>
+    </div>
+    <div id="yamlReadonlyTip" class="hidden px-6 py-3 flex items-center gap-3" style="background: rgba(148,163,184,0.1); border-bottom: 1px solid rgba(148,163,184,0.2);">
+      <i class="fas fa-eye text-sm" style="color: #94a3b8;"></i>
+      <span class="text-xs leading-relaxed" style="color: #cbd5e1;">仅查看模式。Pod 等由上层控制器（Deployment / StatefulSet 等）管理的资源不支持直接编辑，请改上层资源的 template 触发滚动更新。</span>
     </div>
 
     <!-- Monaco 编辑器区域 -->
@@ -106,6 +114,30 @@
           </div>
         </div>
       </label>
+    </template>
+
+    <!-- Namespace 专属：级联删除警告（按用户要求，资源类删除不要输入名称确认，
+         只有 cluster 删除才需要输入名字） -->
+    <template x-if="resType === 'Namespace'">
+      <div class="mt-3 p-3 rounded-lg bg-orange-500/5 border border-orange-500/30">
+        <div class="flex items-start gap-2">
+          <i class="fas fa-exclamation-triangle text-orange-400 text-sm mt-0.5"></i>
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-orange-400 mb-1">级联删除警告</div>
+            <div class="text-[11px] opacity-80 leading-relaxed">
+              K8s 会一并清理该命名空间内的<strong>所有资源</strong>，包括：
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1.5">
+              <template x-for="kind in ['Deployments','StatefulSets','DaemonSets','Pods','Services','Ingresses','ConfigMaps','Secrets','PVCs','Jobs/CronJobs']">
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 font-mono" x-text="kind"></span>
+              </template>
+            </div>
+            <div class="text-[10px] opacity-60 mt-2 leading-relaxed">
+              此操作不可撤销。如果 namespace 内还有 PV/PVC，请确认存储不再需要。
+            </div>
+          </div>
+        </div>
+      </div>
     </template>
 
     <div class="modal-action mt-6 gap-2.5">
@@ -263,6 +295,334 @@
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
+<!-- Deployment Describe Modal -->
+<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail)">
+  <div class="modal-box bg-base-100 border border-base-300 rounded-2xl shadow-2xl flex flex-col p-0" style="width: 80vw; max-width: 80vw; height: 85vh;">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-5 py-3 border-b border-base-300 flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-violet-500/15 grid place-items-center">
+          <i class="fas fa-rocket text-violet-500 text-sm"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-sm">Deployment 详情</h3>
+          <p class="text-[11px] opacity-50" x-text="(meta.namespace || '') + ' / ' + (meta.name || '')"></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost btn-sm h-8 min-h-0 gap-1 text-[11px]" @click="reload()" :disabled="loading">
+          <i class="fas fa-sync-alt text-[10px]" :class="loading ? 'animate-spin' : ''"></i> 刷新
+        </button>
+        <button class="btn btn-ghost btn-sm btn-circle h-8 w-8 min-h-0" onclick="describeModal.close()">
+          <i class="fas fa-times text-xs"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab 切换 -->
+    <div class="flex items-center gap-1 px-5 pt-3 border-b border-base-300 flex-shrink-0">
+      <template x-for="t in tabs" :key="t.key">
+        <button class="btn btn-ghost btn-sm h-8 min-h-0 gap-1 text-[11px] rounded-b-none border-b-2 transition-all"
+                :class="tab === t.key ? 'border-violet-500 text-violet-500' : 'border-transparent opacity-60 hover:opacity-100'"
+                @click="tab = t.key">
+          <i class="fas text-[10px]" :class="t.icon"></i>
+          <span x-text="t.label"></span>
+          <span x-show="t.count !== undefined" class="badge badge-xs ml-1" x-text="t.count"></span>
+        </button>
+      </template>
+    </div>
+
+    <!-- 内容 -->
+    <div class="flex-1 overflow-y-auto px-5 py-4 text-xs">
+      <div x-show="loading" class="flex items-center justify-center py-16 opacity-50 gap-2">
+        <span class="loading loading-spinner loading-sm"></span> 加载中...
+      </div>
+      <div x-show="!loading && error" class="alert alert-error text-xs"><i class="fas fa-exclamation-triangle"></i><span x-text="error"></span></div>
+
+      <!-- Tab: 概览 -->
+      <div x-show="!loading && !error && tab === 'overview'" x-cloak class="space-y-4">
+        <!-- 副本状态 -->
+        <div class="grid grid-cols-4 gap-3">
+          <template x-for="card in [
+            {label:'期望副本', val: info.replicas, color:'text-violet-500'},
+            {label:'就绪', val: info.ready_replicas, color:'text-emerald-500'},
+            {label:'已更新', val: info.updated_replicas, color:'text-blue-500'},
+            {label:'不可用', val: info.unavailable_replicas, color:'text-rose-500'}
+          ]">
+            <div class="rounded-lg bg-base-200/50 px-3 py-2 border border-base-300">
+              <div class="text-[10px] opacity-50" x-text="card.label"></div>
+              <div class="text-lg font-bold" :class="card.color" x-text="card.val"></div>
+            </div>
+          </template>
+        </div>
+
+        <!-- 基本信息 -->
+        <div class="rounded-lg bg-base-200/30 px-4 py-3 border border-base-300/50">
+          <div class="font-semibold mb-2 text-[11px] opacity-70 uppercase">基本信息</div>
+          <div class="grid grid-cols-2 gap-y-1.5 gap-x-6 font-mono text-[11px]">
+            <div><span class="opacity-50">命名空间：</span><span x-text="info.namespace"></span></div>
+            <div><span class="opacity-50">创建时间：</span><span x-text="info.created"></span></div>
+            <div><span class="opacity-50">策略：</span><span x-text="info.strategy?.type || '-'"></span></div>
+            <div><span class="opacity-50">滚动参数：</span><span x-text="(info.strategy?.max_surge || '-') + ' / ' + (info.strategy?.max_unavailable || '-')"></span></div>
+            <div><span class="opacity-50">Generation：</span><span x-text="info.generation + ' (observed: ' + info.observed_generation + ')'"></span></div>
+            <div><span class="opacity-50">Selector：</span><span class="break-all" x-text="Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'"></span></div>
+          </div>
+        </div>
+
+        <!-- 容器 -->
+        <div class="rounded-lg bg-base-200/30 px-4 py-3 border border-base-300/50">
+          <div class="font-semibold mb-2 text-[11px] opacity-70 uppercase">容器</div>
+          <template x-for="c in info.containers || []" :key="c.name">
+            <div class="font-mono text-[11px] mb-1">
+              <span class="text-violet-500" x-text="c.name"></span>
+              <span class="opacity-50"> → </span>
+              <span x-text="c.image"></span>
+              <span x-show="c.ports?.length" class="opacity-50" x-text="' [' + c.ports.join(', ') + ']'"></span>
+            </div>
+          </template>
+        </div>
+
+        <!-- Conditions -->
+        <div class="rounded-lg bg-base-200/30 px-4 py-3 border border-base-300/50">
+          <div class="font-semibold mb-2 text-[11px] opacity-70 uppercase">Conditions</div>
+          <table class="table table-xs">
+            <thead><tr class="border-b border-base-300/50">
+              <th class="text-[10px]">类型</th><th class="text-[10px]">状态</th><th class="text-[10px]">原因</th><th class="text-[10px]">消息</th><th class="text-[10px]">最近更新</th>
+            </tr></thead>
+            <tbody>
+              <template x-for="c in conditions" :key="c.type">
+                <tr class="border-b border-base-300/30">
+                  <td class="font-medium" x-text="c.type"></td>
+                  <td><span class="badge badge-xs" :class="c.status === 'True' ? 'badge-success' : c.status === 'False' ? 'badge-error' : 'badge-warning'" x-text="c.status"></span></td>
+                  <td x-text="c.reason"></td>
+                  <td class="opacity-70" x-text="c.message"></td>
+                  <td class="opacity-50" x-text="c.last_update"></td>
+                </tr>
+              </template>
+              <tr x-show="conditions.length === 0"><td colspan="5" class="text-center opacity-40 py-3">无</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab: Events -->
+      <div x-show="!loading && !error && tab === 'events'" x-cloak>
+        <table class="table table-xs">
+          <thead><tr class="border-b border-base-300/50">
+            <th class="text-[10px]">类型</th><th class="text-[10px]">原因</th><th class="text-[10px]">来源</th><th class="text-[10px] text-center">次数</th><th class="text-[10px]">消息</th><th class="text-[10px]">最近时间</th>
+          </tr></thead>
+          <tbody>
+            <template x-for="(e, i) in events" :key="i">
+              <tr class="border-b border-base-300/30">
+                <td><span class="badge badge-xs" :class="e.type === 'Normal' ? 'badge-info' : 'badge-warning'" x-text="e.type"></span></td>
+                <td class="font-mono" x-text="e.reason"></td>
+                <td class="opacity-50" x-text="e.source"></td>
+                <td class="text-center" x-text="e.count"></td>
+                <td class="opacity-80" x-text="e.message"></td>
+                <td class="opacity-50 whitespace-nowrap" x-text="e.last_timestamp"></td>
+              </tr>
+            </template>
+            <tr x-show="events.length === 0"><td colspan="6" class="text-center opacity-40 py-6">暂无 events</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab: 关联 Pods -->
+      <div x-show="!loading && !error && tab === 'pods'" x-cloak>
+        <table class="table table-xs">
+          <thead><tr class="border-b border-base-300/50">
+            <th class="text-[10px]">名称</th>
+            <th class="text-[10px]">状态</th>
+            <th class="text-[10px]">就绪</th>
+            <th class="text-[10px] text-center">重启</th>
+            <th class="text-[10px]">Age</th>
+            <th class="text-[10px]">创建时间</th>
+            <th class="text-[10px]">节点</th>
+            <th class="text-[10px]">IP</th>
+            <th class="text-[10px]">操作</th>
+          </tr></thead>
+          <tbody>
+            <template x-for="p in pods" :key="p.name">
+              <tr class="border-b border-base-300/30">
+                <td class="font-mono" x-text="p.name"></td>
+                <td><span class="badge badge-xs" :class="p.status_phase === 'Running' ? 'badge-success' : p.status_phase === 'Pending' ? 'badge-warning' : p.status_phase === 'Succeeded' ? 'badge-info' : 'badge-error'" x-text="p.status_phase"></span></td>
+                <td x-text="p.ready_str"></td>
+                <td class="text-center" x-text="p.restarts"></td>
+                <td class="font-medium text-primary whitespace-nowrap" x-text="p.age" :title="p.created"></td>
+                <td class="opacity-50 whitespace-nowrap" x-text="p.created"></td>
+                <td class="opacity-70" x-text="p.node"></td>
+                <td class="font-mono opacity-70" x-text="p.ip"></td>
+                <td>
+                  <div class="flex gap-1">
+                    <button class="btn btn-ghost btn-xs gap-1 h-6 min-h-0 text-[10px]"
+                            @click="$dispatch('open-pod-logs', {namespace: p.namespace, podName: p.name, logsUrl: clusterPodLogsUrl(p.namespace, p.name)})">
+                      <i class="fas fa-terminal text-[9px]"></i> 日志
+                    </button>
+                    <button class="btn btn-ghost btn-xs gap-1 h-6 min-h-0 text-[10px]"
+                            @click="openYaml('Pod: ' + p.name, '/resources/' + clusterPk + '/yaml/pod/' + p.namespace + '/' + p.name + '/', false)">
+                      <i class="fas fa-file-code text-[9px]"></i> YAML
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="pods.length === 0"><td colspan="9" class="text-center opacity-40 py-6">无关联 Pod（selector 可能为空）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Deployment Rollback Modal -->
+<dialog id="rollbackModal" class="modal" x-data="rollbackViewer()" @open-deployment-rollback.window="open($event.detail)">
+  <div class="modal-box bg-base-100 border border-warning/30 rounded-2xl shadow-2xl" style="width: 70vw; max-width: 900px;">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 rounded-xl bg-warning/15 grid place-items-center">
+        <i class="fas fa-undo text-warning"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-sm">回滚 Deployment</h3>
+        <p class="text-[11px] opacity-50" x-text="(meta.namespace || '') + ' / ' + (meta.name || '')"></p>
+      </div>
+    </div>
+
+    <div class="alert text-[11px] mb-3" style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3); color: #facc15;">
+      <i class="fas fa-info-circle"></i>
+      <span>选择一个历史版本回滚。回滚会用该 ReplicaSet 的 pod template 覆盖当前 Deployment，触发滚动更新。</span>
+    </div>
+
+    <div x-show="loading" class="flex items-center justify-center py-10 opacity-50 gap-2">
+      <span class="loading loading-spinner loading-sm"></span> 加载历史中...
+    </div>
+    <div x-show="!loading && error" class="alert alert-error text-xs"><i class="fas fa-exclamation-triangle"></i><span x-text="error"></span></div>
+
+    <table x-show="!loading && !error" class="table table-xs">
+      <thead><tr class="border-b border-base-300/50">
+        <th class="text-[10px]">Revision</th><th class="text-[10px]">镜像</th><th class="text-[10px]">变更原因</th><th class="text-[10px]">创建时间</th><th class="text-[10px]">操作</th>
+      </tr></thead>
+      <tbody>
+        <template x-for="r in revisions" :key="r.revision">
+          <tr class="border-b border-base-300/30" :class="r.is_current ? 'bg-violet-500/5' : ''">
+            <td class="font-bold">
+              <span x-text="'#' + r.revision"></span>
+              <span x-show="r.is_current" class="badge badge-xs badge-primary ml-1">当前</span>
+            </td>
+            <td class="font-mono opacity-80 break-all" x-text="(r.images || []).join(', ') || '-'"></td>
+            <td class="opacity-70" x-text="r.change_cause || '-'"></td>
+            <td class="opacity-50 whitespace-nowrap" x-text="r.created"></td>
+            <td>
+              <button class="btn btn-warning btn-xs h-6 min-h-0 gap-1 text-[10px]"
+                      :disabled="r.is_current || rolling || pendingRevision"
+                      @click="pendingRevision = r.revision">
+                <i class="fas fa-undo text-[9px]"></i> 回滚到此
+              </button>
+            </td>
+          </tr>
+        </template>
+        <tr x-show="revisions.length === 0"><td colspan="5" class="text-center opacity-40 py-6">无历史版本</td></tr>
+      </tbody>
+    </table>
+
+    <!-- 内联确认条：点击"回滚到此"后展开 -->
+    <div x-show="pendingRevision" x-cloak class="mt-4 rounded-lg p-3 flex items-center justify-between gap-3"
+         style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.35);">
+      <div class="flex items-center gap-2 text-xs">
+        <i class="fas fa-exclamation-triangle text-warning"></i>
+        <span>确认回滚到 <span class="font-bold" x-text="'revision #' + pendingRevision"></span> ？此操作会立即触发滚动更新。</span>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost btn-xs h-8 min-h-0 px-4 text-[11px]" :disabled="rolling"
+                @click="pendingRevision = null">取消</button>
+        <button class="btn btn-warning btn-xs gap-1.5 h-8 min-h-0 px-4 text-[11px]" :disabled="rolling"
+                @click="doRollback()">
+          <i class="fas fa-undo text-[9px]" :class="rolling ? 'animate-spin' : ''"></i>
+          <span x-text="rolling ? '回滚中...' : '确认回滚'"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="modal-action mt-4">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs" onclick="rollbackModal.close()">关闭</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Pod Logs Modal（共享：pod 列表、deployment describe 都用） -->
+<dialog id="logModal" class="modal" x-data="podLogViewer()"
+        @open-pod-logs.window="viewLogs($event.detail.namespace, $event.detail.podName, $event.detail.logsUrl)">
+  <div class="modal-box max-w-3xl flex flex-col bg-base-100 shadow-xl rounded-xl p-0" style="height:55vh;">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-base-200 flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg bg-violet-500/15 grid place-items-center">
+          <i class="fas fa-terminal text-violet-500 text-[10px]"></i>
+        </div>
+        <span class="font-semibold text-sm">Pod 日志</span>
+        <span class="text-xs opacity-40" x-text="podName"></span>
+      </div>
+      <button class="btn btn-ghost btn-sm btn-circle h-7 w-7 min-h-0" @click="stopLive(); $el.closest('dialog').close()">
+        <i class="fas fa-times text-xs"></i>
+      </button>
+    </div>
+
+    <div class="flex items-center justify-between px-5 py-2 border-b border-base-200 flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <span class="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-500 font-medium" x-text="container || 'default'"></span>
+        <select x-model="tailLines" @change="viewLogs(namespace, podName, baseUrl, false, true)"
+                class="select select-bordered select-xs h-7 min-h-0 text-[11px] w-28 focus:select-primary">
+          <option value="100">最近 100 行</option>
+          <option value="200">最近 200 行</option>
+          <option value="500">最近 500 行</option>
+          <option value="1000">最近 1000 行</option>
+        </select>
+        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+          <input type="checkbox" class="toggle toggle-xs toggle-success" :checked="liveMode" @change="toggleLive()">
+          <span class="text-[11px]" :class="liveMode ? 'text-emerald-500 font-medium' : 'opacity-40'">实时</span>
+        </label>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @click="viewLogs(namespace, podName, baseUrl, false, true)"
+                class="btn btn-ghost btn-xs h-7 min-h-0 gap-1 text-[11px]">
+          <i class="fas fa-sync-alt text-[9px]" :class="loading ? 'animate-spin' : ''"></i> 刷新
+        </button>
+        <button @click="if(liveMode) stopLive(); previous = !previous; viewLogs(namespace, podName, baseUrl, false, true)"
+                class="btn btn-xs h-7 min-h-0 gap-1 text-[11px] transition-all"
+                :class="previous ? 'btn-warning' : 'btn-ghost'">
+          <i class="fas fa-history text-[9px]"></i> 上次日志
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed" x-ref="logBox"
+         style="background:#0d1117; color:#c9d1d9;">
+      <div x-show="loading && !logs" class="flex flex-col items-center justify-center h-full gap-2">
+        <span class="loading loading-spinner loading-sm text-primary"></span>
+        <span class="text-[11px] opacity-40">获取日志中...</span>
+      </div>
+      <div x-show="!loading && error" class="text-error text-xs" x-text="error"></div>
+      <pre x-show="logs" class="whitespace-pre-wrap break-all m-0" x-text="logs"></pre>
+      <div x-show="!loading && !error && !logs" class="flex flex-col items-center justify-center h-full gap-2 opacity-30">
+        <i class="fas fa-file-alt text-2xl"></i>
+        <span class="text-xs">暂无日志输出</span>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between px-5 py-1.5 border-t border-base-200 text-[10px] opacity-40 flex-shrink-0">
+      <span x-text="namespace + ' / ' + podName"></span>
+      <div class="flex items-center gap-3">
+        <span x-show="liveMode" class="text-emerald-500 flex items-center gap-1 opacity-100">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> 每 3s 刷新
+        </span>
+        <span x-text="logs ? (logs.split('\n').length + ' 行') : ''"></span>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop" @click="stopLive()"><button>close</button></form>
+</dialog>
+
 <!-- CSRF Token -->
 {% csrf_token %}
 
@@ -271,7 +631,15 @@
 <script>
 let monacoEditor = null;
 let currentYamlUrl = '';
-let yamlMode = 'edit';   // 'edit' = 编辑现有资源；'create' = 新建（POST 到 apply API）
+let yamlMode = 'edit';   // 'edit' = 编辑现有资源；'create' = 新建（POST 到 apply API）；'readonly' = 仅查看
+
+// 统一切换 yaml modal 顶部提示条；mode ∈ 'edit' | 'create' | 'readonly'
+function _setYamlTip(mode) {
+  const ids = {edit: 'yamlEditTip', create: 'yamlCreateTip', readonly: 'yamlReadonlyTip'};
+  Object.values(ids).forEach(id => document.getElementById(id).classList.add('hidden'));
+  const target = ids[mode] || ids.edit;
+  document.getElementById(target).classList.remove('hidden');
+}
 
 require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' }});
 
@@ -455,6 +823,7 @@ function openYamlCreate(kind, applyUrl) {
   // 创建模式下应用按钮文案
   const applyBtn = document.getElementById('yamlApplyBtn');
   applyBtn.innerHTML = '<i class="fas fa-cloud-upload-alt mr-1.5 text-[10px]"></i> 创建';
+  _setYamlTip('create');
 
   if (yamlModal.open) yamlModal.close();
   yamlModal.showModal();
@@ -492,17 +861,25 @@ function openYaml(title, url, canEdit) {
   const toggle = document.getElementById('yamlReadonlyToggle');
   const applyBtn = document.getElementById('yamlApplyBtn');
   const validateBtn = document.getElementById('yamlValidateBtn');
+  // 重置按钮文案为"应用到集群"（防止上次进入是"+ 新建"残留下来的"创建"文案）
+  applyBtn.innerHTML = '<i class="fas fa-cloud-upload-alt mr-1.5 text-[10px]"></i> 应用到集群';
+  // 用户反馈：默认进 yaml 弹窗应当是只读预览，避免误改；按右上角"编辑模式"
+  // 开关后再进入可编辑状态。canEdit=false 的资源（如 pod）则强制只读到底，
+  // 此时连开关都不展示。
+  yamlMode = canEdit ? 'edit' : 'readonly';
   if (canEdit) {
     toggle.parentElement.style.display = '';
-    applyBtn.style.display = '';
-    validateBtn.style.display = '';
-    toggle.checked = true;
+    // 开关默认关，应用/验证按钮先隐藏；用户切换后再展示
+    toggle.checked = false;
+    applyBtn.style.display = 'none';
+    validateBtn.style.display = 'none';
   } else {
     toggle.parentElement.style.display = 'none';
     applyBtn.style.display = 'none';
     validateBtn.style.display = 'none';
     toggle.checked = false;
   }
+  _setYamlTip(yamlMode);
 
   yamlModal.showModal();
 
@@ -516,7 +893,8 @@ function openYaml(title, url, canEdit) {
         return;
       }
       const container = document.getElementById('monacoContainer');
-      const readOnly = !canEdit;
+      // 默认按 toggle.checked（已被 openYaml 重置为 false 即只读）
+      const readOnly = !toggle.checked;
       if (monacoEditor) {
         monacoEditor.setValue(data.yaml);
         monacoEditor.updateOptions({ readOnly: readOnly });
@@ -553,33 +931,96 @@ function openYaml(title, url, canEdit) {
     });
 }
 
+// 编辑模式开关：用户切换时同时控制 monaco readOnly、应用/验证按钮的可见性，
+// 以及顶部提示条文案，确保整个弹窗状态一致。
+// canEdit=false 的资源（如 pod）下 toggle 是隐藏的，不会触发到这里。
 document.getElementById('yamlReadonlyToggle').addEventListener('change', function() {
-  if (monacoEditor) monacoEditor.updateOptions({ readOnly: !this.checked });
+  const editing = this.checked;
+  if (monacoEditor) monacoEditor.updateOptions({ readOnly: !editing });
+  const applyBtn = document.getElementById('yamlApplyBtn');
+  const validateBtn = document.getElementById('yamlValidateBtn');
+  applyBtn.style.display = editing ? '' : 'none';
+  validateBtn.style.display = editing ? '' : 'none';
+  // 仅在 edit / readonly 之间切，create 模式不会到这里（toggle 在 openYamlCreate 里隐藏）
+  yamlMode = editing ? 'edit' : 'readonly';
+  _setYamlTip(yamlMode);
 });
 
 function validateYaml() {
   if (!monacoEditor) return;
-  const yaml = monacoEditor.getValue();
-  document.getElementById('yamlError').classList.add('hidden');
-  document.getElementById('yamlSuccess').classList.add('hidden');
+  const yamlText = monacoEditor.getValue();
+  const errBox = document.getElementById('yamlError');
+  const okBox = document.getElementById('yamlSuccess');
+  const errText = document.getElementById('yamlErrorText');
+  const okText = document.getElementById('yamlSuccessText');
+  const status = document.getElementById('yamlStatus');
+  errBox.classList.add('hidden');
+  okBox.classList.add('hidden');
 
-  try {
-    const lines = yaml.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.trim() === '' || line.trim().startsWith('#')) continue;
-      if (line.includes('\t')) {
-        throw new Error(`第 ${i+1} 行: YAML 不允许使用 Tab 缩进，请使用空格`);
-      }
+  // 1) 客户端兜底：YAML 解析最基本的 Tab 缩进检查
+  const lines = yamlText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === '' || line.trim().startsWith('#')) continue;
+    if (line.includes('\t')) {
+      errBox.classList.remove('hidden');
+      errText.textContent = `第 ${i+1} 行: YAML 不允许使用 Tab 缩进，请使用空格`;
+      status.textContent = '验证失败';
+      return;
     }
-    document.getElementById('yamlSuccess').classList.remove('hidden');
-    document.getElementById('yamlSuccessText').textContent = '语法验证通过，YAML 格式正确';
-    document.getElementById('yamlStatus').textContent = '验证通过';
-  } catch (e) {
-    document.getElementById('yamlError').classList.remove('hidden');
-    document.getElementById('yamlErrorText').textContent = e.message;
-    document.getElementById('yamlStatus').textContent = '验证失败';
   }
+
+  // 2) 走后端 server-side dry-run：用真实集群跑一遍 K8s schema/admission 校验
+  // 比手写规则准 100 倍，且每升 K8s 自动获得新校验能力
+  const m = (currentYamlUrl || '').match(/^\/resources\/(\d+)\//);
+  if (!m) {
+    errBox.classList.remove('hidden');
+    errText.textContent = '无法识别集群，请重新打开 YAML';
+    status.textContent = '验证失败';
+    return;
+  }
+  const validateUrl = `/resources/${m[1]}/validate/`;
+  status.textContent = '校验中...';
+  fetch(validateUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+    body: JSON.stringify({yaml: yamlText}),
+  })
+    .then(r => r.json())
+    .then(data => {
+      const errs = data.errors || [];
+      const warns = data.warnings || [];
+
+      if (errs.length > 0) {
+        const msg = errs.map(e => `[${e.kind}/${e.name}] ${e.message}`).join('\n\n');
+        errBox.classList.remove('hidden');
+        errText.style.whiteSpace = 'pre-wrap';
+        errText.textContent = msg;
+        status.textContent = '校验未通过';
+        return;
+      }
+
+      // 没有 error，根据 warning 情况展示
+      okBox.classList.remove('hidden');
+      okText.style.whiteSpace = 'pre-wrap';
+      let okMsg = `校验通过：${data.docs} 个资源对象 K8s 服务端 dry-run 全部接受`;
+      if (warns.length > 0) {
+        const lines = warns.map(w => `⚠ [${w.kind}/${w.name}] ${w.field} —— ${w.reason}`);
+        okMsg += '\n\n以下字段会被服务端忽略，写了也不会生效：\n' + lines.join('\n');
+        status.textContent = '校验通过（含警告）';
+      } else {
+        status.textContent = '校验通过';
+      }
+      okText.textContent = okMsg;
+    })
+    .catch(e => {
+      errBox.classList.remove('hidden');
+      errText.textContent = '校验请求失败：' + e.message;
+      status.textContent = '校验失败';
+    });
 }
 
 function applyYaml() {
@@ -602,9 +1043,19 @@ function applyYaml() {
   .then(data => {
     document.getElementById('yamlApplyBtn').classList.remove('loading');
     if (data.success) {
+      // 后端可能附带 warnings（如 status 字段被剥）；有的话用 toast 单独高亮，
+      // 不淹没在 success 文案里
+      const warns = data.warnings || [];
+      let successMsg = data.message || '资源配置已成功应用到集群';
+      if (warns.length > 0) {
+        successMsg += '\n⚠ ' + warns.join('；');
+        if (typeof showToast === 'function') {
+          warns.forEach(w => showToast(w, 'warning'));
+        }
+      }
       document.getElementById('yamlSuccess').classList.remove('hidden');
-      document.getElementById('yamlSuccessText').textContent = data.message || '资源配置已成功应用到集群';
-      document.getElementById('yamlStatus').textContent = '应用成功';
+      document.getElementById('yamlSuccessText').textContent = successMsg;
+      document.getElementById('yamlStatus').textContent = warns.length ? '应用成功（含警告）' : '应用成功';
 
       // 根据后端返回的 actions 触发列表的乐观更新
       // - created：派发 create + resource，让列表 markAdded 立即插入
@@ -644,5 +1095,183 @@ function applyYaml() {
     document.getElementById('yamlErrorText').textContent = '请求失败: ' + e.message;
     document.getElementById('yamlStatus').textContent = '应用失败';
   });
+}
+
+// Pod 日志查看器（共享在 resource_modals，pod 列表与 deployment describe 都通过
+// open-pod-logs 事件触发；事件 detail.logsUrl 提供具体 cluster 的日志 URL）
+function podLogViewer() {
+  return {
+    podName: '', namespace: '', container: '', baseUrl: '',
+    logs: '', loading: false, error: null,
+    liveMode: false, liveTimer: null, tailLines: '200', previous: false,
+    viewLogs(namespace, podName, logsUrl, isAutoRefresh = false, skipReset = false) {
+      this.podName = podName;
+      this.namespace = namespace;
+      if (logsUrl) this.baseUrl = logsUrl;
+      if (!this.baseUrl) {
+        this.error = '缺少日志 URL';
+        return;
+      }
+      if (!isAutoRefresh && !skipReset) {
+        this.previous = false;
+        this.loading = true;
+        this.error = null;
+        this.logs = '';
+        document.getElementById('logModal').showModal();
+      } else if (!isAutoRefresh) {
+        this.loading = true;
+        this.error = null;
+      }
+
+      const sep = this.baseUrl.includes('?') ? '&' : '?';
+      const url = `${this.baseUrl}${sep}tail_lines=${this.tailLines}${this.previous ? '&previous=true' : ''}`;
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          this.loading = false;
+          if (data.success) {
+            if (data.no_previous) {
+              this.logs = '';
+              this.error = '该容器没有上次日志（容器未重启过）';
+            } else {
+              this.logs = data.logs || '';
+              this.error = null;
+            }
+            this.container = data.container || 'default';
+            this.$nextTick(() => {
+              if (this.$refs.logBox) this.$refs.logBox.scrollTop = this.$refs.logBox.scrollHeight;
+            });
+          } else {
+            this.error = data.error || '获取日志失败';
+            if (this.liveMode) this.stopLive();
+          }
+        })
+        .catch(err => {
+          this.loading = false;
+          this.error = err.message;
+          if (this.liveMode) this.stopLive();
+        });
+    },
+    toggleLive() {
+      this.liveMode = !this.liveMode;
+      if (this.liveMode) {
+        this.previous = false;
+        this.viewLogs(this.namespace, this.podName, this.baseUrl, false, true);
+        this.liveTimer = setInterval(() => {
+          this.viewLogs(this.namespace, this.podName, this.baseUrl, true);
+        }, 3000);
+      } else {
+        this.stopLive();
+      }
+    },
+    stopLive() {
+      this.liveMode = false;
+      if (this.liveTimer) { clearInterval(this.liveTimer); this.liveTimer = null; }
+    }
+  };
+}
+
+// Deployment Describe 视图：通过 open-deployment-describe 事件触发
+// detail: { pk, namespace, name }
+function describeViewer() {
+  return {
+    clusterPk: 0,
+    meta: {},
+    info: {}, conditions: [], events: [], pods: [],
+    loading: false, error: null,
+    tab: 'overview',
+    get tabs() {
+      return [
+        {key: 'overview', label: '概览', icon: 'fa-info-circle'},
+        {key: 'events', label: 'Events', icon: 'fa-bell', count: this.events.length},
+        {key: 'pods', label: '关联 Pods', icon: 'fa-cubes', count: this.pods.length},
+      ];
+    },
+    open(detail) {
+      this.clusterPk = detail.pk;
+      this.meta = {namespace: detail.namespace, name: detail.name};
+      this.tab = 'overview';
+      this.info = {}; this.conditions = []; this.events = []; this.pods = [];
+      this.error = null;
+      describeModal.showModal();
+      this.reload();
+    },
+    reload() {
+      this.loading = true;
+      fetch(`/resources/${this.clusterPk}/api/deployments/${this.meta.namespace}/${this.meta.name}/describe/`)
+        .then(r => r.json())
+        .then(d => {
+          this.loading = false;
+          if (d.error) { this.error = d.error; return; }
+          this.info = d.info || {};
+          this.conditions = d.conditions || [];
+          this.events = d.events || [];
+          this.pods = d.pods || [];
+        })
+        .catch(e => { this.loading = false; this.error = e.message; });
+    },
+    clusterPodLogsUrl(ns, podName) {
+      return `/resources/${this.clusterPk}/pods/${ns}/${podName}/logs/`;
+    },
+  };
+}
+
+// Deployment Rollback 视图：通过 open-deployment-rollback 事件触发
+function rollbackViewer() {
+  return {
+    clusterPk: 0,
+    meta: {},
+    revisions: [], currentRevision: null,
+    loading: false, error: null, rolling: false,
+    pendingRevision: null,   // 用户点了"回滚到此"但还没确认时记下的目标 revision
+    open(detail) {
+      this.clusterPk = detail.pk;
+      this.meta = {namespace: detail.namespace, name: detail.name};
+      this.revisions = []; this.currentRevision = null;
+      this.error = null; this.rolling = false; this.pendingRevision = null;
+      rollbackModal.showModal();
+      this.loading = true;
+      fetch(`/resources/${this.clusterPk}/api/deployments/${this.meta.namespace}/${this.meta.name}/revisions/`)
+        .then(r => r.json())
+        .then(d => {
+          this.loading = false;
+          if (d.error) { this.error = d.error; return; }
+          this.currentRevision = d.current_revision;
+          this.revisions = d.revisions || [];
+        })
+        .catch(e => { this.loading = false; this.error = e.message; });
+    },
+    doRollback() {
+      const revision = this.pendingRevision;
+      if (!revision) return;
+      this.rolling = true;
+      fetch(`/resources/${this.clusterPk}/deployments/${this.meta.namespace}/${this.meta.name}/rollback/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        },
+        body: JSON.stringify({revision: revision}),
+      })
+        .then(r => r.json())
+        .then(d => {
+          this.rolling = false;
+          if (d.success) {
+            if (typeof showToast === 'function') showToast(d.message || '已回滚', 'success');
+            if (d.resource) {
+              window.dispatchEvent(new CustomEvent('resource-updated', {detail: {action: 'update', resource: d.resource}}));
+            } else {
+              window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}));
+            }
+            this.pendingRevision = null;
+            rollbackModal.close();
+          } else {
+            this.error = d.error || '回滚失败';
+            this.pendingRevision = null;
+          }
+        })
+        .catch(e => { this.rolling = false; this.error = e.message; this.pendingRevision = null; });
+    },
+  };
 }
 </script>

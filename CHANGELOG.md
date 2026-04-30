@@ -7,6 +7,63 @@
 ## [Unreleased]
 
 ### 新增
+- **Deployment 详情 & 回滚**（deployment 列表新增「详情」「回滚」按钮）：
+  - 后端新增 `GET /resources/<pk>/api/deployments/<ns>/<name>/describe/`、`GET .../revisions/`、`POST .../rollback/` 三个 API
+  - `describe_deployment`：一次返回基础信息 / replicas 统计 / conditions / events / 关联 pods（按 selector matchLabels 反查），给 describe modal 用
+  - `list_deployment_revisions`：列出 owner 是该 deployment 的 ReplicaSet 历史，按 `deployment.kubernetes.io/revision` 注解倒序；全量拉 RS 用 ownerReferences 过滤（比 label selector 稳）
+  - `rollback_deployment`：拿目标 RS 的 `spec.template` 整体 **replace**（不是 patch）回当前 deployment。重要原因：K8s strategic merge patch 对 `containers[].ports/env` 这种 list 按 merge key 合并，只能加不能删 → 回滚后端口越积越多；用 replace 等价 kubectl replace，无 merge 语义
+  - 前端：describe modal 三段 tab（概览 / Events / 关联 Pods）；rollback modal 列出历史、支持"回滚到此"（内联黄色确认条，不弹浏览器原生 confirm）；关联 pods 行复用共享 logModal 查日志
+- **通用 YAML server-side dry-run 校验**（所有资源类型共用）：
+  - 后端 `POST /resources/<pk>/validate/` + `K8sResourceManager.validate_yaml()`：多文档 YAML 逐个走 `create/replace` 的 `dry_run='All'`，让 K8s 自己做 schema / admission / webhook / 配额检查
+  - 错误翻译成中文：422 字段不可变 / 必填值 / 非法值 / 409 冲突 / 403 权限 / 404 引用缺失 / 400 unknown field 等都有"💡 小白解释"
+  - 警告显式列出"用户写了但会被服务端忽略"的字段（`status` / `metadata.resourceVersion` 等）
+  - 前端"验证语法"按钮改调后端 dry-run，错误用 `pre-wrap` 多行展示（带 kind/name + K8s 原始 cause + 中文解释）；Tab 缩进等纯客户端检查保留兜底
+- **集群连接状态差异化前端提示**（覆盖所有资源列表）：
+  - 后端 sync_service 加 `_sync_last_error` / `get_sync_error`：周期 sync 和 immediate sync 都记录失败原因并翻译（kubeconfig 错 / DNS 解析失败 / 401 凭证失效 / 403 / 超时 / TLS 错…）
+  - 列表 API 响应带 `cluster_error` / `syncing` / `never_synced` 三个字段
+  - 前端按四类差异化展示：**后端服务挂了**红色 alert / **K8s 集群连不上**黄色横幅 + 中文原因 / **首次同步中**spinner + 自动 3s 轮询 / **真没数据**仅"暂无数据"，不再"所有资源都不显示"一片空白让人猜
+- **Deployment 列表引入按钮整合**：除原有 YAML / 扩缩 / 重启 / 删除，新增"详情" + "回滚"两个按钮
+
+### 改进
+- **YAML 弹窗默认只读预览 + 按"编辑模式"切换**：有编辑权限的资源（deployment / namespace / configmap / ...）默认进弹窗是只读预览，用户点右上角"编辑模式"开关才进入编辑态；应用/验证按钮也跟着显隐、顶部提示条在 edit / create / readonly 三种模式切换文案
+  - Pod / 由 controller 管理的资源（pod_list.html 的 YAML 按钮、deployment 详情里关联 pod 的 YAML 按钮）强制只读，开关隐藏
+  - 创建模式（"+ 新建"）保持默认编辑，按钮文案"创建"，紫色模板提示
+- **YAML GET 时剥掉运行时字段**（对齐 kubectl edit）：`get_resource_yaml` 在返回给前端前剥掉 `status`、`metadata.resourceVersion/uid/creationTimestamp/managedFields` 以及 `kubectl.kubernetes.io/last-applied-configuration` 大注解。避免用户看到 status 又改不了、metadata 杂字段干扰
+- **Pod 列表默认 YAML 按钮只读**（canEdit=false）：Pod 由 ReplicaSet/StatefulSet/DaemonSet/Job 管理，K8s 不允许直接改大部分 spec 字段；改为只读配一条灰色提示"请改上层资源的 template 触发滚动更新"
+- **Namespace 删除弹窗的级联删除警告**（保留醒目橙色警告条，不加 type-to-confirm 输入框）：明确列出会被 K8s 级联清理的资源类型 Deployments / StatefulSets / Pods / Services / ConfigMaps / Secrets / PVCs / Jobs 等；**只有 cluster 删除才需要输入名称二次确认，资源类删除一律不要**
+- **资源列表命名空间下拉改为可搜索 combobox**（所有资源列表共享）：原生 `<select>` 只按首字母跳转，用户搜 `zcw` 找不到 `test-zcw`。改为 input + 下拉 panel 的自定义控件，支持**子串模糊匹配**；点击 panel 外自动收起；当前选中有对勾高亮；搜不到时显示"没有匹配 xxx 的命名空间"
+- **命名空间下拉仅展示"当前资源类型有实例"的 ns**（各资源类型独立）：deployment 列表下拉只列出至少有 1 个 deployment 的 ns；service 列表只列出有 service 的 ns；避免用户选了之后列表空白
+  - 用户当前已选的 ns 即使暂时没数据也保留在下拉里，防止 select 显示空白
+  - 排除 Terminating 状态的 ns（从用户视角 ns 已不存在）
+- **Deployment describe modal 关联 Pods 表格补齐 Age / 创建时间列**：之前漏展示，后端本就返回 `age` 和 `created` 字段
+
+### 修复
+- **删除 namespace 后，其他资源列表仍显示该 ns 下的资源**（所有资源类型通病）：
+  - 根因：namespace 删除是异步的（K8s namespace controller 要几秒~几十秒清理内部资源），期间 K8s API 继续返回 deployment/pod → sync cache 也继续有 → 前端看到"删了 ns 但 deployment 还在"
+  - 修法 1：`_workload_list_api` 读路径构造"Terminating ns 集合"，把属于这些 ns 的资源从返回结果中过滤掉；ns 下拉也排除 Terminating 的 ns
+  - 修法 2：`namespace_delete` / `namespace_force_finalize` 新增 `_purge_namespace_from_cache`：删除后立即把 cache 里 `namespace=删掉的ns` 的条目剔除，防止 sync 拉回老数据；同时级联触发内部资源 cache 刷新
+  - 覆盖：deployment / statefulset / daemonset / pod / service / ingress / configmap / secret / pvc
+- **改 Deployment YAML 保存后列表仍显示旧值**（致命）：
+  - 根因：apply_yaml 触发的是**异步** sync，HTTP 返回时 cache 没刷新；前端 1.5s 后 silent load 拿的是旧 cache → 把 markUpdated 写入的新 replicas/image 覆盖回去
+  - 修法：`resource_yaml_api` POST / `deployment_scale` / `namespace_create` / `resource_apply_api` / `resource_delete_api` / `statefulset_scale/restart` / `deployment_restart/rollback` 全部改为 `wait=True`，阻塞等 cache 同步完成再返回
+  - 前端 `markUpdated` 改用独立 `update` op（TTL 8s），`_mergePendingOps` 在窗口内强制用 op.resource 覆盖 items 里同 key 项；修复"add op 在 items 里找到同 key 就清掉 op"导致新值被旧 cache 覆盖的 bug
+- **Deployment YAML rollback 后端口越滚越多**（致命）：
+  - 根因：旧实现用 `patch_namespaced_deployment` + strategic merge patch，K8s 对 `containers[].ports` 按 `containerPort` 做 merge-by-key，**只能加不能删**。回滚到只有 80 端口的旧版本时 K8s 把 80 跟当前 [80, 5000, 2000] 合并还是 [80, 5000, 2000]
+  - 修法：改用 `replace_namespaced_deployment`（PUT 整对象），`spec.template` 整体替换，没有 merge 语义，等价 kubectl replace
+- **YAML 弹窗底部按钮文案残留"创建"**：先点过"+ 新建"后再点某资源的 YAML 按钮，按钮残留"创建"文案。`openYaml` 每次进入强制重置为"应用到集群"
+- **Namespace 强制完成（force-finalize）返回 500**：`read_namespace` 碰到 404（K8s 已清理完成）被通用 except 兜住返回 500。改为 404 时当作"已成功"：清 cache + wait=True 同步 + 返回 success 信息
+- **所有资源类型下拉筛选不到刚新建的空 ns**（回退的需求方向：本轮改回"只显示有实例的 ns"）——见上方"改进"条目
+- **`'str' object has no attribute 'get'` 致命 bug**：
+  - 触发：用户 YAML 里写 `name:test-zcw11`（冒号后缺空格），YAML 解析器把 metadata 整块解析成字符串 `"name:test-zcw11"`
+  - 根因：`_validate_one_doc` / `apply_yaml` / `_strip_server_managed_fields` / `_scan_user_facing_dropped` 都直接 `metadata.get()`，遇到字符串就 AttributeError，前端看到没意义的 `'str' object has no attribute 'get'`
+  - 修法：所有路径显式 `isinstance(meta, dict)` 防御，报"metadata 字段格式错误：解析结果是 str，最常见原因是 'name: xxx' 后冒号缺少空格"
+  - 同样防御 spec / 顶层 doc
+- **YAML 编辑器"验证语法"只做 YAML parse 不做 K8s schema 检查**（之前点检查总是通过）：改为调新增的 server-side dry-run endpoint
+- **前端多行 `{# #}` 注释被当作正文渲染出来**（Django 模板注释限制）：`{# ... #}` 只支持单行，多行必须 `{% comment %}`。修复 base_list.html 的 ns combobox 说明、pod_list.html 两处多行注释
+- **Django 后端服务挂了时前端全空白、无法辨别**：fetch 异常时前端不再 "暂无数据"，改为 alert "后端服务暂不可达" + 重试按钮
+- **资源列表无数据时空态文案混在一起**：拆分四种情况（搜索无结果 / 同步中 / 集群连不上 / 真无数据），每种对应专属图标 + 文案 + 操作
+
+### 新增
 - **所有 K8s 资源类型支持「+ 新建」**：原本只有 Namespace 有创建按钮，现在 Deployment / StatefulSet / DaemonSet / Pod / Service / Ingress / ConfigMap / Secret / PVC 全部支持
   - 后端：新增 `POST /resources/<pk>/apply/` 通用 API，从 YAML 内容自身解析 `kind/name/namespace`，复用 `apply_yaml`（已支持 create/replace/改名场景）
   - 前端：每种资源给一份**默认 YAML 模板**（包含必填字段示例），点"+ 新建"按钮 → 弹 Monaco YAML 编辑器，用户改完点"创建"即可

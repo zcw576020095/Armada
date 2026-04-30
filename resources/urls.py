@@ -14,6 +14,9 @@ urlpatterns = [
     path('<int:pk>/deployments/', views.deployment_list, name='deployments'),
     path('<int:pk>/deployments/<str:ns>/<str:name>/scale/', views.deployment_scale, name='deployment_scale'),
     path('<int:pk>/deployments/<str:ns>/<str:name>/restart/', views.deployment_restart, name='deployment_restart'),
+    path('<int:pk>/api/deployments/<str:ns>/<str:name>/describe/', views.deployment_describe_api, name='deployment_describe'),
+    path('<int:pk>/api/deployments/<str:ns>/<str:name>/revisions/', views.deployment_revisions_api, name='deployment_revisions'),
+    path('<int:pk>/deployments/<str:ns>/<str:name>/rollback/', views.deployment_rollback, name='deployment_rollback'),
 
     # StatefulSets
     path('<int:pk>/statefulsets/', views.statefulset_list, name='statefulsets'),
@@ -56,6 +59,7 @@ urlpatterns = [
 
     # ─── Generic Apply (通用 YAML 创建/更新) ─────────────────
     path('<int:pk>/apply/', views.resource_apply_api, name='resource_apply'),
+    path('<int:pk>/validate/', views.resource_validate_api, name='resource_validate'),
 
     # ─── Generic YAML & Delete ───────────────────────────────
     path('<int:pk>/yaml/<str:resource_type>/<str:ns>/<str:name>/', views.resource_yaml_api, name='resource_yaml'),

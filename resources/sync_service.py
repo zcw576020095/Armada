@@ -18,6 +18,39 @@ logger = logging.getLogger(__name__)
 # 全局同步线程管理
 _sync_threads: Dict[int, threading.Thread] = {}
 _sync_locks: Dict[int, threading.Lock] = {}
+# 记录每个 cluster 最近一次 sync 是否失败：成功清空，失败留下原因。
+# 列表 API 会把它透传给前端，让用户知道是 K8s 连不上 / kubeconfig 错 / 还是其他。
+# 结构：{cluster_id: {'message': str, 'failed_at': iso_str, 'resource_type': str}}
+_sync_last_error: Dict[int, dict] = {}
+
+
+def get_sync_error(cluster_id):
+    """供 view 查询某 cluster 最近一次同步是否有未恢复的错误"""
+    return _sync_last_error.get(cluster_id)
+
+
+def _describe_sync_error(exc):
+    """把底层异常翻译成对运维有意义的中文一句话。
+
+    K8s SDK / urllib3 / socket 抛出来的原始 message 很长且带堆栈信息，
+    直接给用户看体验差；这里按特征字符串做粗分类。
+    """
+    msg = str(exc).lower()
+    if 'kubeconfig' in msg or 'invalid kube-config' in msg:
+        return f'kubeconfig 解析失败：{exc}'
+    if 'unable to connect' in msg or 'connection refused' in msg or 'no route to host' in msg:
+        return '无法连接到集群 API Server，请检查网络连通性或 kubeconfig 中的 server 地址'
+    if 'timed out' in msg or 'timeout' in msg:
+        return '连接集群超时，可能是网络抖动或 API Server 负载过高'
+    if 'unauthorized' in msg or '401' in msg:
+        return 'kubeconfig 凭证无效或已过期（401 Unauthorized）'
+    if 'forbidden' in msg or '403' in msg:
+        return '当前 kubeconfig 没有 list 权限（403 Forbidden）'
+    if 'name or service not known' in msg or 'nodename nor servname' in msg:
+        return '无法解析集群 API Server 的 DNS，请检查 kubeconfig 中的 server 地址'
+    if 'certificate' in msg or 'x509' in msg or 'tls' in msg:
+        return f'集群 TLS 证书校验失败：{exc}'
+    return f'同步失败：{exc}'
 
 
 def _list_func_for(cluster, resource_type):
@@ -106,6 +139,7 @@ def _sync_all_resources(cluster):
         logger.info(f'[Cluster {cluster.name}] Starting sync cycle...')
         start_time = time.time()
 
+        had_error = None  # 任意 kind 失败就记下，最后写入 _sync_last_error
         for resource_type in SYNC_ORDER:
             list_func = _list_func_for(cluster, resource_type)
             if not list_func:
@@ -114,9 +148,19 @@ def _sync_all_resources(cluster):
                 _sync_resource(cluster, resource_type, list_func)
             except Exception as e:
                 logger.error(f'[Cluster {cluster.name}] Failed to sync {resource_type}: {e}')
+                had_error = (resource_type, e)
                 continue
 
         elapsed = time.time() - start_time
+        if had_error is None:
+            _sync_last_error.pop(cluster.pk, None)
+        else:
+            rt, exc = had_error
+            _sync_last_error[cluster.pk] = {
+                'resource_type': rt,
+                'message': _describe_sync_error(exc),
+                'failed_at': timezone.now().isoformat(),
+            }
         logger.info(f'[Cluster {cluster.name}] Sync cycle completed in {elapsed:.1f}s')
 
 
@@ -341,9 +385,20 @@ def trigger_immediate_sync(cluster, resource_type, wait=False, timeout=5):
         with lock:
             try:
                 _sync_resource(cluster, resource_type, list_func)
+                # 单个资源同步成功不能简单清掉整个 cluster 的 error
+                # （别的 kind 可能仍有问题），但这一类成功了就把它"忘掉"，
+                # 让定时 sync 下一轮重新评估
+                err = _sync_last_error.get(cluster_id)
+                if err and err.get('resource_type') == resource_type:
+                    _sync_last_error.pop(cluster_id, None)
                 logger.info(f'[Cluster {cluster.name}] Immediate sync done for {resource_type}')
             except Exception as e:
                 logger.error(f'[Cluster {cluster.name}] Immediate sync failed for {resource_type}: {e}')
+                _sync_last_error[cluster_id] = {
+                    'resource_type': resource_type,
+                    'message': _describe_sync_error(e),
+                    'failed_at': timezone.now().isoformat(),
+                }
 
     thread = threading.Thread(target=_do_sync, daemon=True, name=f'ImmediateSync-{resource_type}')
     thread.start()

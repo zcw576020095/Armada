@@ -36,13 +36,44 @@
         <span class="px-3 py-1 rounded-full bg-violet-500 text-white text-sm font-bold" x-show="!loading" x-cloak x-text="filteredRows.length"></span>
       </div>
       <div class="flex items-center gap-2">
-        <select x-show="namespaces.length > 0" x-cloak id="nsFilter" class="select select-bordered select-sm h-8 min-h-0 w-40 text-xs focus:select-primary"
-          x-model="nsFilter" @change="page = 1; load({silent: true})">
-          <option value="">全部命名空间</option>
-          <template x-for="ns in namespaces" :key="ns">
-            <option :value="ns" x-text="ns"></option>
-          </template>
-        </select>
+        {# 自定义 namespace combobox：原生 select 不支持子串模糊匹配（用户搜 zcw 找不到 test-zcw），改成 input + 下拉 panel 实现 contains 匹配，所有资源列表共享 #}
+        <div x-show="namespaces.length > 0" x-cloak class="relative" @click.outside="nsOpen = false" style="width: 10rem;">
+          <button type="button"
+                  class="input input-bordered input-sm h-8 min-h-0 w-full text-xs focus:input-primary flex items-center justify-between gap-1 px-2"
+                  @click="nsOpen = !nsOpen; $nextTick(() => { if (nsOpen) $refs.nsSearchInput.focus() })">
+            <span class="truncate" :class="!nsFilter ? 'opacity-50' : ''" x-text="nsFilter || '全部命名空间'"></span>
+            <i class="fas fa-chevron-down text-[9px] opacity-50"></i>
+          </button>
+          <div x-show="nsOpen" x-cloak x-transition.opacity.duration.100ms
+               class="absolute z-50 mt-1 w-64 rounded-lg shadow-xl border border-base-300 bg-base-100 overflow-hidden"
+               style="left: 0;">
+            <div class="p-1.5 border-b border-base-300/50">
+              <input type="text" x-ref="nsSearchInput" x-model="nsSearch" placeholder="搜索命名空间（支持子串）"
+                     class="input input-bordered input-xs h-7 min-h-0 w-full text-[11px] focus:input-primary">
+            </div>
+            <div class="max-h-64 overflow-y-auto py-1">
+              <button type="button"
+                      class="w-full text-left px-3 py-1.5 text-[11px] hover:bg-base-200 transition-colors flex items-center gap-2"
+                      :class="!nsFilter ? 'bg-violet-500/10 text-violet-500 font-medium' : ''"
+                      @click="nsFilter = ''; nsOpen = false; nsSearch = ''; page = 1; load({silent: true})">
+                <i class="fas fa-check text-[9px]" :class="!nsFilter ? 'opacity-100' : 'opacity-0'"></i>
+                <span>全部命名空间</span>
+              </button>
+              <template x-for="ns in filteredNamespaces" :key="ns">
+                <button type="button"
+                        class="w-full text-left px-3 py-1.5 text-[11px] hover:bg-base-200 transition-colors flex items-center gap-2 font-mono"
+                        :class="nsFilter === ns ? 'bg-violet-500/10 text-violet-500 font-medium' : ''"
+                        @click="nsFilter = ns; nsOpen = false; nsSearch = ''; page = 1; load({silent: true})">
+                  <i class="fas fa-check text-[9px]" :class="nsFilter === ns ? 'opacity-100' : 'opacity-0'"></i>
+                  <span x-text="ns"></span>
+                </button>
+              </template>
+              <div x-show="filteredNamespaces.length === 0 && nsSearch" x-cloak class="text-center py-3 text-[11px] opacity-40">
+                没有匹配 "<span class="font-mono" x-text="nsSearch"></span>" 的命名空间
+              </div>
+            </div>
+          </div>
+        </div>
         <div style="position: relative; display: inline-block;">
           <input type="text" id="searchInput" placeholder="搜索名称（回车刷新）" class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary"
             style="padding-right: 28px;"
@@ -67,6 +98,31 @@
     <div x-show="error" x-cloak class="alert alert-error text-sm border border-error/20 mb-4">
       <i class="fas fa-exclamation-triangle text-sm"></i>
       <span x-text="error"></span>
+    </div>
+
+    <!-- 集群连接错误横幅：cache 还在但最近一次 sync 失败 -->
+    <div x-show="!error && clusterError" x-cloak class="alert text-sm mb-4"
+         style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3); color: #ca8a04;">
+      <i class="fas fa-plug-circle-exclamation"></i>
+      <div class="flex-1">
+        <div class="font-semibold text-[12px] mb-0.5">集群连接异常，列表数据可能不是最新的</div>
+        <div class="text-[11px] opacity-80" x-text="clusterError && clusterError.message"></div>
+      </div>
+      <button @click="load({silent: true})" class="btn btn-ghost btn-xs h-7 min-h-0 text-[11px] gap-1">
+        <i class="fas fa-sync-alt text-[10px]"></i> 重试
+      </button>
+    </div>
+
+    <!-- 后端服务不可达：fetch 直接抛异常时进这里 -->
+    <div x-show="serviceDown" x-cloak class="alert alert-error text-sm mb-4">
+      <i class="fas fa-server"></i>
+      <div class="flex-1">
+        <div class="font-semibold text-[12px] mb-0.5">后端服务暂不可达</div>
+        <div class="text-[11px] opacity-80">无法连接到 Armada 服务，请检查服务是否运行或刷新页面重试。</div>
+      </div>
+      <button @click="load({silent: true})" class="btn btn-ghost btn-xs h-7 min-h-0 text-[11px] gap-1">
+        <i class="fas fa-sync-alt text-[10px]"></i> 重试
+      </button>
     </div>
 
     <div class="overflow-x-auto">
@@ -124,18 +180,38 @@
     </div>
 
     <!-- Empty -->
-    <div x-show="!loading && !error && filteredRows.length === 0" x-cloak class="text-center py-16 opacity-50">
-      <i class="fas fa-inbox text-3xl mb-3 block text-primary/30"></i>
+    <div x-show="!loading && !error && !serviceDown && filteredRows.length === 0" x-cloak class="text-center py-16 opacity-60">
       <template x-if="rows.length > 0 && search">
         <div>
+          <i class="fas fa-search text-3xl mb-3 block text-primary/30"></i>
           <p class="text-sm">没有匹配 "<span class="text-primary font-mono" x-text="search"></span>" 的结果</p>
           <button class="btn btn-ghost btn-xs mt-3 h-7 min-h-0 text-[11px] gap-1" @click="search = ''">
             <i class="fas fa-times text-[9px]"></i> 清空搜索
           </button>
         </div>
       </template>
-      <template x-if="!(rows.length > 0 && search)">
-        <p class="text-sm">暂无数据</p>
+      <template x-if="!(rows.length > 0 && search) && syncing && !clusterError">
+        <div>
+          <span class="loading loading-spinner loading-md text-primary mb-3"></span>
+          <p class="text-sm">首次加载中，正在从集群同步资源...</p>
+          <p class="text-[11px] opacity-50 mt-1">大集群约需 30 秒，请稍候</p>
+        </div>
+      </template>
+      <template x-if="!(rows.length > 0 && search) && clusterError">
+        <div>
+          <i class="fas fa-plug-circle-xmark text-3xl mb-3 block text-warning/60"></i>
+          <p class="text-sm">无法从集群拉取数据</p>
+          <p class="text-[11px] opacity-70 mt-1 max-w-md mx-auto" x-text="clusterError.message"></p>
+          <button class="btn btn-ghost btn-xs mt-3 h-7 min-h-0 text-[11px] gap-1" @click="load({silent: true})">
+            <i class="fas fa-sync-alt text-[9px]"></i> 重试
+          </button>
+        </div>
+      </template>
+      <template x-if="!(rows.length > 0 && search) && !syncing && !clusterError">
+        <div>
+          <i class="fas fa-inbox text-3xl mb-3 block text-primary/30"></i>
+          <p class="text-sm">暂无数据</p>
+        </div>
       </template>
     </div>
   </div>
@@ -166,9 +242,14 @@ function resourceList() {
     loading: true,         // 首次加载 - 显示骨架屏
     refreshing: false,     // 后台静默刷新 - 不闪骨架屏，右上角显示"刷新中"
     error: null,
+    serviceDown: false,    // fetch 抛异常（后端 Django 服务挂了 / 网络断了）
+    clusterError: null,    // 后端可达但 sync 失败：{message, resource_type, failed_at}
+    syncing: false,        // 后端 cache 还没填上，sync 进行中
     rows: [],
     namespaces: [],
     nsFilter: initialParams.get('namespace') || '',
+    nsOpen: false,           // ns combobox 下拉 panel 是否展开
+    nsSearch: '',            // ns combobox 输入框内容（contains 匹配，比原生 select 强）
     search: initialParams.get('search') || '',
     page: parseInt(initialParams.get('page'), 10) || 1,
     pageSize: 20,
@@ -199,6 +280,13 @@ function resourceList() {
       if (!this.search) return this.rows;
       const q = this.search.toLowerCase();
       return this.rows.filter(r => (r.name || '').toLowerCase().includes(q));
+    },
+    // ns combobox 用：基于子串模糊匹配过滤下拉选项（原生 select 不支持，
+    // 用户搜 zcw 找不到 test-zcw 是浏览器原生限制）
+    get filteredNamespaces() {
+      if (!this.nsSearch) return this.namespaces;
+      const q = this.nsSearch.toLowerCase();
+      return this.namespaces.filter(ns => (ns || '').toLowerCase().includes(q));
     },
     get totalPages() {
       return Math.ceil(this.filteredRows.length / this.pageSize) || 1;
@@ -235,14 +323,14 @@ function resourceList() {
     markUpdated(resource) {
       if (!resource || !resource.name) return;
       const k = this._key(resource.name, resource.namespace);
-      // 用最新 resource 覆盖 _pendingOps 里可能存在的 add op，防止旧数据复活
-      this._pendingOps[k] = {action: 'add', resource, until: Date.now() + this.PENDING_TTL};
+      // 用 'update' op：在 TTL 内每次 silent load 都用 op.resource 覆盖同 key 旧 cache 项，
+      // 直到 backend cache 同步追上来 —— 否则 1.5s 后的 silent load 会拿旧 cache 把刚改的
+      // replicas/image 等覆盖回去（add op 的 exists-then-delete 逻辑救不回来）
+      this._pendingOps[k] = {action: 'update', resource, until: Date.now() + 8000};
       const idx = this.rows.findIndex(r => this._key(r.name, r.namespace) === k);
       if (idx >= 0) {
-        // 替换现有项
         this.rows = [...this.rows.slice(0, idx), resource, ...this.rows.slice(idx + 1)];
       } else {
-        // 不存在则插入到顶部
         this.rows = [resource, ...this.rows];
       }
     },
@@ -312,6 +400,14 @@ function resourceList() {
         }
       });
 
+      // update 处理：在 TTL 内强制用 op.resource 覆盖同 key 项（应对后端 cache 还没刷新的窗口）。
+      // TTL 过期后 op 自动清掉，让 silent load 的实时 cache 数据接管（如 ready_replicas 滚动）
+      items = items.map(r => {
+        const op = this._pendingOps[itemKey(r)];
+        if (op && op.action === 'update') return op.resource;
+        return r;
+      });
+
       return items;
     },
 
@@ -347,24 +443,48 @@ function resourceList() {
       if (silent) this.refreshing = true;
       else this.loading = true;
       this.error = null;
+      this.serviceDown = false;
       const apiUrl = '{% block api_url %}{% endblock %}' + (this.nsFilter ? '?namespace=' + this.nsFilter : '');
       return fetch(apiUrl)
-        .then(r => r.json())
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
         .then(data => {
           if (data.error) { this.error = data.error; return; }
+          // 透传后端识别出来的"集群连接错误"和"是否同步中"
+          this.clusterError = data.cluster_error || null;
+          this.syncing = !!data.syncing;
           let items = data.resources || data.namespaces || [];
           if (data.resources) items = data.resources;
           // 合并最近的乐观操作，防止后端老 cache 把刚做的操作覆盖回去
           this.rows = this._mergePendingOps(items);
-          if (!this.nsFilter && this.rows.length > 0) {
-            const nsSet = new Set(this.rows.map(r => r.namespace).filter(Boolean));
-            this.namespaces = [...nsSet].sort();
+          if (!this.nsFilter) {
+            // 优先用后端返回的 ns 全集（_workload_list_api 会带上 data.namespaces）；
+            // 否则才退化到从 rows 聚合 —— 否则刚新建的、还没装东西的 ns 不会出现在下拉里
+            if (data.resources && Array.isArray(data.namespaces) && data.namespaces.length > 0) {
+              this.namespaces = [...data.namespaces].sort();
+            } else if (this.rows.length > 0) {
+              const nsSet = new Set(this.rows.map(r => r.namespace).filter(Boolean));
+              this.namespaces = [...nsSet].sort();
+            }
           }
           if (this.page > this.totalPages) this.page = this.totalPages;
           if (this._hasTerminating()) this._startPolling();
           else this._stopPolling();
+
+          // syncing 状态下自动 3s 后再拉一次（首次加载 / 长 sync 周期），
+          // 不让用户停留在加载态太久；若集群本身连不上就不重试避免刷屏
+          if (this.syncing && !this.clusterError) {
+            clearTimeout(this._syncRetryTimer);
+            this._syncRetryTimer = setTimeout(() => this.load({silent: true}), 3000);
+          }
         })
-        .catch(e => { this.error = e.message; })
+        .catch(e => {
+          // fetch reject = 网络层 / 后端服务挂了 / HTTP 5xx
+          this.serviceDown = true;
+          this.error = null;
+        })
         .finally(() => {
           this.loading = false;
           this.refreshing = false;

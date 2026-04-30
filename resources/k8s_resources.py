@@ -1,4 +1,5 @@
 """K8s 资源操作管理类"""
+import copy
 import logging
 import yaml
 from kubernetes import client
@@ -154,12 +155,32 @@ class K8sResourceManager:
             raise Exception(f"Failed to get {resource_type}: {e.reason}")
 
     def get_resource_yaml(self, resource_type, name, namespace=None):
-        """获取资源的 YAML 表示"""
+        """获取资源的 YAML 表示。
+
+        参考 kubectl edit 的处理：剥掉 K8s 运行时维护的字段（status、metadata 里的
+        resourceVersion / uid / managedFields 等），用户编辑界面里只看到"配置部分"，
+        避免出现"GET 时带着 status，用户没动它，apply 时却被静默忽略"这种迷惑场景。
+        """
         resource = self.get_resource(resource_type, name, namespace)
-        # 移除 managed fields 等冗余信息
         if hasattr(resource, 'metadata') and hasattr(resource.metadata, 'managed_fields'):
             resource.metadata.managed_fields = None
-        return yaml.dump(client.ApiClient().sanitize_for_serialization(resource), default_flow_style=False)
+        doc = client.ApiClient().sanitize_for_serialization(resource)
+        if isinstance(doc, dict):
+            doc.pop('status', None)
+            metadata = doc.get('metadata') or {}
+            for key in (
+                'resourceVersion', 'uid', 'creationTimestamp', 'generation',
+                'managedFields', 'selfLink', 'deletionTimestamp',
+                'deletionGracePeriodSeconds', 'ownerReferences',
+            ):
+                metadata.pop(key, None)
+            # 清掉 kubectl.kubernetes.io/last-applied-configuration 这种巨型注解，
+            # 用户编辑时根本不该看到（kubectl edit 也会自动隐藏它）
+            anns = metadata.get('annotations') or {}
+            anns.pop('kubectl.kubernetes.io/last-applied-configuration', None)
+            if not anns and 'annotations' in metadata:
+                metadata.pop('annotations', None)
+        return yaml.dump(doc, default_flow_style=False)
 
     def delete_resource(self, resource_type, name, namespace=None, force=False):
         """删除资源。
@@ -192,13 +213,15 @@ class K8sResourceManager:
 
     @staticmethod
     def _strip_server_managed_fields(doc):
-        """移除 K8s 服务端维护的只读字段。
+        """移除 K8s 服务端维护的只读字段，返回被剥离过的"用户感知"字段名（用于警告 UI）。
 
         - 创建对象时这些字段不能出现（否则 K8s 拒绝："resourceVersion should not be set on objects to be created"）
         - 更新对象时 resourceVersion 会被重新注入（用于乐观锁），其他字段保持移除
-        - status 整块由 K8s 管理，apply 时不应包含
+        - status 整块由 K8s 管理，apply 时不应包含 —— 改了也不会生效，必须警告用户
         """
-        metadata = doc.get('metadata') or {}
+        warnings = []
+        metadata_raw = doc.get('metadata')
+        metadata = metadata_raw if isinstance(metadata_raw, dict) else {}
         for key in (
             'resourceVersion', 'uid', 'creationTimestamp', 'generation',
             'managedFields', 'selfLink', 'deletionTimestamp',
@@ -207,7 +230,12 @@ class K8sResourceManager:
             metadata.pop(key, None)
         if 'metadata' in doc and not metadata:
             doc['metadata'] = {}
-        doc.pop('status', None)
+        if 'status' in doc:
+            warnings.append(
+                'status 字段是 K8s 控制面维护的只读子资源，对它的修改不会生效，已自动忽略'
+            )
+            doc.pop('status', None)
+        return warnings
 
     def apply_yaml(self, yaml_content):
         """应用 YAML 配置（整体替换，不存在则创建）。
@@ -230,14 +258,26 @@ class K8sResourceManager:
             docs = list(yaml.safe_load_all(yaml_content))
             results = []
             actions = []
+            warnings = []   # 累计所有被剥离的只读字段提示，去重后随 response 返回
 
             for doc in docs:
                 if not doc or not isinstance(doc, dict):
                     continue
 
+                # 跟 _validate_one_doc 相同的结构防御：metadata 必须是 mapping。
+                # 用户漏 ":" 后空格时 YAML 解析器把 metadata 解析成 str，
+                # 不拦下来下面的 doc.get('metadata', {}).get(...) 会崩 AttributeError，
+                # 在前端会以 "'str' object has no attribute 'get'" 出现，没有任何意义
+                meta_raw = doc.get('metadata')
+                if meta_raw is not None and not isinstance(meta_raw, dict):
+                    raise Exception(
+                        f'metadata 字段格式错误：解析结果是 {type(meta_raw).__name__}，'
+                        f'最常见原因是 "name: xxx" 后冒号缺少空格（例如 "name:xxx" 应为 "name: xxx"）'
+                    )
+
                 kind = doc.get('kind', '').lower()
-                name = doc.get('metadata', {}).get('name')
-                namespace = doc.get('metadata', {}).get('namespace', 'default')
+                name = (meta_raw or {}).get('name')
+                namespace = (meta_raw or {}).get('namespace', 'default')
 
                 if not kind or not name:
                     raise Exception("Invalid YAML: missing 'kind' or 'metadata.name'")
@@ -246,7 +286,10 @@ class K8sResourceManager:
                 if not config:
                     raise Exception(f"Unsupported resource type: {kind}")
 
-                self._strip_server_managed_fields(doc)
+                doc_warnings = self._strip_server_managed_fields(doc)
+                for w in doc_warnings:
+                    if w not in warnings:
+                        warnings.append(w)
 
                 api_client = self._get_api_client(config['api'])
 
@@ -318,11 +361,278 @@ class K8sResourceManager:
                         detail = e.body or e.reason or str(e)
                         raise Exception(f"{e.reason}: {detail[:500]}")
 
-            return {'success': True, 'message': '; '.join(results), 'actions': actions}
+            return {
+                'success': True,
+                'message': '; '.join(results),
+                'actions': actions,
+                'warnings': warnings,
+            }
         except yaml.YAMLError as e:
             return {'success': False, 'error': f'Invalid YAML: {str(e)}'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+    # ─── 通用 yaml 校验（server-side dry-run）──────────────────────
+    # K8s schema 校验、admission webhook、配额、PSA 等所有"提交时会触发"的
+    # 检查都在这里跑一遍但不真写入。比手写规则准 100 倍，且每升级一次 K8s
+    # 自动获得新校验能力。
+    def validate_yaml(self, yaml_content):
+        """对 yaml 做 server-side dry-run，返回结构化的诊断结果。
+
+        返回：
+        {
+          'success': bool,                          # 整体能否提交
+          'errors':   [{kind, name, message}, ...], # K8s 拒绝的硬错误
+          'warnings': [{kind, name, field, reason}, ...]
+              # K8s 接受了但有副作用的提示，例如：
+              # - 字段会被服务端忽略（status / resourceVersion 等）
+              # - 字段不在该资源 schema 里（拼错的字段名）
+              # - 用户写的值会被 K8s 默认值覆盖
+          'docs': int,                              # 解析到的文档数
+        }
+        """
+        result = {'success': True, 'errors': [], 'warnings': [], 'docs': 0}
+        try:
+            docs = list(yaml.safe_load_all(yaml_content))
+        except yaml.YAMLError as e:
+            return {
+                'success': False,
+                'errors': [{'kind': '-', 'name': '-', 'message': f'YAML 解析失败：{e}'}],
+                'warnings': [],
+                'docs': 0,
+            }
+
+        for doc in docs:
+            if not doc or not isinstance(doc, dict):
+                continue
+            result['docs'] += 1
+            self._validate_one_doc(doc, result)
+
+        if result['errors']:
+            result['success'] = False
+        return result
+
+    def _validate_one_doc(self, doc, result):
+        """对单个 yaml 文档调 server-side dry-run，把结果合并进 result"""
+        # 防御性结构校验：YAML 解析后顶层必须是 mapping，metadata 也必须是 mapping。
+        # 用户漏了 ":" 后空格、或缩进对错位都会导致 metadata 解析成 str/list/None，
+        # 后续 .get() 会崩。提前给出能看懂的报错。
+        if not isinstance(doc, dict):
+            result['errors'].append({'kind': '-', 'name': '-',
+                'message': 'YAML 顶层结构不是 mapping，请检查缩进 / 冒号后是否漏了空格'})
+            return
+        meta_raw = doc.get('metadata')
+        if meta_raw is not None and not isinstance(meta_raw, dict):
+            result['errors'].append({'kind': str(doc.get('kind') or '-'), 'name': '-',
+                'message': f'metadata 字段格式错误：解析结果是 {type(meta_raw).__name__}，'
+                           f'最常见的原因是 "name: xxx" 后冒号缺少空格（例如 "name:xxx" 错，应为 "name: xxx"）'})
+            return
+        spec_raw = doc.get('spec')
+        if spec_raw is not None and not isinstance(spec_raw, (dict, list)):
+            result['errors'].append({'kind': str(doc.get('kind') or '-'), 'name': '-',
+                'message': f'spec 字段格式错误：解析结果是 {type(spec_raw).__name__}，'
+                           f'通常是缩进或冒号空格问题'})
+            return
+
+        kind = (doc.get('kind') or '').lower()
+        meta = meta_raw or {}
+        name = meta.get('name') or '-'
+        namespace = meta.get('namespace') or 'default'
+
+        if not kind:
+            result['errors'].append({'kind': '-', 'name': name,
+                                     'message': '缺少 kind 字段（如 Deployment / Service / ...）'})
+            return
+        if not meta.get('name'):
+            result['errors'].append({'kind': kind, 'name': '-',
+                                     'message': '缺少 metadata.name 字段'})
+            return
+
+        config = self.RESOURCE_TYPES.get(kind)
+        if not config:
+            result['errors'].append({
+                'kind': kind, 'name': name,
+                'message': f'不支持的资源类型 {kind}（仅支持：{", ".join(sorted(self.RESOURCE_TYPES.keys()))}）'
+            })
+            return
+
+        # 备份用户原始 doc，dry-run 用 strip 过的 doc，回头用原始 doc 做 diff
+        original_doc = copy.deepcopy(doc)
+        dryrun_doc = copy.deepcopy(doc)
+        self._strip_server_managed_fields(dryrun_doc)
+
+        # 在 strip 之前先扫一遍已知"K8s 服务端保留 / 不会生效"的字段，
+        # 这是显式提示，不依赖 diff（dry-run 提交的 doc 已经被剥掉这些字段，
+        # diff 看不到差异）
+        for path, reason in self._scan_user_facing_dropped(original_doc):
+            result['warnings'].append({
+                'kind': kind, 'name': name,
+                'field': path,
+                'reason': reason,
+            })
+
+        api_client = self._get_api_client(config['api'])
+
+        # 判断创建/更新：先 GET，存在 → replace dry-run；不存在 → create dry-run
+        existing = None
+        try:
+            get_method = getattr(api_client, config['get'])
+            if config['namespaced']:
+                existing = get_method(name, namespace, _request_timeout=5)
+            else:
+                existing = get_method(name, _request_timeout=5)
+        except ApiException as e:
+            if e.status != 404:
+                # GET 都打不通就别 dry-run 了，把错误冒上去
+                result['errors'].append({
+                    'kind': kind, 'name': name,
+                    'message': f'查询资源失败（{e.status}）：{e.reason}',
+                })
+                return
+
+        try:
+            applied_obj = self._dry_run_call(api_client, config, dryrun_doc, name, namespace, existing)
+        except ApiException as e:
+            result['errors'].append({
+                'kind': kind, 'name': name,
+                'message': self._humanize_api_exception(e),
+            })
+            return
+        except Exception as e:
+            result['errors'].append({'kind': kind, 'name': name, 'message': str(e)})
+            return
+
+        # dry-run 通过 —— 用户视角的"已知会被剥的字段"已经在 strip 之前 scan 过了
+        # （见上面 _scan_user_facing_dropped 调用），这里不再做 diff，避免噪声警告
+
+    def _dry_run_call(self, api_client, config, doc, name, namespace, existing):
+        """根据资源是否存在选 create / replace dry-run。返回 K8s 服务端处理后的对象。"""
+        # dry_run='All' 让 K8s 走完整 admission/校验链路但不真持久化
+        common = {'dry_run': 'All', '_request_timeout': 10}
+
+        if existing is None:
+            # 不存在 → 创建路径
+            create_name = config.get('create')
+            if not create_name:
+                raise Exception(f'资源类型 {config} 不支持创建')
+            method = getattr(api_client, create_name)
+            if config['namespaced']:
+                return method(namespace, doc, **common)
+            return method(doc, **common)
+
+        # 存在 → 更新路径，注入 resourceVersion 做乐观锁
+        doc.setdefault('metadata', {})
+        doc['metadata']['resourceVersion'] = existing.metadata.resource_version
+        replace_name = config.get('replace')
+        method = getattr(api_client, replace_name)
+        if config['namespaced']:
+            return method(name, namespace, doc, **common)
+        return method(name, doc, **common)
+
+    @staticmethod
+    def _humanize_api_exception(e):
+        """把 K8s ApiException 翻译成对小白友好的错误说明。"""
+        body = e.body or ''
+        # 服务端通常返回 JSON 格式的 Status 对象，message 里写了人类可读原因
+        try:
+            import json
+            obj = json.loads(body)
+            msg = obj.get('message') or obj.get('reason') or e.reason
+            details = obj.get('details') or {}
+            causes = details.get('causes') or []
+            tips = []
+            for c in causes:
+                t = c.get('reason') or c.get('type') or ''
+                f = c.get('field') or ''
+                m = c.get('message') or ''
+                tips.append(f'  • [{f or t}] {m}')
+            base = f'K8s 拒绝（{e.status}）：{msg}'
+            if tips:
+                base += '\n' + '\n'.join(tips)
+            # 在 base 之外补一条"普通用户能看懂"的归因
+            hint = K8sResourceManager._classify_error(e.status, msg)
+            if hint:
+                base += f'\n💡 {hint}'
+            return base
+        except Exception:
+            return f'K8s 拒绝（{e.status}）：{e.reason}：{body[:300]}'
+
+    @staticmethod
+    def _classify_error(status, msg):
+        """常见错误的"小白解释" —— 解释为什么会发生，怎么改"""
+        m = (msg or '').lower()
+        if status == 422 or 'invalid' in m:
+            if 'immutable' in m or 'cannot be changed' in m or 'forbidden' in m and 'updates to' in m:
+                return ('该字段在资源创建后不可更改（K8s 不可变字段，如 Service.spec.clusterIP、'
+                        'PVC.spec.storageClassName、Pod 的大部分 spec 字段等）。如需变更请删除后重建。')
+            if 'required value' in m or 'must be specified' in m:
+                return '缺少必填字段，请按 K8s 文档补全后重试。'
+            if 'invalid value' in m:
+                return '某个字段的值不合法（格式 / 取值范围错误），请按上方 [field] 提示修正。'
+            return '资源校验失败，请按上方 [field] 修复'
+        if status == 409:
+            return '资源版本冲突或已存在。可能是别人/控制器同时改动了，请重新打开 YAML 拿最新版本再试。'
+        if status == 403:
+            return '当前 kubeconfig 没有这个操作的权限（403 Forbidden）。'
+        if status == 404:
+            return '关联的对象不存在（如引用了不存在的 namespace / serviceaccount / pvc）。'
+        if status == 400 and 'unknown field' in m:
+            return ('YAML 里有 K8s schema 不认识的字段（拼写错？版本错？）。'
+                    '请检查字段名大小写以及 apiVersion 是否匹配。')
+        return None
+
+    @staticmethod
+    def _scan_user_facing_dropped(doc):
+        """从用户原始 doc 里挑出"我们一定会剥掉、用户应该知道这点"的字段路径。
+
+        与 _strip_server_managed_fields 的字段集合保持一致；这是给用户看的提示，
+        所以只挑用户视角"看得懂"的高频项，不刷屏。
+        """
+        out = []
+        if not isinstance(doc, dict):
+            return out
+        if 'status' in doc:
+            out.append(('status',
+                'status 是 K8s 控制面维护的只读子资源，对它的修改会被服务端静默忽略。'
+                '要影响资源运行状态请改 spec/template 触发控制器调谐。'))
+        meta_raw = doc.get('metadata')
+        meta = meta_raw if isinstance(meta_raw, dict) else {}
+        readonly_meta = {
+            'resourceVersion': 'K8s 内部用于乐观锁，由服务端维护，写了也无效',
+            'uid': 'K8s 自动生成的全局唯一 ID，不可写',
+            'creationTimestamp': '资源创建时间，由服务端写入，不可改',
+            'generation': 'spec 变更次数，由服务端维护',
+            'managedFields': 'server-side apply 的字段所有权记录，不该手工写',
+            'selfLink': '已弃用字段',
+            'deletionTimestamp': '资源被删除时由服务端写入，不可手动设置',
+            'ownerReferences': '由控制器维护（如 ReplicaSet → Pod 的 owner），手工写会被覆盖',
+        }
+        for k, why in readonly_meta.items():
+            if k in meta:
+                out.append((f'metadata.{k}', why))
+        return out
+
+        """对 diff 出来的"被丢字段"给一个说人话的解释。返回 None 表示不值得告诉用户。"""
+        # 顶层 status：永远是控制面只读的
+        if path == 'status' or path.startswith('status.'):
+            return ('status 是 K8s 控制面维护的只读子资源，对它的修改会被服务端静默忽略。'
+                    '要改资源的运行状态请改 spec/template 触发控制器调谐。')
+        # metadata 下的服务端字段
+        readonly_meta = {
+            'metadata.resourceVersion': 'K8s 内部用于乐观锁，由服务端维护，写了也无效',
+            'metadata.uid': 'K8s 自动生成的全局唯一 ID，不可写',
+            'metadata.creationTimestamp': '资源创建时间，由服务端写入，不可改',
+            'metadata.generation': 'spec 变更次数，由服务端维护',
+            'metadata.managedFields': 'server-side apply 的字段所有权记录，不该手工写',
+            'metadata.selfLink': '已弃用字段',
+            'metadata.deletionTimestamp': '资源被删除时由服务端写入，不可手动设置',
+            'metadata.ownerReferences': '由控制器维护（如 ReplicaSet → Pod 的 owner），手工写会被覆盖',
+        }
+        if path in readonly_meta:
+            return readonly_meta[path]
+        # 其他字段被丢一般是 schema 不认识或 server-side default
+        # 不是所有 dropped 都值得提示，避免警告刷屏
+        return None
 
     # Deployment 特定操作
     def scale_deployment(self, name, namespace, replicas):
@@ -387,3 +697,246 @@ class K8sResourceManager:
             )
         except ApiException as e:
             raise Exception(f"Failed to restart statefulset: {e.reason}")
+
+    # ─── Describe / Events / 关联 Pod ───────────────────────────
+    @staticmethod
+    def _ts_to_str(ts):
+        return ts.strftime('%Y-%m-%d %H:%M:%S') if ts else '-'
+
+    def _list_events_for(self, namespace, kind, name, uid=None):
+        """查 involvedObject 是 (kind,name) 的 events，按时间倒序"""
+        try:
+            field_selector = f'involvedObject.kind={kind},involvedObject.name={name}'
+            if uid:
+                field_selector += f',involvedObject.uid={uid}'
+            evs = self.core_v1.list_namespaced_event(
+                namespace, field_selector=field_selector, _request_timeout=10
+            )
+        except ApiException as e:
+            logger.warning(f'list events for {kind}/{name} failed: {e.reason}')
+            return []
+
+        out = []
+        for e in evs.items:
+            ts = e.last_timestamp or e.event_time or e.first_timestamp or e.metadata.creation_timestamp
+            out.append({
+                'type': e.type or '-',
+                'reason': e.reason or '-',
+                'message': e.message or '',
+                'source': (e.source.component if e.source else '') or '-',
+                'count': e.count or 1,
+                'last_timestamp': self._ts_to_str(ts),
+                '_sort_key': ts.timestamp() if ts else 0,
+            })
+        out.sort(key=lambda x: x['_sort_key'], reverse=True)
+        for o in out:
+            o.pop('_sort_key', None)
+        return out
+
+    def _list_pods_by_selector(self, namespace, match_labels):
+        """按 label selector 拉取 namespace 下的 pods（仅支持 matchLabels）"""
+        if not match_labels:
+            return []
+        label_selector = ','.join(f'{k}={v}' for k, v in match_labels.items())
+        try:
+            res = self.core_v1.list_namespaced_pod(
+                namespace, label_selector=label_selector, _request_timeout=15
+            )
+        except ApiException as e:
+            logger.warning(f'list pods by selector failed: {e.reason}')
+            return []
+
+        from resources.sync_service import _serialize_item
+        return [_serialize_item('pod', p) for p in res.items]
+
+    def describe_deployment(self, name, namespace):
+        """汇总 Deployment 的状态/conditions/events/关联 Pods，给前端 describe modal"""
+        try:
+            dep = self.apps_v1.read_namespaced_deployment(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            if e.status == 404:
+                raise Exception(f"Deployment '{name}' not found in namespace '{namespace}'")
+            raise Exception(f"Failed to read deployment: {e.reason}")
+
+        spec = dep.spec
+        status = dep.status
+        meta = dep.metadata
+
+        strategy_obj = spec.strategy if spec else None
+        strategy = {
+            'type': strategy_obj.type if strategy_obj else '-',
+        }
+        if strategy_obj and strategy_obj.rolling_update:
+            ru = strategy_obj.rolling_update
+            strategy['max_surge'] = str(ru.max_surge) if ru.max_surge is not None else '-'
+            strategy['max_unavailable'] = str(ru.max_unavailable) if ru.max_unavailable is not None else '-'
+
+        match_labels = {}
+        if spec and spec.selector and spec.selector.match_labels:
+            match_labels = dict(spec.selector.match_labels)
+
+        containers = []
+        if spec and spec.template and spec.template.spec:
+            for c in spec.template.spec.containers or []:
+                containers.append({
+                    'name': c.name,
+                    'image': c.image or '-',
+                    'ports': [f'{p.container_port}/{p.protocol or "TCP"}' for p in (c.ports or [])],
+                })
+
+        conditions = []
+        for c in (status.conditions or []) if status else []:
+            conditions.append({
+                'type': c.type,
+                'status': c.status,
+                'reason': c.reason or '-',
+                'message': c.message or '',
+                'last_update': self._ts_to_str(c.last_update_time),
+            })
+
+        info = {
+            'name': meta.name,
+            'namespace': meta.namespace,
+            'created': self._ts_to_str(meta.creation_timestamp),
+            'labels': dict(meta.labels or {}),
+            'annotations': {k: v for k, v in (meta.annotations or {}).items() if not k.startswith('kubectl.kubernetes.io/last-applied')},
+            'replicas': spec.replicas or 0,
+            'ready_replicas': (status.ready_replicas if status else None) or 0,
+            'available_replicas': (status.available_replicas if status else None) or 0,
+            'updated_replicas': (status.updated_replicas if status else None) or 0,
+            'unavailable_replicas': (status.unavailable_replicas if status else None) or 0,
+            'strategy': strategy,
+            'selector': match_labels,
+            'containers': containers,
+            'observed_generation': (status.observed_generation if status else None) or 0,
+            'generation': meta.generation or 0,
+        }
+
+        return {
+            'info': info,
+            'conditions': conditions,
+            'events': self._list_events_for(namespace, 'Deployment', name, meta.uid),
+            'pods': self._list_pods_by_selector(namespace, match_labels),
+        }
+
+    # ─── Rollout 历史 / 回滚 ─────────────────────────────────────
+    REVISION_ANNOTATION = 'deployment.kubernetes.io/revision'
+    CHANGE_CAUSE_ANNOTATION = 'kubernetes.io/change-cause'
+
+    def list_deployment_revisions(self, name, namespace):
+        """列出 deployment 的 ReplicaSet 历史，按 revision 倒序"""
+        try:
+            dep = self.apps_v1.read_namespaced_deployment(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            raise Exception(f"Failed to read deployment: {e.reason}")
+
+        match_labels = {}
+        if dep.spec and dep.spec.selector and dep.spec.selector.match_labels:
+            match_labels = dict(dep.spec.selector.match_labels)
+        if not match_labels:
+            return {'current_revision': None, 'revisions': []}
+
+        label_selector = ','.join(f'{k}={v}' for k, v in match_labels.items())
+        try:
+            # 不带 selector 全量拉取该 ns 下所有 RS —— 让 owner_references 来过滤更可靠：
+            # 用 deployment.spec.selector 做 label_selector 看似精准，但用户若手改过 yaml
+            # 删掉了 RS 的 selector match label，就会漏掉旧 RS。owner_references 是 controller
+            # 自己维护的、不依赖业务 label，可靠性更高。
+            rs_list = self.apps_v1.list_namespaced_replica_set(
+                namespace, _request_timeout=15
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to list replica sets: {e.reason}")
+
+        # 仅保留 ownerReferences 指向当前 deployment 的 RS
+        owned = []
+        for rs in rs_list.items:
+            for owner in (rs.metadata.owner_references or []):
+                if owner.kind == 'Deployment' and owner.name == name:
+                    owned.append(rs)
+                    break
+
+        logger.info(
+            f'[rollout-history] deployment={namespace}/{name} '
+            f'total_rs_in_ns={len(rs_list.items)} owned_by_deploy={len(owned)} '
+            f'selector={match_labels}'
+        )
+
+        current_rev = (dep.metadata.annotations or {}).get(self.REVISION_ANNOTATION)
+        revisions = []
+        for rs in owned:
+            ann = rs.metadata.annotations or {}
+            rev = ann.get(self.REVISION_ANNOTATION)
+            if not rev:
+                logger.info(f'[rollout-history] rs={rs.metadata.name} skipped (no revision annotation)')
+                continue
+            containers = (rs.spec.template.spec.containers
+                          if rs.spec and rs.spec.template and rs.spec.template.spec else []) or []
+            revisions.append({
+                'revision': rev,
+                'rs_name': rs.metadata.name,
+                'images': [c.image for c in containers if c.image],
+                'change_cause': ann.get(self.CHANGE_CAUSE_ANNOTATION, ''),
+                'created': self._ts_to_str(rs.metadata.creation_timestamp),
+                'replicas': rs.spec.replicas if rs.spec else 0,
+                'is_current': str(rev) == str(current_rev),
+            })
+
+        revisions.sort(key=lambda r: int(r['revision']), reverse=True)
+        return {'current_revision': current_rev, 'revisions': revisions}
+
+    def rollback_deployment(self, name, namespace, target_revision):
+        """把 deployment 的 spec.template 回滚到指定 revision 对应的 ReplicaSet template。
+
+        关键：必须用 replace（PUT 整个对象）而不是 patch。
+        K8s strategic merge patch 对 containers[].ports / env 这种 list 是按 merge key 合并，
+        只能"加项"不能"删项"——会出现回滚后端口越来越多的诡异现象。
+        replace 是整对象覆盖，没有 merge 语义，等价于 kubectl replace。
+        """
+        target_rev = str(target_revision)
+        try:
+            dep = self.apps_v1.read_namespaced_deployment(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            raise Exception(f"Failed to read deployment: {e.reason}")
+
+        try:
+            # 全量拉 RS 用 owner_references 过滤，比 selector label 可靠
+            rs_list = self.apps_v1.list_namespaced_replica_set(namespace, _request_timeout=15)
+        except ApiException as e:
+            raise Exception(f"Failed to list replica sets: {e.reason}")
+
+        target_rs = None
+        for rs in rs_list.items:
+            owners = rs.metadata.owner_references or []
+            if not any(o.kind == 'Deployment' and o.name == name for o in owners):
+                continue
+            ann_rev = (rs.metadata.annotations or {}).get(self.REVISION_ANNOTATION)
+            if str(ann_rev) == target_rev:
+                target_rs = rs
+                break
+
+        if target_rs is None:
+            raise Exception(f"Revision {target_rev} not found")
+
+        current_rev = (dep.metadata.annotations or {}).get(self.REVISION_ANNOTATION)
+        if str(current_rev) == target_rev:
+            raise Exception(f"Already at revision {target_rev}, no rollback needed")
+
+        # 整体替换 spec.template（保留 RS 上的 pod-template-hash label，让 controller
+        # 重新识别这是已有 revision 的复用，给出新 revision number 但不创建新 RS）
+        dep.spec.template = target_rs.spec.template
+
+        if dep.metadata.annotations is None:
+            dep.metadata.annotations = {}
+        dep.metadata.annotations[self.CHANGE_CAUSE_ANNOTATION] = f'Rollback to revision {target_rev}'
+
+        # managed_fields 在 replace 时如果带上可能引发 server 端 conflict，去掉更稳
+        if hasattr(dep.metadata, 'managed_fields'):
+            dep.metadata.managed_fields = None
+
+        try:
+            self.apps_v1.replace_namespaced_deployment(
+                name, namespace, dep, _request_timeout=15
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to rollback deployment: {e.reason}")
