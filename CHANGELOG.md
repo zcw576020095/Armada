@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### 新增
+- **README 加入「功能截图」章节 + 新建 `docs/screenshots/` 目录**：用于集中展示平台功能截图（登录、集群、节点、仪表盘、Deployment 详情/回滚/扩缩、Pod 日志/exec、各资源列表、YAML 编辑/新建/校验、用户权限等），让浏览者一眼看清项目实现的功能。`docs/screenshots/README.md` 给出文件命名规范，方便后续按规范补图，README 引用稳定不需要改动
 - **Pod 容器层卡点显式展示**（用户场景：deployment 显示 Pending 看不出为什么）：
   - 后端 `_serialize_item('pod', ...)` 新增 `status_reason` / `status_message`：从 `container_statuses[].state.waiting.reason`（或 terminated.reason、init container 卡点）抽出 `ImagePullBackOff` / `CrashLoopBackOff` / `CreateContainerConfigError` 等具体原因
   - 前端 pod 列表 + Deployment describe modal 关联 Pods 表格：状态列除 `Pending` 外加红色 reason badge，鼠标悬停看完整 message
