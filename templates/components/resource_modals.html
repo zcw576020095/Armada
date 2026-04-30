@@ -341,6 +341,37 @@
 
       <!-- Tab: 概览 -->
       <div x-show="!loading && !error && tab === 'overview'" x-cloak class="space-y-4">
+        <!-- 健康总览：任意 condition 异常时强提示，让用户一眼看到 rollout 卡住等问题 -->
+        <template x-if="abnormalConditions.length > 0">
+          <div class="rounded-lg p-3" style="background: rgba(244,63,94,0.08); border: 1px solid rgba(244,63,94,0.3);">
+            <div class="flex items-start gap-2">
+              <i class="fas fa-exclamation-triangle text-rose-500 mt-0.5"></i>
+              <div class="flex-1">
+                <div class="font-semibold text-[12px] text-rose-500 mb-1.5">
+                  Deployment 当前不健康（<span x-text="abnormalConditions.length"></span> 个异常状态）
+                </div>
+                <template x-for="c in abnormalConditions" :key="c.type">
+                  <div class="text-[11px] mb-1 last:mb-0">
+                    <span class="font-mono font-semibold text-rose-400" x-text="c.type + '=' + c.status"></span>
+                    <span class="opacity-60"> · </span>
+                    <span class="font-mono text-rose-400" x-text="c.reason"></span>
+                    <div class="opacity-80 mt-0.5 ml-1" x-show="c.message" x-text="c.message"></div>
+                  </div>
+                </template>
+                <template x-if="podBlockReasons.length > 0">
+                  <div class="mt-2 pt-2 border-t border-rose-500/20 text-[11px]">
+                    <div class="opacity-70 mb-0.5">关联 Pod 卡点：</div>
+                    <template x-for="r in podBlockReasons" :key="r">
+                      <span class="badge badge-xs gap-1 bg-rose-500/15 border border-rose-500/30 text-rose-400 font-mono mr-1" x-text="r"></span>
+                    </template>
+                    <span class="opacity-50">→ 切到「关联 Pods」标签查看具体 pod 和详细错误</span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- 副本状态 -->
         <div class="grid grid-cols-4 gap-3">
           <template x-for="card in [
@@ -391,10 +422,15 @@
             </tr></thead>
             <tbody>
               <template x-for="c in conditions" :key="c.type">
-                <tr class="border-b border-base-300/30">
+                {# 异常 condition 整行染红：Available/Progressing 期望 True，
+                   ReplicaFailure 期望不存在或 False —— 出现 True 才异常 #}
+                <tr class="border-b border-base-300/30"
+                    :class="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') ||
+                            (c.type === 'ReplicaFailure' && c.status === 'True')
+                            ? 'bg-rose-500/5' : ''">
                   <td class="font-medium" x-text="c.type"></td>
                   <td><span class="badge badge-xs" :class="c.status === 'True' ? 'badge-success' : c.status === 'False' ? 'badge-error' : 'badge-warning'" x-text="c.status"></span></td>
-                  <td x-text="c.reason"></td>
+                  <td class="font-mono" :class="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'text-rose-500 font-semibold' : ''" x-text="c.reason"></td>
                   <td class="opacity-70" x-text="c.message"></td>
                   <td class="opacity-50" x-text="c.last_update"></td>
                 </tr>
@@ -445,7 +481,18 @@
             <template x-for="p in pods" :key="p.name">
               <tr class="border-b border-base-300/30">
                 <td class="font-mono" x-text="p.name"></td>
-                <td><span class="badge badge-xs" :class="p.status_phase === 'Running' ? 'badge-success' : p.status_phase === 'Pending' ? 'badge-warning' : p.status_phase === 'Succeeded' ? 'badge-info' : 'badge-error'" x-text="p.status_phase"></span></td>
+                <td>
+                  <div class="flex flex-col gap-0.5">
+                    <span class="badge badge-xs" :class="p.status_phase === 'Running' ? 'badge-success' : p.status_phase === 'Pending' ? 'badge-warning' : p.status_phase === 'Succeeded' ? 'badge-info' : 'badge-error'" x-text="p.status_phase"></span>
+                    <template x-if="p.status_reason">
+                      <span class="badge badge-xs gap-1 bg-rose-500/15 border border-rose-500/30 text-rose-400 font-mono text-[9px] cursor-help"
+                            :title="p.status_message || p.status_reason">
+                        <i class="fas fa-exclamation-circle text-[8px]"></i>
+                        <span x-text="p.status_reason"></span>
+                      </span>
+                    </template>
+                  </div>
+                </td>
                 <td x-text="p.ready_str"></td>
                 <td class="text-center" x-text="p.restarts"></td>
                 <td class="font-medium text-primary whitespace-nowrap" x-text="p.age" :title="p.created"></td>
@@ -1186,6 +1233,20 @@ function describeViewer() {
         {key: 'events', label: 'Events', icon: 'fa-bell', count: this.events.length},
         {key: 'pods', label: '关联 Pods', icon: 'fa-cubes', count: this.pods.length},
       ];
+    },
+    // 异常 conditions：Available/Progressing 期望 True；ReplicaFailure 出现就是异常
+    get abnormalConditions() {
+      return (this.conditions || []).filter(c =>
+        ((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') ||
+        (c.type === 'ReplicaFailure' && c.status === 'True')
+      );
+    },
+    // 关联 pods 的容器卡点 reason 集合（去重），让用户一眼看到"是 ImagePullBackOff
+    // 还是 CrashLoopBackOff 还是 CreateContainerConfigError"
+    get podBlockReasons() {
+      const reasons = new Set();
+      (this.pods || []).forEach(p => { if (p.status_reason) reasons.add(p.status_reason); });
+      return [...reasons];
     },
     open(detail) {
       this.clusterPk = detail.pk;

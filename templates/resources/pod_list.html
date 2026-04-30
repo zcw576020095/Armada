@@ -37,7 +37,17 @@
       </span>
     </template>
     <template x-if="r.status_phase != 'Terminating'">
-      <span class="badge badge-xs" :class="r.status_phase == 'Running' ? 'badge-success' : r.status_phase == 'Pending' ? 'badge-warning' : r.status_phase == 'Succeeded' ? 'badge-info' : 'badge-error'" x-text="r.status_phase"></span>
+      <div class="flex flex-col gap-0.5">
+        <span class="badge badge-xs" :class="r.status_phase == 'Running' ? 'badge-success' : r.status_phase == 'Pending' ? 'badge-warning' : r.status_phase == 'Succeeded' ? 'badge-info' : 'badge-error'" x-text="r.status_phase"></span>
+        {# 容器层卡点：phase=Pending/Running 之外的 reason 用红色 badge 突出展示，鼠标悬停看完整 message #}
+        <template x-if="r.status_reason">
+          <span class="badge badge-xs gap-1 bg-rose-500/15 border border-rose-500/30 text-rose-400 font-mono text-[9px] cursor-help"
+                :title="r.status_message || r.status_reason">
+            <i class="fas fa-exclamation-circle text-[8px]"></i>
+            <span x-text="r.status_reason"></span>
+          </span>
+        </template>
+      </div>
     </template>
   </td>
   <td class="font-medium text-xs" x-text="r.ready_str"></td>

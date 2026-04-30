@@ -7,6 +7,13 @@
 ## [Unreleased]
 
 ### 新增
+- **Pod 容器层卡点显式展示**（用户场景：deployment 显示 Pending 看不出为什么）：
+  - 后端 `_serialize_item('pod', ...)` 新增 `status_reason` / `status_message`：从 `container_statuses[].state.waiting.reason`（或 terminated.reason、init container 卡点）抽出 `ImagePullBackOff` / `CrashLoopBackOff` / `CreateContainerConfigError` 等具体原因
+  - 前端 pod 列表 + Deployment describe modal 关联 Pods 表格：状态列除 `Pending` 外加红色 reason badge，鼠标悬停看完整 message
+- **Deployment describe 概览页健康总览横幅**：任意 condition 异常（Available/Progressing≠True、ReplicaFailure=True）时在副本卡片上方红框列出 `[type=False] reason / message`，并汇总关联 Pods 的 `status_reason` 集合（如 ImagePullBackOff），让用户一眼看清"rollout 卡住的原因"，不必再翻 events 自己排查
+- **Deployment describe 概览页 conditions 表格异常行染红**：Available/Progressing≠True 或 ReplicaFailure=True 时整行 `bg-rose-500/5` + reason 列加粗红字
+
+### 改进
 - **Deployment 详情 & 回滚**（deployment 列表新增「详情」「回滚」按钮）：
   - 后端新增 `GET /resources/<pk>/api/deployments/<ns>/<name>/describe/`、`GET .../revisions/`、`POST .../rollback/` 三个 API
   - `describe_deployment`：一次返回基础信息 / replicas 统计 / conditions / events / 关联 pods（按 selector matchLabels 反查），给 describe modal 用

@@ -250,8 +250,33 @@ def _serialize_item(resource_type, item):
         # Pod 被删除但仍在优雅退出期时，metadata.deletion_timestamp 有值，
         # 此时 status.phase 可能还是 Running/Pending，但实际已在终止
         is_terminating = getattr(item.metadata, 'deletion_timestamp', None) is not None
+        # 容器层卡点：phase=Pending 时 K8s 会把具体原因写在 container_statuses[].state.waiting.reason
+        # （ImagePullBackOff / CrashLoopBackOff / CreateContainerConfigError 等）。
+        # 单独抽出来给前端用更醒目的 badge 展示，避免用户只看到 "Pending" 不知道卡哪了。
+        status_reason = ''
+        status_message = ''
+        for cs in (status.container_statuses or []):
+            st = cs.state
+            if st and st.waiting and st.waiting.reason:
+                status_reason = st.waiting.reason
+                status_message = st.waiting.message or ''
+                break
+            if st and st.terminated and st.terminated.reason:
+                status_reason = st.terminated.reason
+                status_message = st.terminated.message or ''
+                break
+        # 容器没起 init container 也可能卡，扫一遍 init_container_statuses
+        if not status_reason:
+            for cs in (status.init_container_statuses or []):
+                st = cs.state
+                if st and st.waiting and st.waiting.reason and st.waiting.reason != 'PodInitializing':
+                    status_reason = f'Init:{st.waiting.reason}'
+                    status_message = st.waiting.message or ''
+                    break
         base.update({
             'status_phase': 'Terminating' if is_terminating else (status.phase or 'Unknown'),
+            'status_reason': status_reason,
+            'status_message': status_message[:200] if status_message else '',
             'ready_str': f'{ready}/{len(containers)}',
             'restarts': restarts,
             'node': item.spec.node_name or '-',
