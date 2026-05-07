@@ -414,24 +414,51 @@ function resourceList() {
     _hasTerminating() {
       return this.rows.some(r => r.status_phase === 'Terminating' || r.status === 'Terminating');
     },
-    // 检测到 Terminating 资源时启动后台轮询，让用户尽快感知到资源真正消失
-    // 前 30s 用 2.5s 间隔（密集观察 K8s 清理过程），之后转 6s 间隔降低负载
-    // 整体最长轮询 120s（覆盖 Pod 30s 优雅期 + Namespace 含较多资源的清理）
+    // 检测工作负载是否不健康（ready < desired）：Deployment/StatefulSet 看 ready_replicas，
+    // DaemonSet 看 ready，Pod 看 ready_str。让 YAML apply 改镜像后能快速看到副本数变绿。
+    _hasUnhealthy() {
+      return this.rows.some(r => {
+        // Deployment / StatefulSet: ready_replicas < replicas
+        if (r.replicas !== undefined && r.ready_replicas !== undefined) {
+          return r.ready_replicas < r.replicas;
+        }
+        // DaemonSet: ready < desired
+        if (r.desired !== undefined && r.ready !== undefined) {
+          return r.ready < r.desired;
+        }
+        // Pod: ready_str 不是 "N/N" 格式（如 "0/1"）
+        if (r.ready_str) {
+          const parts = r.ready_str.split('/');
+          return parts.length === 2 && parts[0] !== parts[1];
+        }
+        return false;
+      });
+    },
+    // 检测到 Terminating 或不健康资源时启动后台轮询，让用户尽快感知状态变化
+    // Terminating: 前 30s 用 2.5s 间隔（密集观察 K8s 清理），之后 6s，最长 120s
+    // Unhealthy: 固定 5s 间隔，最长 60s（覆盖滚动更新 + Pod 启动时间）
     _startPolling() {
       if (this._pollTimer) return;
-      this._pollDeadline = Date.now() + 120000;
+      const hasTerminating = this._hasTerminating();
+      const hasUnhealthy = this._hasUnhealthy();
+      if (!hasTerminating && !hasUnhealthy) return;
+
+      this._pollDeadline = Date.now() + (hasTerminating ? 120000 : 60000);
       const denseUntil = Date.now() + 30000;
       const tick = () => {
-        if (Date.now() > this._pollDeadline || !this._hasTerminating()) {
+        if (Date.now() > this._pollDeadline || (!this._hasTerminating() && !this._hasUnhealthy())) {
           this._stopPolling();
           return;
         }
         this.load({silent: true}).finally(() => {
-          const interval = Date.now() < denseUntil ? 2500 : 6000;
+          // Terminating 用渐进间隔，Unhealthy 固定 5s
+          const interval = this._hasTerminating()
+            ? (Date.now() < denseUntil ? 2500 : 6000)
+            : 5000;
           this._pollTimer = setTimeout(tick, interval);
         });
       };
-      this._pollTimer = setTimeout(tick, 2500);
+      this._pollTimer = setTimeout(tick, this._hasTerminating() ? 2500 : 5000);
     },
     _stopPolling() {
       if (this._pollTimer) clearTimeout(this._pollTimer);
@@ -470,7 +497,7 @@ function resourceList() {
             }
           }
           if (this.page > this.totalPages) this.page = this.totalPages;
-          if (this._hasTerminating()) this._startPolling();
+          if (this._hasTerminating() || this._hasUnhealthy()) this._startPolling();
           else this._stopPolling();
 
           // syncing 状态下自动 3s 后再拉一次（首次加载 / 长 sync 周期），
