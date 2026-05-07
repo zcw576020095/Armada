@@ -388,10 +388,10 @@
           </div>
         </template>
         <template x-if="isRolling">
-          <div class="rounded-lg p-3" style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.2);">
+          <div class="rounded-lg p-3" style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.25);">
             <div class="flex items-start gap-2">
-              <i class="fas fa-sync-alt text-blue-400/70 mt-0.5 animate-spin"></i>
-              <div class="text-[11px] opacity-80 leading-relaxed">
+              <i class="fas fa-sync-alt text-warning mt-0.5 animate-spin"></i>
+              <div class="text-[11px] opacity-90 leading-relaxed">
                 <span class="font-semibold">滚动更新进行中</span>（已更新 <span x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span>）<br>
                 K8s 正在逐步替换旧 Pod，此时 Pod 总数会暂时超过期望副本数，更新完成后恢复正常。
               </div>
