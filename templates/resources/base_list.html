@@ -102,8 +102,8 @@
 
     <!-- 集群连接错误横幅：cache 还在但最近一次 sync 失败 -->
     <div x-show="!error && clusterError" x-cloak class="alert text-sm mb-4"
-         style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3); color: #ca8a04;">
-      <i class="fas fa-plug-circle-exclamation"></i>
+         style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3);">
+      <i class="fas fa-plug-circle-exclamation text-warning"></i>
       <div class="flex-1">
         <div class="font-semibold text-[12px] mb-0.5">集群连接异常，列表数据可能不是最新的</div>
         <div class="text-[11px] opacity-80" x-text="clusterError && clusterError.message"></div>

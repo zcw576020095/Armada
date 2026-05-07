@@ -285,7 +285,7 @@
       </div>
       <div class="space-y-3">
         <div class="bg-warning/5 border border-warning/15 rounded-xl p-4 space-y-3">
-          <p class="text-sm leading-relaxed">确定要 Cordon 节点 <code class="bg-base-200 text-warning px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code> 吗？</p>
+          <p class="text-sm leading-relaxed">确定要 Cordon 节点 <code class="bg-base-200 px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code> 吗？</p>
           <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
             <p><i class="fas fa-info-circle text-warning mr-1.5"></i>Cordon 后，调度器将不再向该节点分配新的 Pod。</p>
             <p><i class="fas fa-check-circle text-success mr-1.5"></i>节点上已运行的 Pod 不受影响，会继续正常运行。</p>
@@ -348,7 +348,7 @@
       </div>
       <div class="space-y-3">
         <div class="bg-warning/5 border border-warning/15 rounded-xl p-4">
-          <p class="text-sm leading-relaxed">此操作将停止调度并驱逐节点 <code class="bg-base-200 text-warning px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code> 上的所有非 DaemonSet Pod。</p>
+          <p class="text-sm leading-relaxed">此操作将停止调度并驱逐节点 <code class="bg-base-200 px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code> 上的所有非 DaemonSet Pod。</p>
           <p class="text-sm leading-relaxed mt-2.5 opacity-80">已驱逐的 Pod 会被自动调度到集群中其他可用的节点上。</p>
         </div>
       </div>
@@ -379,7 +379,7 @@
           <p class="text-sm leading-relaxed">此操作将从集群中移除节点对象 <code class="bg-base-200 text-error px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{ node_name }}</code>。</p>
           <div class="mt-3 flex items-start gap-2 bg-warning/10 border border-warning/20 rounded-lg p-3">
             <i class="fas fa-info-circle text-warning text-sm mt-0.5 flex-shrink-0"></i>
-            <p class="text-xs leading-relaxed text-warning">如果节点上的 kubelet 仍在运行，节点可能会自动重新加入集群。建议先执行 Drain 操作。</p>
+            <p class="text-xs leading-relaxed opacity-80">如果节点上的 kubelet 仍在运行，节点可能会自动重新加入集群。建议先执行 Drain 操作。</p>
           </div>
         </div>
         <div>

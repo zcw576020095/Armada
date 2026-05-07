@@ -263,7 +263,7 @@
       </div>
     </div>
     <div class="bg-warning/5 border border-warning/15 rounded-xl p-4 space-y-2.5">
-      <p class="text-sm leading-relaxed">确定要重启 <span id="restartResourceName" class="font-bold text-warning font-mono"></span> 吗？</p>
+      <p class="text-sm leading-relaxed">确定要重启 <span id="restartResourceName" class="font-bold font-mono"></span> 吗？</p>
       <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
         <p><i class="fas fa-info-circle text-warning mr-1.5"></i>重启将通过滚动更新方式逐步替换所有 Pod。</p>
         <p><i class="fas fa-check-circle text-success mr-1.5"></i>服务不会中断，新 Pod 就绪后旧 Pod 才会被终止。</p>
@@ -569,8 +569,8 @@
       </div>
     </div>
 
-    <div class="alert text-[11px] mb-3" style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3); color: #facc15;">
-      <i class="fas fa-info-circle"></i>
+    <div class="alert text-[11px] mb-3" style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3);">
+      <i class="fas fa-info-circle text-warning"></i>
       <span>选择一个历史版本回滚。回滚会用该 ReplicaSet 的 pod template 覆盖当前 Deployment，触发滚动更新。</span>
     </div>
 

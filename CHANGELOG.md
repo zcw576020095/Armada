@@ -10,6 +10,10 @@
 - **Deployment 详情关联 Pods 支持删除操作**：非 Running / Succeeded 状态的 Pod（如 ImagePullBackOff、ErrImagePull、CrashLoopBackOff 等）在操作列显示红色删除按钮，复用通用删除弹窗（含 Pod 强制删除勾选项）。删除后 pod 立即从关联列表移除（监听 `resource-updated` 事件），Deployment controller 会自动补建新 pod 重试拉取。解决用户"重启 deployment 后旧的失败 pod 不消失、手动无法清理"的痛点
 
 ### 修复
+- **全局修复黄色文字在黄色背景上不可读的问题**：
+  - 根因：多处警告/提示区域使用 `text-warning` / `color: #facc15` / `color: #ca8a04` 文字放在 `rgba(234,179,8,0.08~0.1)` 黄色背景上，深色主题下对比度极低、完全看不清文字
+  - 修法：移除警告区域正文的黄色字体色，让文字继承默认 base-content 色（白/浅灰），仅保留图标用 `text-warning` 做视觉区分
+  - 横向覆盖：`resource_modals.html`（回滚提示、重启确认资源名）、`base_list.html`（集群连接异常横幅）、`node_detail.html`（Cordon/Drain/Delete 节点名、kubelet 提示文字）、`namespace_list.html`（强制完成 namespace 名称）—— 所有资源类型的警告类 UI 统一修复
 - **所有资源的"创建时间"显示为 UTC（比北京时间慢 8 小时）**：
   - 根因：K8s API 返回的 `creation_timestamp` 是 UTC aware datetime，后端 `strftime` 直接格式化没做时区转换；`settings.TIME_ZONE` 也配的 `'UTC'`
   - 修法：`settings.TIME_ZONE` 改为 `'Asia/Shanghai'`；`sync_service._ts()` / `views.namespace_create` / `k8s_resources._ts_to_str()` 三处 strftime 前统一加 `timezone.localtime(ts)` 转换
