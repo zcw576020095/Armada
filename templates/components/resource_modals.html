@@ -375,23 +375,23 @@
         <!-- 滚动更新卡住提示：updated_replicas < replicas 或实际 pod 数 > 期望副本数时展示。
              解释"为什么 1 副本却有 2 个 pod"这个常见困惑。-->
         <template x-if="!isRolling && pods.length > info.replicas && info.replicas > 0">
-          <div class="rounded-lg p-3" style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3);">
+          <div class="rounded-lg p-3" style="background: rgba(148,163,184,0.08); border: 1px solid rgba(148,163,184,0.25);">
             <div class="flex items-start gap-2">
-              <i class="fas fa-info-circle text-yellow-500 mt-0.5"></i>
-              <div class="text-[11px] text-yellow-400 leading-relaxed">
+              <i class="fas fa-info-circle opacity-50 mt-0.5"></i>
+              <div class="text-[11px] opacity-80 leading-relaxed">
                 <span class="font-semibold">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span><br>
                 K8s 滚动更新时旧 ReplicaSet 的 Pod 需等新 Pod 就绪后才会被删除（maxUnavailable 保护）。
-                当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留，导致实际 Pod 数超过期望值。
-                <span class="opacity-70">→ 请修复 Pod 错误后 K8s 会自动清理多余副本，或回滚到上一个正常版本。</span>
+                当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留，导致实际 Pod 数超过期望值。<br>
+                <span class="opacity-70">→ 修复镜像问题后 K8s 会自动收敛到期望副本数；或回滚到正常版本；也可手动删除多余 Pod。</span>
               </div>
             </div>
           </div>
         </template>
         <template x-if="isRolling">
-          <div class="rounded-lg p-3" style="background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.3);">
+          <div class="rounded-lg p-3" style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.2);">
             <div class="flex items-start gap-2">
-              <i class="fas fa-sync-alt text-blue-400 mt-0.5 animate-spin"></i>
-              <div class="text-[11px] text-blue-300 leading-relaxed">
+              <i class="fas fa-sync-alt text-blue-400/70 mt-0.5 animate-spin"></i>
+              <div class="text-[11px] opacity-80 leading-relaxed">
                 <span class="font-semibold">滚动更新进行中</span>（已更新 <span x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span>）<br>
                 K8s 正在逐步替换旧 Pod，此时 Pod 总数会暂时超过期望副本数，更新完成后恢复正常。
               </div>
