@@ -296,7 +296,7 @@
 </dialog>
 
 <!-- Deployment Describe Modal -->
-<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail)">
+<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail)" @resource-updated.window="handleResourceUpdate($event)">
   <div class="modal-box bg-base-100 border border-base-300 rounded-2xl shadow-2xl flex flex-col p-0" style="width: 80vw; max-width: 80vw; height: 85vh;">
     <!-- Header -->
     <div class="flex items-center justify-between px-5 py-3 border-b border-base-300 flex-shrink-0">
@@ -509,6 +509,12 @@
                             @click="openYaml('Pod: ' + p.name, '/resources/' + clusterPk + '/yaml/pod/' + p.namespace + '/' + p.name + '/', false)">
                       <i class="fas fa-file-code text-[9px]"></i> YAML
                     </button>
+                    <template x-if="p.status_phase !== 'Running' && p.status_phase !== 'Succeeded'">
+                      <button class="btn btn-ghost btn-xs text-error gap-1 h-6 min-h-0 text-[10px]"
+                              @click="$dispatch('open-delete-modal', {type: 'Pod', name: p.name, namespace: p.namespace, deleteUrl: '/resources/' + clusterPk + '/delete/pod/' + p.namespace + '/' + p.name + '/'})">
+                        <i class="fas fa-trash-alt text-[9px]"></i> 删除
+                      </button>
+                    </template>
                   </div>
                 </td>
               </tr>
@@ -1273,6 +1279,13 @@ function describeViewer() {
     },
     clusterPodLogsUrl(ns, podName) {
       return `/resources/${this.clusterPk}/pods/${ns}/${podName}/logs/`;
+    },
+    // 监听 resource-updated 事件，删除 pod 后从列表移除
+    handleResourceUpdate(event) {
+      const d = event.detail;
+      if (d && d.action === 'delete' && d.type === 'Pod') {
+        this.pods = this.pods.filter(p => !(p.name === d.name && p.namespace === d.namespace));
+      }
     },
   };
 }

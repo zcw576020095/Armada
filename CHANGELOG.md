@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### 新增
+- **Deployment 详情关联 Pods 支持删除操作**：非 Running / Succeeded 状态的 Pod（如 ImagePullBackOff、ErrImagePull、CrashLoopBackOff 等）在操作列显示红色删除按钮，复用通用删除弹窗（含 Pod 强制删除勾选项）。删除后 pod 立即从关联列表移除（监听 `resource-updated` 事件），Deployment controller 会自动补建新 pod 重试拉取。解决用户"重启 deployment 后旧的失败 pod 不消失、手动无法清理"的痛点
+
 ### 修复
 - **资源列表偶发"集群连接异常 / 同步失败：database is locked"**（紧跟上一个 per-type 锁修复出现的回归）：
   - 根因：原先 cluster 全局一把锁让 K8sResourceCache 表的写操作天然串行；拆 per-type 锁后周期 sync 的 10 种资源类型可以并发写同一张表。SQLite 默认 rollback journal 模式下写者之间互斥，并发就立刻抛 `OperationalError: database is locked`，被 `_sync_last_error` 捕获后变成黄色横幅"集群连接异常"（其实是本地 SQLite 写锁冲突，跟 K8s 集群无关）
