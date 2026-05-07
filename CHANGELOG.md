@@ -7,6 +7,10 @@
 ## [Unreleased]
 
 ### 修复
+- **资源列表偶发"集群连接异常 / 同步失败：database is locked"**（紧跟上一个 per-type 锁修复出现的回归）：
+  - 根因：原先 cluster 全局一把锁让 K8sResourceCache 表的写操作天然串行；拆 per-type 锁后周期 sync 的 10 种资源类型可以并发写同一张表。SQLite 默认 rollback journal 模式下写者之间互斥，并发就立刻抛 `OperationalError: database is locked`，被 `_sync_last_error` 捕获后变成黄色横幅"集群连接异常"（其实是本地 SQLite 写锁冲突，跟 K8s 集群无关）
+  - 修法：`settings.py` 的 `DATABASES.default.OPTIONS` 加 `timeout=30` + `init_command` 启用 `PRAGMA journal_mode=WAL` / `synchronous=NORMAL` / `busy_timeout=30000` / `temp_store=MEMORY`。WAL 模式读写不互斥、写者之间靠 busy_timeout 排队等待 30s，从基础设施层消除并发写冲突。`PRAGMA journal_mode=WAL` 对 db 文件持久生效，重启后所有连接自动 WAL
+  - 横向覆盖：所有 sync 写路径（10 种资源类型 × 周期 sync × immediate sync），以及任何 ORM 并发写场景都受益
 - **YAML apply 改 ns name 后刷新页面看不到新 ns**（用户场景：在 ns "foo" 的 YAML 编辑器把 `metadata.name` 改成 "bar" → 后端 200 success → F5 后列表里 "bar" 一直不出现，过几十秒再刷才有）：
   - 根因：`sync_service` 用 cluster 全局一把锁，周期 sync 持锁串行跑 10 种资源（pod/deployment 全量列表对大集群可能耗 5-30s）；`trigger_immediate_sync(wait=True)` 也抢同一把锁，5s timeout 后线程仍在 `with lock:` 处阻塞，HTTP 已返回 success 但 cache 实际没刷 —— 前端 `_pendingOps` 乐观插入只在内存里，F5 一刷就丢，再读 stale cache 就看不到新 ns
   - 修法：`_sync_locks` 从 `{cluster_id: Lock}` 改成 `{cluster_id: {resource_type: Lock}}` per-type 粒度；`_sync_all_resources` 不再持 cluster 全局锁，逐 kind 各拿自己的锁；immediate sync 通过 `_get_resource_lock(cluster_id, resource_type)` 拿对应锁 → 跟同 kind 的周期 sync 串行（保证 cache 写不并发），但不被别的 kind 阻塞，5s timeout 内基本必中

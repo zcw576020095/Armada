@@ -94,6 +94,19 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # SQLite 默认 rollback journal 模式下，写者之间互斥，并发写会立刻抛
+        # "database is locked"。sync_service 拆 per-type 锁后多 kind 可能同时写
+        # K8sResourceCache 表，所以这里开 WAL（读写不互斥）+ busy_timeout 30s
+        # （写者撞写者时排队等而不是立刻报错），从基础设施层消除并发写冲突。
+        'OPTIONS': {
+            'timeout': 30,  # python sqlite3 客户端层等待秒数
+            'init_command': (
+                'PRAGMA journal_mode=WAL;'
+                'PRAGMA synchronous=NORMAL;'
+                'PRAGMA busy_timeout=30000;'
+                'PRAGMA temp_store=MEMORY'
+            ),
+        },
     }
 }
 
