@@ -234,7 +234,12 @@ def _serialize_item(resource_type, item):
 
     def _ts(obj):
         ts = getattr(obj.metadata, 'creation_timestamp', None)
-        return ts.strftime('%Y-%m-%d %H:%M') if ts else '-'
+        if not ts:
+            return '-'
+        # K8s API 返回的 creation_timestamp 是 UTC aware datetime；
+        # 转成 Django 配置的本地时区再格式化，避免显示 UTC 时间（差 8h）
+        from django.utils import timezone as tz
+        return tz.localtime(ts).strftime('%Y-%m-%d %H:%M')
 
     def _age(obj):
         """计算资源运行时长，类似 kubectl 的 Age 字段"""

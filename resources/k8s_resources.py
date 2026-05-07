@@ -732,7 +732,11 @@ class K8sResourceManager:
     # ─── Describe / Events / 关联 Pod ───────────────────────────
     @staticmethod
     def _ts_to_str(ts):
-        return ts.strftime('%Y-%m-%d %H:%M:%S') if ts else '-'
+        if not ts:
+            return '-'
+        # K8s API 返回的时间戳是 UTC aware datetime；转成本地时区再格式化
+        from django.utils import timezone as tz
+        return tz.localtime(ts).strftime('%Y-%m-%d %H:%M:%S')
 
     def _list_events_for(self, namespace, kind, name, uid=None):
         """查 involvedObject 是 (kind,name) 的 events，按时间倒序"""

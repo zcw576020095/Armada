@@ -10,7 +10,10 @@
 - **Deployment 详情关联 Pods 支持删除操作**：非 Running / Succeeded 状态的 Pod（如 ImagePullBackOff、ErrImagePull、CrashLoopBackOff 等）在操作列显示红色删除按钮，复用通用删除弹窗（含 Pod 强制删除勾选项）。删除后 pod 立即从关联列表移除（监听 `resource-updated` 事件），Deployment controller 会自动补建新 pod 重试拉取。解决用户"重启 deployment 后旧的失败 pod 不消失、手动无法清理"的痛点
 
 ### 修复
-- **资源列表偶发"集群连接异常 / 同步失败：database is locked"**（紧跟上一个 per-type 锁修复出现的回归）：
+- **所有资源的"创建时间"显示为 UTC（比北京时间慢 8 小时）**：
+  - 根因：K8s API 返回的 `creation_timestamp` 是 UTC aware datetime，后端 `strftime` 直接格式化没做时区转换；`settings.TIME_ZONE` 也配的 `'UTC'`
+  - 修法：`settings.TIME_ZONE` 改为 `'Asia/Shanghai'`；`sync_service._ts()` / `views.namespace_create` / `k8s_resources._ts_to_str()` 三处 strftime 前统一加 `timezone.localtime(ts)` 转换
+  - 横向覆盖：所有资源类型（namespace / pod / deployment / statefulset / daemonset / service / configmap / secret / ingress / pvc）的列表「创建时间」列，以及 Deployment 详情里的 events 时间、conditions 更新时间、rollout history 创建时间 —— 全部通过同一组修改点生效（紧跟上一个 per-type 锁修复出现的回归）：
   - 根因：原先 cluster 全局一把锁让 K8sResourceCache 表的写操作天然串行；拆 per-type 锁后周期 sync 的 10 种资源类型可以并发写同一张表。SQLite 默认 rollback journal 模式下写者之间互斥，并发就立刻抛 `OperationalError: database is locked`，被 `_sync_last_error` 捕获后变成黄色横幅"集群连接异常"（其实是本地 SQLite 写锁冲突，跟 K8s 集群无关）
   - 修法：`settings.py` 的 `DATABASES.default.OPTIONS` 加 `timeout=30` + `init_command` 启用 `PRAGMA journal_mode=WAL` / `synchronous=NORMAL` / `busy_timeout=30000` / `temp_store=MEMORY`。WAL 模式读写不互斥、写者之间靠 busy_timeout 排队等待 30s，从基础设施层消除并发写冲突。`PRAGMA journal_mode=WAL` 对 db 文件持久生效，重启后所有连接自动 WAL
   - 横向覆盖：所有 sync 写路径（10 种资源类型 × 周期 sync × immediate sync），以及任何 ORM 并发写场景都受益

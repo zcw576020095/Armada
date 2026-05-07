@@ -142,7 +142,7 @@ def namespace_create(request, pk):
                 'name': created.metadata.name,
                 'namespace': '',
                 'status': (created.status.phase if created.status else 'Active') or 'Active',
-                'created': created.metadata.creation_timestamp.strftime('%Y-%m-%d %H:%M') if created.metadata.creation_timestamp else '',
+                'created': timezone.localtime(created.metadata.creation_timestamp).strftime('%Y-%m-%d %H:%M') if created.metadata.creation_timestamp else '',
                 'age': '0s',
             },
         })
