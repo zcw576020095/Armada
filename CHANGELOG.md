@@ -7,6 +7,10 @@
 ## [Unreleased]
 
 ### 修复
+- **YAML apply 改 ns name 后刷新页面看不到新 ns**（用户场景：在 ns "foo" 的 YAML 编辑器把 `metadata.name` 改成 "bar" → 后端 200 success → F5 后列表里 "bar" 一直不出现，过几十秒再刷才有）：
+  - 根因：`sync_service` 用 cluster 全局一把锁，周期 sync 持锁串行跑 10 种资源（pod/deployment 全量列表对大集群可能耗 5-30s）；`trigger_immediate_sync(wait=True)` 也抢同一把锁，5s timeout 后线程仍在 `with lock:` 处阻塞，HTTP 已返回 success 但 cache 实际没刷 —— 前端 `_pendingOps` 乐观插入只在内存里，F5 一刷就丢，再读 stale cache 就看不到新 ns
+  - 修法：`_sync_locks` 从 `{cluster_id: Lock}` 改成 `{cluster_id: {resource_type: Lock}}` per-type 粒度；`_sync_all_resources` 不再持 cluster 全局锁，逐 kind 各拿自己的锁；immediate sync 通过 `_get_resource_lock(cluster_id, resource_type)` 拿对应锁 → 跟同 kind 的周期 sync 串行（保证 cache 写不并发），但不被别的 kind 阻塞，5s timeout 内基本必中
+  - 横向覆盖：所有走 `trigger_immediate_sync(wait=True)` 的写路径都受影响并都被一并修好 —— ns create / ns delete / ns force-finalize / 通用 yaml apply（`resource_yaml_api`、`resource_apply_api`，覆盖 deployment / statefulset / daemonset / configmap / secret / service / ingress / pvc 等所有资源类型）/ 删除 API（`resource_delete_api`，所有 kind）
 - **回滚 / YAML 编辑后产生多余 ReplicaSet**（致命）：用户场景"我只改一个端口号 / 只点了一次回滚，结果出现 3 个版本"
   - 根因：`rollback_deployment` 把目标 RS 的 `spec.template` 整体复制给当前 deployment，连同 `spec.template.metadata.labels.pod-template-hash` 这个 controller-only label 一起带过去；K8s deployment controller 收到带 hash 的 template 后，会把它当成"用户层 label"跟新算的 hash 合并 → 新 RS 的 labels 跟历史 RS 不再一致 → 创建新 RS、revision 一直涨
   - 同样问题在 `apply_yaml` / `get_resource_yaml` 路径也存在：用户编辑 yaml 时如果带着这个 hash 提交回来，每次更新都生成新 RS

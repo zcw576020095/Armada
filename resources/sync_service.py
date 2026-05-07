@@ -17,11 +17,34 @@ logger = logging.getLogger(__name__)
 
 # 全局同步线程管理
 _sync_threads: Dict[int, threading.Thread] = {}
-_sync_locks: Dict[int, threading.Lock] = {}
+# {cluster_id: {resource_type: Lock}} —— per-resource-type 粒度的锁。
+# 旧设计是 cluster 全局一把锁：周期 sync 串行跑 10 种资源（pod/deployment 慢），
+# 期间 trigger_immediate_sync(wait=True) 经常拿不到锁，5s timeout 后请求返回但
+# cache 实际还没刷 —— 表现就是 yaml apply 改 ns name 后 F5 看不到新 ns。
+# 拆成 per-type 后 immediate sync 只跟同 kind 串行，不被别的 kind 拖累。
+_sync_locks: Dict[int, Dict[str, threading.Lock]] = {}
+# 保护 _sync_locks 嵌套 dict 的初始化（懒创建 per-type Lock 时用）
+_sync_locks_meta_lock = threading.Lock()
 # 记录每个 cluster 最近一次 sync 是否失败：成功清空，失败留下原因。
 # 列表 API 会把它透传给前端，让用户知道是 K8s 连不上 / kubeconfig 错 / 还是其他。
 # 结构：{cluster_id: {'message': str, 'failed_at': iso_str, 'resource_type': str}}
 _sync_last_error: Dict[int, dict] = {}
+
+
+def _get_resource_lock(cluster_id, resource_type):
+    """返回 (cluster_id, resource_type) 对应的 Lock，首次访问时懒创建。
+
+    cluster 已被 stop_sync_for_cluster 清掉时返回 None —— 调用方应跳过 sync。
+    """
+    with _sync_locks_meta_lock:
+        type_locks = _sync_locks.get(cluster_id)
+        if type_locks is None:
+            return None
+        lock = type_locks.get(resource_type)
+        if lock is None:
+            lock = threading.Lock()
+            type_locks[resource_type] = lock
+        return lock
 
 
 def get_sync_error(cluster_id):
@@ -98,7 +121,8 @@ def start_sync_for_cluster(cluster):
         logger.warning(f'Sync thread for cluster {cluster.name} already running')
         return
 
-    _sync_locks[cluster_id] = threading.Lock()
+    with _sync_locks_meta_lock:
+        _sync_locks[cluster_id] = {}
     thread = threading.Thread(
         target=_sync_loop,
         args=(cluster,),
@@ -128,22 +152,28 @@ def _sync_loop(cluster):
 
 
 def _sync_all_resources(cluster):
-    """同步所有资源类型（串行执行）"""
-    cluster_id = cluster.pk
-    lock = _sync_locks.get(cluster_id)
+    """周期同步所有资源类型。
 
-    if not lock:
+    按 SYNC_ORDER 逐个 kind 跑，每个 kind 只在自己的 per-type lock 下串行。
+    单线程 _sync_loop 调用，所以同一 cluster 不会有两轮周期 sync 并发；
+    周期 sync 跟 immediate sync 之间靠 per-type lock 互斥。
+    """
+    cluster_id = cluster.pk
+    if cluster_id not in _sync_locks:  # 已被 stop_sync_for_cluster 清掉
         return
 
-    with lock:
-        logger.info(f'[Cluster {cluster.name}] Starting sync cycle...')
-        start_time = time.time()
+    logger.info(f'[Cluster {cluster.name}] Starting sync cycle...')
+    start_time = time.time()
 
-        had_error = None  # 任意 kind 失败就记下，最后写入 _sync_last_error
-        for resource_type in SYNC_ORDER:
-            list_func = _list_func_for(cluster, resource_type)
-            if not list_func:
-                continue
+    had_error = None  # 任意 kind 失败就记下，最后写入 _sync_last_error
+    for resource_type in SYNC_ORDER:
+        lock = _get_resource_lock(cluster_id, resource_type)
+        if lock is None:  # 中途被 stop
+            return
+        list_func = _list_func_for(cluster, resource_type)
+        if not list_func:
+            continue
+        with lock:
             try:
                 _sync_resource(cluster, resource_type, list_func)
             except Exception as e:
@@ -151,17 +181,17 @@ def _sync_all_resources(cluster):
                 had_error = (resource_type, e)
                 continue
 
-        elapsed = time.time() - start_time
-        if had_error is None:
-            _sync_last_error.pop(cluster.pk, None)
-        else:
-            rt, exc = had_error
-            _sync_last_error[cluster.pk] = {
-                'resource_type': rt,
-                'message': _describe_sync_error(exc),
-                'failed_at': timezone.now().isoformat(),
-            }
-        logger.info(f'[Cluster {cluster.name}] Sync cycle completed in {elapsed:.1f}s')
+    elapsed = time.time() - start_time
+    if had_error is None:
+        _sync_last_error.pop(cluster.pk, None)
+    else:
+        rt, exc = had_error
+        _sync_last_error[cluster.pk] = {
+            'resource_type': rt,
+            'message': _describe_sync_error(exc),
+            'failed_at': timezone.now().isoformat(),
+        }
+    logger.info(f'[Cluster {cluster.name}] Sync cycle completed in {elapsed:.1f}s')
 
 
 def _sync_resource(cluster, resource_type, list_func):
@@ -380,10 +410,9 @@ def _serialize_item(resource_type, item):
 
 def stop_sync_for_cluster(cluster_id):
     """停止集群的同步线程（通过删除锁让线程自然退出）"""
-    if cluster_id in _sync_locks:
-        del _sync_locks[cluster_id]
-    if cluster_id in _sync_threads:
-        del _sync_threads[cluster_id]
+    with _sync_locks_meta_lock:
+        _sync_locks.pop(cluster_id, None)
+    _sync_threads.pop(cluster_id, None)
     logger.info(f'Stopped sync for cluster {cluster_id}')
 
 
@@ -395,9 +424,9 @@ def trigger_immediate_sync(cluster, resource_type, wait=False, timeout=5):
               确保前端紧接着的 list API 能拿到最新数据，无需等 60s 周期或乐观更新兜底
     """
     cluster_id = cluster.pk
-    lock = _sync_locks.get(cluster_id)
+    lock = _get_resource_lock(cluster_id, resource_type)
 
-    if not lock:
+    if lock is None:
         logger.warning(f'No sync lock found for cluster {cluster.name}')
         return
 
