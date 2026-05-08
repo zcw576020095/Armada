@@ -238,11 +238,18 @@ def _workload_list(request, pk, template):
 
 
 def _workload_list_api(request, pk, resource_type):
-    """AJAX API: 优先从数据库缓存读取（毫秒级），缓存未命中时触发同步。"""
+    """AJAX API: 优先从数据库缓存读取（毫秒级），缓存未命中时触发同步。
+
+    ?refresh=1 时强制触发一次 immediate sync 再返回最新数据（前端轮询不健康工作负载时用）。
+    """
     cluster = get_object_or_404(Cluster, pk=pk)
     ns_filter = request.GET.get('namespace', '')
+    force_refresh = request.GET.get('refresh') == '1'
 
     try:
+        if force_refresh:
+            trigger_immediate_sync(cluster, resource_type, wait=True, timeout=3)
+
         cache_obj = K8sResourceCache.objects.filter(
             cluster_id=cluster.pk,
             resource_type=resource_type,

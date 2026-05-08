@@ -450,7 +450,7 @@ function resourceList() {
           this._stopPolling();
           return;
         }
-        this.load({silent: true}).finally(() => {
+        this.load({silent: true, refresh: true}).finally(() => {
           // Terminating 用渐进间隔，Unhealthy 固定 5s
           const interval = this._hasTerminating()
             ? (Date.now() < denseUntil ? 2500 : 6000)
@@ -467,11 +467,17 @@ function resourceList() {
 
     load(opts) {
       const silent = !!(opts && opts.silent);
+      const refresh = !!(opts && opts.refresh);
       if (silent) this.refreshing = true;
       else this.loading = true;
       this.error = null;
       this.serviceDown = false;
-      const apiUrl = '{% block api_url %}{% endblock %}' + (this.nsFilter ? '?namespace=' + this.nsFilter : '');
+      let apiUrl = '{% block api_url %}{% endblock %}';
+      const params = new URLSearchParams();
+      if (this.nsFilter) params.set('namespace', this.nsFilter);
+      if (refresh) params.set('refresh', '1');
+      const qs = params.toString();
+      if (qs) apiUrl += '?' + qs;
       return fetch(apiUrl)
         .then(r => {
           if (!r.ok) throw new Error('HTTP ' + r.status);
