@@ -7,6 +7,15 @@
 ## [Unreleased]
 
 ### 新增
+- **StatefulSet 详情 & 回滚**：StatefulSet 列表新增「详情」「回滚」按钮
+  - 后端新增 `describe_statefulset`、`list_statefulset_revisions`、`rollback_statefulset` 三个方法，通过 ControllerRevision + ownerReferences 管理历史版本
+  - 详情弹框显示 StatefulSet 特有字段：service_name、pod_management_policy、partition
+  - 副本状态卡片：期望/就绪/已更新/当前
+- **DaemonSet 详情 & 回滚**：DaemonSet 列表新增「详情」「回滚」按钮
+  - 后端新增 `describe_daemonset`、`list_daemonset_revisions`、`rollback_daemonset` 三个方法
+  - 详情弹框显示 DaemonSet 特有字段：desired/current/ready/updated/available、更新策略 maxUnavailable
+  - DaemonSet 无扩缩容功能（节点数决定副本数）
+- **详情/回滚弹框通用化**：`describeViewer()` 和 `rollbackViewer()` 改为支持 Deployment/StatefulSet/DaemonSet 三种资源类型，通过 `resourceType` 动态切换 API URL、概览字段、弹框标题
 - **Deployment 详情弹框自动刷新**：打开期间每 6 秒自动拉取最新状态（Pod 变化、副本数收敛、Events 更新），关闭后停止。解决"容器退出后 Pod 列表不更新、需手动刷新"的问题
 - **弹框分页**：Deployment 详情的「关联 Pods」（10 条/页）、「Events」（20 条/页）、回滚历史（10 条/页）均加分页控件
 - **列表页不健康工作负载自动轮询 + 强制刷新缓存**：检测到 `ready < desired` 时前端每 5 秒带 `refresh=1` 请求后端，后端触发 `trigger_immediate_sync(wait=True)` 从 K8s 拉最新数据再返回。覆盖 Deployment/StatefulSet/DaemonSet/Pod。解决"YAML apply 后 Pod 已 Running 但列表副本数长时间 0/1"的问题

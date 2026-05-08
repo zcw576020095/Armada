@@ -295,17 +295,17 @@
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
-<!-- Deployment Describe Modal -->
-<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail)" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto()">
+<!-- Workload Describe Modal (Deployment/StatefulSet/DaemonSet) -->
+<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto()">
   <div class="modal-box bg-base-100 border border-base-300 rounded-2xl shadow-2xl flex flex-col p-0" style="width: 80vw; max-width: 80vw; height: 85vh;">
     <!-- Header -->
     <div class="flex items-center justify-between px-5 py-3 border-b border-base-300 flex-shrink-0">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl bg-violet-500/15 grid place-items-center">
-          <i class="fas fa-rocket text-violet-500 text-sm"></i>
+          <i class="fas text-violet-500 text-sm" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : 'fa-clone'"></i>
         </div>
         <div>
-          <h3 class="font-bold text-sm">Deployment 详情</h3>
+          <h3 class="font-bold text-sm" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : 'DaemonSet') + ' 详情'"></h3>
           <p class="text-[11px] opacity-50" x-text="(meta.namespace || '') + ' / ' + (meta.name || '')"></p>
         </div>
       </div>
@@ -341,14 +341,14 @@
 
       <!-- Tab: 概览 -->
       <div x-show="!loading && !error && tab === 'overview'" x-cloak class="space-y-4">
-        <!-- 健康总览：任意 condition 异常时强提示，让用户一眼看到 rollout 卡住等问题 -->
+        <!-- 健康总览：任意 condition 异常时强提示 -->
         <template x-if="abnormalConditions.length > 0">
           <div class="rounded-lg p-3" style="background: rgba(244,63,94,0.08); border: 1px solid rgba(244,63,94,0.3);">
             <div class="flex items-start gap-2">
               <i class="fas fa-exclamation-triangle text-rose-500 mt-0.5"></i>
               <div class="flex-1">
                 <div class="font-semibold text-[12px] text-rose-500 mb-1.5">
-                  Deployment 当前不健康（<span x-text="abnormalConditions.length"></span> 个异常状态）
+                  <span x-text="resourceTypeLabel"></span> 当前不健康（<span x-text="abnormalConditions.length"></span> 个异常状态）
                 </div>
                 <template x-for="c in abnormalConditions" :key="c.type">
                   <div class="text-[11px] mb-1 last:mb-0">
@@ -372,9 +372,8 @@
           </div>
         </template>
 
-        <!-- 滚动更新卡住提示：updated_replicas < replicas 或实际 pod 数 > 期望副本数时展示。
-             解释"为什么 1 副本却有 2 个 pod"这个常见困惑。-->
-        <template x-if="!isRolling && pods.length > info.replicas && info.replicas > 0">
+        <!-- Deployment: 滚动更新 Pod 数量超出解释 -->
+        <template x-if="resourceType === 'deployment' && !isRolling && pods.length > info.replicas && info.replicas > 0">
           <div class="rounded-lg p-3" style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.25);">
             <div class="flex items-start gap-2">
               <i class="fas fa-info-circle text-warning mt-0.5"></i>
@@ -387,7 +386,7 @@
             </div>
           </div>
         </template>
-        <template x-if="isRolling">
+        <template x-if="resourceType === 'deployment' && isRolling">
           <div class="rounded-lg p-3" style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.25);">
             <div class="flex items-start gap-2">
               <i class="fas fa-sync-alt text-warning mt-0.5 animate-spin"></i>
@@ -399,33 +398,104 @@
           </div>
         </template>
 
-        <!-- 副本状态 -->
-        <div class="grid grid-cols-4 gap-3">
-          <template x-for="card in [
-            {label:'期望副本', val: info.replicas, color:'text-violet-500'},
-            {label:'就绪', val: info.ready_replicas, color:'text-emerald-500'},
-            {label:'已更新', val: info.updated_replicas, color:'text-blue-500'},
-            {label:'不可用', val: info.unavailable_replicas, color:'text-rose-500'}
-          ]">
-            <div class="rounded-lg bg-base-200/50 px-3 py-2 border border-base-300">
-              <div class="text-[10px] opacity-50" x-text="card.label"></div>
-              <div class="text-lg font-bold" :class="card.color" x-text="card.val"></div>
-            </div>
-          </template>
-        </div>
-
-        <!-- 基本信息 -->
-        <div class="rounded-lg bg-base-200/30 px-4 py-3 border border-base-300/50">
-          <div class="font-semibold mb-2 text-[11px] opacity-70 uppercase">基本信息</div>
-          <div class="grid grid-cols-2 gap-y-1.5 gap-x-6 font-mono text-[11px]">
-            <div><span class="opacity-50">命名空间：</span><span x-text="info.namespace"></span></div>
-            <div><span class="opacity-50">创建时间：</span><span x-text="info.created"></span></div>
-            <div><span class="opacity-50">策略：</span><span x-text="info.strategy?.type || '-'"></span></div>
-            <div><span class="opacity-50">滚动参数：</span><span x-text="(info.strategy?.max_surge || '-') + ' / ' + (info.strategy?.max_unavailable || '-')"></span></div>
-            <div><span class="opacity-50">Generation：</span><span x-text="info.generation + ' (observed: ' + info.observed_generation + ')'"></span></div>
-            <div><span class="opacity-50">Selector：</span><span class="break-all" x-text="Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'"></span></div>
+        <!-- 副本状态 - Deployment -->
+        <template x-if="resourceType === 'deployment'">
+          <div class="grid grid-cols-4 gap-3">
+            <template x-for="card in [
+              {label:'期望副本', val: info.replicas, color:'text-violet-500'},
+              {label:'就绪', val: info.ready_replicas, color:'text-emerald-500'},
+              {label:'已更新', val: info.updated_replicas, color:'text-blue-500'},
+              {label:'不可用', val: info.unavailable_replicas, color:'text-rose-500'}
+            ]">
+              <div class="rounded-lg bg-base-200/50 px-3 py-2 border border-base-300">
+                <div class="text-[10px] opacity-50" x-text="card.label"></div>
+                <div class="text-lg font-bold" :class="card.color" x-text="card.val"></div>
+              </div>
+            </template>
           </div>
-        </div>
+        </template>
+
+        <!-- 副本状态 - StatefulSet -->
+        <template x-if="resourceType === 'statefulset'">
+          <div class="grid grid-cols-4 gap-3">
+            <template x-for="card in [
+              {label:'期望副本', val: info.replicas, color:'text-violet-500'},
+              {label:'就绪', val: info.ready_replicas, color:'text-emerald-500'},
+              {label:'已更新', val: info.updated_replicas, color:'text-blue-500'},
+              {label:'当前', val: info.current_replicas, color:'text-cyan-500'}
+            ]">
+              <div class="rounded-lg bg-base-200/50 px-3 py-2 border border-base-300">
+                <div class="text-[10px] opacity-50" x-text="card.label"></div>
+                <div class="text-lg font-bold" :class="card.color" x-text="card.val"></div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- 副本状态 - DaemonSet -->
+        <template x-if="resourceType === 'daemonset'">
+          <div class="grid grid-cols-5 gap-3">
+            <template x-for="card in [
+              {label:'期望节点数', val: info.desired, color:'text-violet-500'},
+              {label:'当前', val: info.current, color:'text-cyan-500'},
+              {label:'就绪', val: info.ready, color:'text-emerald-500'},
+              {label:'已更新', val: info.updated, color:'text-blue-500'},
+              {label:'可用', val: info.available, color:'text-teal-500'}
+            ]">
+              <div class="rounded-lg bg-base-200/50 px-3 py-2 border border-base-300">
+                <div class="text-[10px] opacity-50" x-text="card.label"></div>
+                <div class="text-lg font-bold" :class="card.color" x-text="card.val"></div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- 基本信息 - Deployment -->
+        <template x-if="resourceType === 'deployment'">
+          <div class="rounded-lg bg-base-200/30 px-4 py-3 border border-base-300/50">
+            <div class="font-semibold mb-2 text-[11px] opacity-70 uppercase">基本信息</div>
+            <div class="grid grid-cols-2 gap-y-1.5 gap-x-6 font-mono text-[11px]">
+              <div><span class="opacity-50">命名空间：</span><span x-text="info.namespace"></span></div>
+              <div><span class="opacity-50">创建时间：</span><span x-text="info.created"></span></div>
+              <div><span class="opacity-50">策略：</span><span x-text="info.strategy?.type || '-'"></span></div>
+              <div><span class="opacity-50">滚动参数：</span><span x-text="(info.strategy?.max_surge || '-') + ' / ' + (info.strategy?.max_unavailable || '-')"></span></div>
+              <div><span class="opacity-50">Generation：</span><span x-text="info.generation + ' (observed: ' + info.observed_generation + ')'"></span></div>
+              <div><span class="opacity-50">Selector：</span><span class="break-all" x-text="Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'"></span></div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 基本信息 - StatefulSet -->
+        <template x-if="resourceType === 'statefulset'">
+          <div class="rounded-lg bg-base-200/30 px-4 py-3 border border-base-300/50">
+            <div class="font-semibold mb-2 text-[11px] opacity-70 uppercase">基本信息</div>
+            <div class="grid grid-cols-2 gap-y-1.5 gap-x-6 font-mono text-[11px]">
+              <div><span class="opacity-50">命名空间：</span><span x-text="info.namespace"></span></div>
+              <div><span class="opacity-50">创建时间：</span><span x-text="info.created"></span></div>
+              <div><span class="opacity-50">Service 名称：</span><span x-text="info.service_name || '-'"></span></div>
+              <div><span class="opacity-50">Pod 管理策略：</span><span x-text="info.pod_management_policy || '-'"></span></div>
+              <div><span class="opacity-50">更新策略：</span><span x-text="info.strategy?.type || '-'"></span></div>
+              <div><span class="opacity-50">Partition：</span><span x-text="info.strategy?.partition ?? '-'"></span></div>
+              <div><span class="opacity-50">Generation：</span><span x-text="info.generation + ' (observed: ' + info.observed_generation + ')'"></span></div>
+              <div><span class="opacity-50">Selector：</span><span class="break-all" x-text="Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'"></span></div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 基本信息 - DaemonSet -->
+        <template x-if="resourceType === 'daemonset'">
+          <div class="rounded-lg bg-base-200/30 px-4 py-3 border border-base-300/50">
+            <div class="font-semibold mb-2 text-[11px] opacity-70 uppercase">基本信息</div>
+            <div class="grid grid-cols-2 gap-y-1.5 gap-x-6 font-mono text-[11px]">
+              <div><span class="opacity-50">命名空间：</span><span x-text="info.namespace"></span></div>
+              <div><span class="opacity-50">创建时间：</span><span x-text="info.created"></span></div>
+              <div><span class="opacity-50">更新策略：</span><span x-text="info.strategy?.type || '-'"></span></div>
+              <div><span class="opacity-50">maxUnavailable：</span><span x-text="info.strategy?.max_unavailable || '-'"></span></div>
+              <div><span class="opacity-50">Generation：</span><span x-text="info.generation + ' (observed: ' + info.observed_generation + ')'"></span></div>
+              <div><span class="opacity-50">Selector：</span><span class="break-all" x-text="Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'"></span></div>
+            </div>
+          </div>
+        </template>
 
         <!-- 容器 -->
         <div class="rounded-lg bg-base-200/30 px-4 py-3 border border-base-300/50">
@@ -438,6 +508,7 @@
               <span x-show="c.ports?.length" class="opacity-50" x-text="' [' + c.ports.join(', ') + ']'"></span>
             </div>
           </template>
+          <div x-show="(info.containers || []).length === 0" class="text-[11px] opacity-40">无容器信息</div>
         </div>
 
         <!-- Conditions -->
@@ -572,22 +643,22 @@
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
-<!-- Deployment Rollback Modal -->
-<dialog id="rollbackModal" class="modal" x-data="rollbackViewer()" @open-deployment-rollback.window="open($event.detail)">
+<!-- Workload Rollback Modal (Deployment/StatefulSet/DaemonSet) -->
+<dialog id="rollbackModal" class="modal" x-data="rollbackViewer()" @open-deployment-rollback.window="open($event.detail, 'deployment')" @open-statefulset-rollback.window="open($event.detail, 'statefulset')" @open-daemonset-rollback.window="open($event.detail, 'daemonset')">
   <div class="modal-box bg-base-100 border border-warning/30 rounded-2xl shadow-2xl" style="width: 70vw; max-width: 900px;">
     <div class="flex items-center gap-3 mb-4">
       <div class="w-10 h-10 rounded-xl bg-warning/15 grid place-items-center">
         <i class="fas fa-undo text-warning"></i>
       </div>
       <div>
-        <h3 class="font-bold text-sm">回滚 Deployment</h3>
+        <h3 class="font-bold text-sm" x-text="'回滚 ' + resourceTypeLabel"></h3>
         <p class="text-[11px] opacity-50" x-text="(meta.namespace || '') + ' / ' + (meta.name || '')"></p>
       </div>
     </div>
 
     <div class="alert text-[11px] mb-3" style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3);">
       <i class="fas fa-info-circle text-warning"></i>
-      <span>选择一个历史版本回滚。回滚会用该 ReplicaSet 的 pod template 覆盖当前 Deployment，触发滚动更新。</span>
+      <span>选择一个历史版本回滚。回滚会用该历史版本的 pod template 覆盖当前配置，触发滚动更新。</span>
     </div>
 
     <div x-show="loading" class="flex items-center justify-center py-10 opacity-50 gap-2">
@@ -1275,19 +1346,20 @@ function podLogViewer() {
   };
 }
 
-// Deployment Describe 视图：通过 open-deployment-describe 事件触发
-// detail: { pk, namespace, name }
 function describeViewer() {
   return {
     clusterPk: 0,
     meta: {},
+    resourceType: 'deployment',
     info: {}, conditions: [], events: [], pods: [],
     loading: false, error: null,
     tab: 'overview',
     _autoTimer: null,
-    // 分页
     podPage: 1, podPageSize: 10,
     eventPage: 1, eventPageSize: 20,
+    get resourceTypeLabel() {
+      return {deployment: 'Deployment', statefulset: 'StatefulSet', daemonset: 'DaemonSet'}[this.resourceType] || '';
+    },
     get tabs() {
       return [
         {key: 'overview', label: '概览', icon: 'fa-info-circle'},
@@ -1307,23 +1379,23 @@ function describeViewer() {
       return [...reasons];
     },
     get isRolling() {
+      if (this.resourceType !== 'deployment') return false;
       if (!this.info || !this.info.replicas) return false;
       if (this.info.updated_replicas >= this.info.replicas) return false;
       return (this.conditions || []).some(c => c.type === 'Progressing' && c.status === 'True');
     },
-    // Pods 分页
     get podTotalPages() { return Math.ceil(this.pods.length / this.podPageSize) || 1; },
     get pagedPods() {
       const s = (this.podPage - 1) * this.podPageSize;
       return this.pods.slice(s, s + this.podPageSize);
     },
-    // Events 分页
     get eventTotalPages() { return Math.ceil(this.events.length / this.eventPageSize) || 1; },
     get pagedEvents() {
       const s = (this.eventPage - 1) * this.eventPageSize;
       return this.events.slice(s, s + this.eventPageSize);
     },
-    open(detail) {
+    open(detail, type) {
+      this.resourceType = type || 'deployment';
       this.clusterPk = detail.pk;
       this.meta = {namespace: detail.namespace, name: detail.name};
       this.tab = 'overview';
@@ -1352,7 +1424,8 @@ function describeViewer() {
       this._fetch();
     },
     _fetch() {
-      fetch(`/resources/${this.clusterPk}/api/deployments/${this.meta.namespace}/${this.meta.name}/describe/`)
+      const plural = this.resourceType + 's';
+      fetch(`/resources/${this.clusterPk}/api/${plural}/${this.meta.namespace}/${this.meta.name}/describe/`)
         .then(r => r.json())
         .then(d => {
           this.loading = false;
@@ -1378,21 +1451,25 @@ function describeViewer() {
   };
 }
 
-// Deployment Rollback 视图：通过 open-deployment-rollback 事件触发
 function rollbackViewer() {
   return {
     clusterPk: 0,
     meta: {},
+    resourceType: 'deployment',
     revisions: [], currentRevision: null,
     loading: false, error: null, rolling: false,
     pendingRevision: null,
     page: 1, pageSize: 10,
+    get resourceTypeLabel() {
+      return {deployment: 'Deployment', statefulset: 'StatefulSet', daemonset: 'DaemonSet'}[this.resourceType] || '';
+    },
     get totalPages() { return Math.ceil(this.revisions.length / this.pageSize) || 1; },
     get pagedRevisions() {
       const s = (this.page - 1) * this.pageSize;
       return this.revisions.slice(s, s + this.pageSize);
     },
-    open(detail) {
+    open(detail, type) {
+      this.resourceType = type || 'deployment';
       this.clusterPk = detail.pk;
       this.meta = {namespace: detail.namespace, name: detail.name};
       this.revisions = []; this.currentRevision = null;
@@ -1400,7 +1477,8 @@ function rollbackViewer() {
       this.page = 1;
       rollbackModal.showModal();
       this.loading = true;
-      fetch(`/resources/${this.clusterPk}/api/deployments/${this.meta.namespace}/${this.meta.name}/revisions/`)
+      const plural = this.resourceType + 's';
+      fetch(`/resources/${this.clusterPk}/api/${plural}/${this.meta.namespace}/${this.meta.name}/revisions/`)
         .then(r => r.json())
         .then(d => {
           this.loading = false;
@@ -1414,7 +1492,8 @@ function rollbackViewer() {
       const revision = this.pendingRevision;
       if (!revision) return;
       this.rolling = true;
-      fetch(`/resources/${this.clusterPk}/deployments/${this.meta.namespace}/${this.meta.name}/rollback/`, {
+      const plural = this.resourceType + 's';
+      fetch(`/resources/${this.clusterPk}/${plural}/${this.meta.namespace}/${this.meta.name}/rollback/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

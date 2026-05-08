@@ -1007,3 +1007,336 @@ class K8sResourceManager:
             )
         except ApiException as e:
             raise Exception(f"Failed to rollback deployment: {e.reason}")
+
+    # ─── StatefulSet Describe / Revisions / Rollback ─────────────
+
+    def describe_statefulset(self, name, namespace):
+        """汇总 StatefulSet 的状态/conditions/events/关联 Pods"""
+        try:
+            sts = self.apps_v1.read_namespaced_stateful_set(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            if e.status == 404:
+                raise Exception(f"StatefulSet '{name}' not found in namespace '{namespace}'")
+            raise Exception(f"Failed to read statefulset: {e.reason}")
+
+        spec = sts.spec
+        status = sts.status
+        meta = sts.metadata
+
+        update_strategy = spec.update_strategy if spec else None
+        strategy = {'type': update_strategy.type if update_strategy else '-'}
+        if update_strategy and update_strategy.rolling_update:
+            ru = update_strategy.rolling_update
+            strategy['partition'] = ru.partition if ru.partition is not None else 0
+            strategy['max_unavailable'] = str(ru.max_unavailable) if hasattr(ru, 'max_unavailable') and ru.max_unavailable else '1'
+
+        match_labels = {}
+        if spec and spec.selector and spec.selector.match_labels:
+            match_labels = dict(spec.selector.match_labels)
+
+        containers = []
+        if spec and spec.template and spec.template.spec:
+            for c in spec.template.spec.containers or []:
+                containers.append({
+                    'name': c.name,
+                    'image': c.image or '-',
+                    'ports': [f'{p.container_port}/{p.protocol or "TCP"}' for p in (c.ports or [])],
+                })
+
+        conditions = []
+        for c in (status.conditions or []) if status else []:
+            conditions.append({
+                'type': c.type,
+                'status': c.status,
+                'reason': c.reason or '-',
+                'message': c.message or '',
+                'last_update': self._ts_to_str(c.last_transition_time),
+            })
+
+        info = {
+            'name': meta.name,
+            'namespace': meta.namespace,
+            'created': self._ts_to_str(meta.creation_timestamp),
+            'labels': dict(meta.labels or {}),
+            'annotations': {k: v for k, v in (meta.annotations or {}).items() if not k.startswith('kubectl.kubernetes.io/last-applied')},
+            'replicas': spec.replicas or 0,
+            'ready_replicas': (status.ready_replicas if status else None) or 0,
+            'current_replicas': (status.current_replicas if status else None) or 0,
+            'updated_replicas': (status.updated_replicas if status else None) or 0,
+            'strategy': strategy,
+            'selector': match_labels,
+            'containers': containers,
+            'service_name': spec.service_name or '-',
+            'pod_management_policy': spec.pod_management_policy or 'OrderedReady',
+            'observed_generation': (status.observed_generation if status else None) or 0,
+            'generation': meta.generation or 0,
+        }
+
+        return {
+            'info': info,
+            'conditions': conditions,
+            'events': self._list_events_for(namespace, 'StatefulSet', name, meta.uid),
+            'pods': self._list_pods_by_selector(namespace, match_labels),
+        }
+
+    CONTROLLER_REVISION_HASH_LABEL = 'controller-revision-hash'
+
+    def list_statefulset_revisions(self, name, namespace):
+        """列出 StatefulSet 的 ControllerRevision 历史，按 revision 倒序"""
+        try:
+            sts = self.apps_v1.read_namespaced_stateful_set(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            raise Exception(f"Failed to read statefulset: {e.reason}")
+
+        match_labels = {}
+        if sts.spec and sts.spec.selector and sts.spec.selector.match_labels:
+            match_labels = dict(sts.spec.selector.match_labels)
+
+        try:
+            cr_list = self.apps_v1.list_namespaced_controller_revision(
+                namespace, _request_timeout=15
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to list controller revisions: {e.reason}")
+
+        owned = []
+        for cr in cr_list.items:
+            for owner in (cr.metadata.owner_references or []):
+                if owner.kind == 'StatefulSet' and owner.name == name:
+                    owned.append(cr)
+                    break
+
+        current_hash = ''
+        if sts.status and sts.status.update_revision:
+            current_hash = sts.status.update_revision
+
+        revisions = []
+        for cr in owned:
+            containers = []
+            if cr.data and isinstance(cr.data, dict):
+                spec_data = cr.data.get('spec', {})
+                template = spec_data.get('template', {}) if isinstance(spec_data, dict) else {}
+                pod_spec = template.get('spec', {}) if isinstance(template, dict) else {}
+                for c in (pod_spec.get('containers') or []):
+                    if isinstance(c, dict):
+                        containers.append(c.get('image', '-'))
+            revisions.append({
+                'revision': cr.revision,
+                'cr_name': cr.metadata.name,
+                'images': containers,
+                'change_cause': (cr.metadata.annotations or {}).get(self.CHANGE_CAUSE_ANNOTATION, ''),
+                'created': self._ts_to_str(cr.metadata.creation_timestamp),
+                'is_current': cr.metadata.name == current_hash,
+            })
+
+        revisions.sort(key=lambda r: int(r['revision']), reverse=True)
+        current_revision = next((r['revision'] for r in revisions if r['is_current']), None)
+        return {'current_revision': current_revision, 'revisions': revisions}
+
+    def rollback_statefulset(self, name, namespace, target_revision):
+        """把 StatefulSet 回滚到指定 ControllerRevision 的 template"""
+        target_rev = int(target_revision)
+        try:
+            sts = self.apps_v1.read_namespaced_stateful_set(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            raise Exception(f"Failed to read statefulset: {e.reason}")
+
+        try:
+            cr_list = self.apps_v1.list_namespaced_controller_revision(
+                namespace, _request_timeout=15
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to list controller revisions: {e.reason}")
+
+        target_cr = None
+        for cr in cr_list.items:
+            owners = cr.metadata.owner_references or []
+            if not any(o.kind == 'StatefulSet' and o.name == name for o in owners):
+                continue
+            if cr.revision == target_rev:
+                target_cr = cr
+                break
+
+        if target_cr is None:
+            raise Exception(f"Revision {target_rev} not found")
+
+        if not target_cr.data or not isinstance(target_cr.data, dict):
+            raise Exception(f"Revision {target_rev} has no valid data")
+
+        spec_data = target_cr.data.get('spec', {})
+        template = spec_data.get('template') if isinstance(spec_data, dict) else None
+        if not template:
+            raise Exception(f"Revision {target_rev} has no pod template")
+
+        patch_body = {'spec': {'template': template}}
+        if sts.metadata.annotations is None:
+            sts.metadata.annotations = {}
+
+        try:
+            self.apps_v1.patch_namespaced_stateful_set(
+                name, namespace, patch_body, _request_timeout=15
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to rollback statefulset: {e.reason}")
+
+    # ─── DaemonSet Describe / Revisions / Rollback ───────────────
+
+    def describe_daemonset(self, name, namespace):
+        """汇总 DaemonSet 的状态/conditions/events/关联 Pods"""
+        try:
+            ds = self.apps_v1.read_namespaced_daemon_set(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            if e.status == 404:
+                raise Exception(f"DaemonSet '{name}' not found in namespace '{namespace}'")
+            raise Exception(f"Failed to read daemonset: {e.reason}")
+
+        spec = ds.spec
+        status = ds.status
+        meta = ds.metadata
+
+        update_strategy = spec.update_strategy if spec else None
+        strategy = {'type': update_strategy.type if update_strategy else '-'}
+        if update_strategy and update_strategy.rolling_update:
+            ru = update_strategy.rolling_update
+            strategy['max_unavailable'] = str(ru.max_unavailable) if ru.max_unavailable else '1'
+            strategy['max_surge'] = str(ru.max_surge) if hasattr(ru, 'max_surge') and ru.max_surge else '0'
+
+        match_labels = {}
+        if spec and spec.selector and spec.selector.match_labels:
+            match_labels = dict(spec.selector.match_labels)
+
+        containers = []
+        if spec and spec.template and spec.template.spec:
+            for c in spec.template.spec.containers or []:
+                containers.append({
+                    'name': c.name,
+                    'image': c.image or '-',
+                    'ports': [f'{p.container_port}/{p.protocol or "TCP"}' for p in (c.ports or [])],
+                })
+
+        conditions = []
+        for c in (status.conditions or []) if status else []:
+            conditions.append({
+                'type': c.type,
+                'status': c.status,
+                'reason': c.reason or '-',
+                'message': c.message or '',
+                'last_update': self._ts_to_str(c.last_transition_time),
+            })
+
+        info = {
+            'name': meta.name,
+            'namespace': meta.namespace,
+            'created': self._ts_to_str(meta.creation_timestamp),
+            'labels': dict(meta.labels or {}),
+            'annotations': {k: v for k, v in (meta.annotations or {}).items() if not k.startswith('kubectl.kubernetes.io/last-applied')},
+            'desired': (status.desired_number_scheduled if status else None) or 0,
+            'current': (status.current_number_scheduled if status else None) or 0,
+            'ready': (status.number_ready if status else None) or 0,
+            'updated': (status.updated_number_scheduled if status else None) or 0,
+            'available': (status.number_available if status else None) or 0,
+            'strategy': strategy,
+            'selector': match_labels,
+            'containers': containers,
+            'observed_generation': (status.observed_generation if status else None) or 0,
+            'generation': meta.generation or 0,
+        }
+
+        return {
+            'info': info,
+            'conditions': conditions,
+            'events': self._list_events_for(namespace, 'DaemonSet', name, meta.uid),
+            'pods': self._list_pods_by_selector(namespace, match_labels),
+        }
+
+    def list_daemonset_revisions(self, name, namespace):
+        """列出 DaemonSet 的 ControllerRevision 历史，按 revision 倒序"""
+        try:
+            ds = self.apps_v1.read_namespaced_daemon_set(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            raise Exception(f"Failed to read daemonset: {e.reason}")
+
+        try:
+            cr_list = self.apps_v1.list_namespaced_controller_revision(
+                namespace, _request_timeout=15
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to list controller revisions: {e.reason}")
+
+        owned = []
+        for cr in cr_list.items:
+            for owner in (cr.metadata.owner_references or []):
+                if owner.kind == 'DaemonSet' and owner.name == name:
+                    owned.append(cr)
+                    break
+
+        current_hash = ''
+        if ds.status and hasattr(ds.status, 'current_number_scheduled'):
+            labels = ds.spec.template.metadata.labels if ds.spec and ds.spec.template and ds.spec.template.metadata else {}
+            current_hash = labels.get(self.CONTROLLER_REVISION_HASH_LABEL, '')
+
+        revisions = []
+        for cr in owned:
+            containers = []
+            if cr.data and isinstance(cr.data, dict):
+                spec_data = cr.data.get('spec', {})
+                template = spec_data.get('template', {}) if isinstance(spec_data, dict) else {}
+                pod_spec = template.get('spec', {}) if isinstance(template, dict) else {}
+                for c in (pod_spec.get('containers') or []):
+                    if isinstance(c, dict):
+                        containers.append(c.get('image', '-'))
+            revisions.append({
+                'revision': cr.revision,
+                'cr_name': cr.metadata.name,
+                'images': containers,
+                'change_cause': (cr.metadata.annotations or {}).get(self.CHANGE_CAUSE_ANNOTATION, ''),
+                'created': self._ts_to_str(cr.metadata.creation_timestamp),
+                'is_current': cr.metadata.name == current_hash,
+            })
+
+        revisions.sort(key=lambda r: int(r['revision']), reverse=True)
+        current_revision = next((r['revision'] for r in revisions if r['is_current']), None)
+        return {'current_revision': current_revision, 'revisions': revisions}
+
+    def rollback_daemonset(self, name, namespace, target_revision):
+        """把 DaemonSet 回滚到指定 ControllerRevision 的 template"""
+        target_rev = int(target_revision)
+        try:
+            ds = self.apps_v1.read_namespaced_daemon_set(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            raise Exception(f"Failed to read daemonset: {e.reason}")
+
+        try:
+            cr_list = self.apps_v1.list_namespaced_controller_revision(
+                namespace, _request_timeout=15
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to list controller revisions: {e.reason}")
+
+        target_cr = None
+        for cr in cr_list.items:
+            owners = cr.metadata.owner_references or []
+            if not any(o.kind == 'DaemonSet' and o.name == name for o in owners):
+                continue
+            if cr.revision == target_rev:
+                target_cr = cr
+                break
+
+        if target_cr is None:
+            raise Exception(f"Revision {target_rev} not found")
+
+        if not target_cr.data or not isinstance(target_cr.data, dict):
+            raise Exception(f"Revision {target_rev} has no valid data")
+
+        spec_data = target_cr.data.get('spec', {})
+        template = spec_data.get('template') if isinstance(spec_data, dict) else None
+        if not template:
+            raise Exception(f"Revision {target_rev} has no pod template")
+
+        patch_body = {'spec': {'template': template}}
+        try:
+            self.apps_v1.patch_namespaced_daemon_set(
+                name, namespace, patch_body, _request_timeout=15
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to rollback daemonset: {e.reason}")

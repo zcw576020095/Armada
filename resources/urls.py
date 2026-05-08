@@ -22,9 +22,15 @@ urlpatterns = [
     path('<int:pk>/statefulsets/', views.statefulset_list, name='statefulsets'),
     path('<int:pk>/statefulsets/<str:ns>/<str:name>/scale/', views.statefulset_scale, name='statefulset_scale'),
     path('<int:pk>/statefulsets/<str:ns>/<str:name>/restart/', views.statefulset_restart, name='statefulset_restart'),
+    path('<int:pk>/api/statefulsets/<str:ns>/<str:name>/describe/', views.statefulset_describe_api, name='statefulset_describe'),
+    path('<int:pk>/api/statefulsets/<str:ns>/<str:name>/revisions/', views.statefulset_revisions_api, name='statefulset_revisions'),
+    path('<int:pk>/statefulsets/<str:ns>/<str:name>/rollback/', views.statefulset_rollback, name='statefulset_rollback'),
 
     # DaemonSets
     path('<int:pk>/daemonsets/', views.daemonset_list, name='daemonsets'),
+    path('<int:pk>/api/daemonsets/<str:ns>/<str:name>/describe/', views.daemonset_describe_api, name='daemonset_describe'),
+    path('<int:pk>/api/daemonsets/<str:ns>/<str:name>/revisions/', views.daemonset_revisions_api, name='daemonset_revisions'),
+    path('<int:pk>/daemonsets/<str:ns>/<str:name>/rollback/', views.daemonset_rollback, name='daemonset_rollback'),
 
     # Pods
     path('<int:pk>/pods/', views.pod_list, name='pods'),

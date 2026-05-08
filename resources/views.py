@@ -418,6 +418,42 @@ def statefulset_restart(request, pk, ns, name):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+def statefulset_describe_api(request, pk, ns, name):
+    _, mgr = _get_mgr(pk)
+    try:
+        return JsonResponse(mgr.describe_statefulset(name, ns))
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def statefulset_revisions_api(request, pk, ns, name):
+    _, mgr = _get_mgr(pk)
+    try:
+        return JsonResponse(mgr.list_statefulset_revisions(name, ns))
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def statefulset_rollback(request, pk, ns, name):
+    cluster, mgr = _get_mgr(pk)
+    try:
+        data = json.loads(request.body or '{}')
+        revision = data.get('revision')
+        if not revision:
+            return JsonResponse({'error': 'revision is required'}, status=400)
+        mgr.rollback_statefulset(name, ns, revision)
+        trigger_immediate_sync(cluster, 'statefulset', wait=True)
+        trigger_immediate_sync(cluster, 'pod')
+        return JsonResponse({
+            'success': True,
+            'resource': _serialize_resource(mgr, 'statefulset', name, ns),
+            'message': f'已回滚到 revision {revision}',
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 # ─── DaemonSets ──────────────────────────────────────────────
 
 def daemonset_list(request, pk):
@@ -426,6 +462,42 @@ def daemonset_list(request, pk):
 
 def daemonset_list_api(request, pk):
     return _workload_list_api(request, pk, 'daemonset')
+
+
+def daemonset_describe_api(request, pk, ns, name):
+    _, mgr = _get_mgr(pk)
+    try:
+        return JsonResponse(mgr.describe_daemonset(name, ns))
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def daemonset_revisions_api(request, pk, ns, name):
+    _, mgr = _get_mgr(pk)
+    try:
+        return JsonResponse(mgr.list_daemonset_revisions(name, ns))
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def daemonset_rollback(request, pk, ns, name):
+    cluster, mgr = _get_mgr(pk)
+    try:
+        data = json.loads(request.body or '{}')
+        revision = data.get('revision')
+        if not revision:
+            return JsonResponse({'error': 'revision is required'}, status=400)
+        mgr.rollback_daemonset(name, ns, revision)
+        trigger_immediate_sync(cluster, 'daemonset', wait=True)
+        trigger_immediate_sync(cluster, 'pod')
+        return JsonResponse({
+            'success': True,
+            'resource': _serialize_resource(mgr, 'daemonset', name, ns),
+            'message': f'已回滚到 revision {revision}',
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 # ─── Pods ────────────────────────────────────────────────────
