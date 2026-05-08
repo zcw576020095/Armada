@@ -296,7 +296,7 @@
 </dialog>
 
 <!-- Deployment Describe Modal -->
-<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail)" @resource-updated.window="handleResourceUpdate($event)">
+<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail)" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto()">
   <div class="modal-box bg-base-100 border border-base-300 rounded-2xl shadow-2xl flex flex-col p-0" style="width: 80vw; max-width: 80vw; height: 85vh;">
     <!-- Header -->
     <div class="flex items-center justify-between px-5 py-3 border-b border-base-300 flex-shrink-0">
@@ -475,7 +475,7 @@
             <th class="text-[10px]">类型</th><th class="text-[10px]">原因</th><th class="text-[10px]">来源</th><th class="text-[10px] text-center">次数</th><th class="text-[10px]">消息</th><th class="text-[10px]">最近时间</th>
           </tr></thead>
           <tbody>
-            <template x-for="(e, i) in events" :key="i">
+            <template x-for="(e, i) in pagedEvents" :key="i">
               <tr class="border-b border-base-300/30">
                 <td><span class="badge badge-xs" :class="e.type === 'Normal' ? 'badge-info' : 'badge-warning'" x-text="e.type"></span></td>
                 <td class="font-mono" x-text="e.reason"></td>
@@ -488,6 +488,14 @@
             <tr x-show="events.length === 0"><td colspan="6" class="text-center opacity-40 py-6">暂无 events</td></tr>
           </tbody>
         </table>
+        <div x-show="eventTotalPages > 1" class="flex items-center justify-between mt-3 text-[10px] opacity-60">
+          <span>共 <span x-text="events.length"></span> 条事件</span>
+          <div class="join">
+            <button class="join-item btn btn-xs h-7 min-h-0" :disabled="eventPage <= 1" @click="eventPage--">«</button>
+            <button class="join-item btn btn-xs h-7 min-h-0 no-animation" x-text="eventPage + ' / ' + eventTotalPages"></button>
+            <button class="join-item btn btn-xs h-7 min-h-0" :disabled="eventPage >= eventTotalPages" @click="eventPage++">»</button>
+          </div>
+        </div>
       </div>
 
       <!-- Tab: 关联 Pods -->
@@ -505,7 +513,7 @@
             <th class="text-[10px]">操作</th>
           </tr></thead>
           <tbody>
-            <template x-for="p in pods" :key="p.name">
+            <template x-for="p in pagedPods" :key="p.name">
               <tr class="border-b border-base-300/30">
                 <td class="font-mono" x-text="p.name"></td>
                 <td>
@@ -549,6 +557,14 @@
             <tr x-show="pods.length === 0"><td colspan="9" class="text-center opacity-40 py-6">无关联 Pod（selector 可能为空）</td></tr>
           </tbody>
         </table>
+        <div x-show="podTotalPages > 1" class="flex items-center justify-between mt-3 text-[10px] opacity-60">
+          <span>共 <span x-text="pods.length"></span> 个 Pod</span>
+          <div class="join">
+            <button class="join-item btn btn-xs h-7 min-h-0" :disabled="podPage <= 1" @click="podPage--">«</button>
+            <button class="join-item btn btn-xs h-7 min-h-0 no-animation" x-text="podPage + ' / ' + podTotalPages"></button>
+            <button class="join-item btn btn-xs h-7 min-h-0" :disabled="podPage >= podTotalPages" @click="podPage++">»</button>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -584,7 +600,7 @@
         <th class="text-[10px]">Revision</th><th class="text-[10px]">镜像</th><th class="text-[10px]">变更原因</th><th class="text-[10px]">创建时间</th><th class="text-[10px]">操作</th>
       </tr></thead>
       <tbody>
-        <template x-for="r in revisions" :key="r.revision">
+        <template x-for="r in pagedRevisions" :key="r.revision">
           <tr class="border-b border-base-300/30" :class="r.is_current ? 'bg-violet-500/5' : ''">
             <td class="font-bold">
               <span x-text="'#' + r.revision"></span>
@@ -605,6 +621,14 @@
         <tr x-show="revisions.length === 0"><td colspan="5" class="text-center opacity-40 py-6">无历史版本</td></tr>
       </tbody>
     </table>
+    <div x-show="totalPages > 1" class="flex items-center justify-between mt-3 text-[10px] opacity-60">
+      <span>共 <span x-text="revisions.length"></span> 个版本</span>
+      <div class="join">
+        <button class="join-item btn btn-xs h-7 min-h-0" :disabled="page <= 1" @click="page--">«</button>
+        <button class="join-item btn btn-xs h-7 min-h-0 no-animation" x-text="page + ' / ' + totalPages"></button>
+        <button class="join-item btn btn-xs h-7 min-h-0" :disabled="page >= totalPages" @click="page++">»</button>
+      </div>
+    </div>
 
     <!-- 内联确认条：点击"回滚到此"后展开 -->
     <div x-show="pendingRevision" x-cloak class="mt-4 rounded-lg p-3 flex items-center justify-between gap-3"
@@ -1260,6 +1284,10 @@ function describeViewer() {
     info: {}, conditions: [], events: [], pods: [],
     loading: false, error: null,
     tab: 'overview',
+    _autoTimer: null,
+    // 分页
+    podPage: 1, podPageSize: 10,
+    eventPage: 1, eventPageSize: 20,
     get tabs() {
       return [
         {key: 'overview', label: '概览', icon: 'fa-info-circle'},
@@ -1267,25 +1295,33 @@ function describeViewer() {
         {key: 'pods', label: '关联 Pods', icon: 'fa-cubes', count: this.pods.length},
       ];
     },
-    // 异常 conditions：Available/Progressing 期望 True；ReplicaFailure 出现就是异常
     get abnormalConditions() {
       return (this.conditions || []).filter(c =>
         ((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') ||
         (c.type === 'ReplicaFailure' && c.status === 'True')
       );
     },
-    // 关联 pods 的容器卡点 reason 集合（去重），让用户一眼看到"是 ImagePullBackOff
-    // 还是 CrashLoopBackOff 还是 CreateContainerConfigError"
     get podBlockReasons() {
       const reasons = new Set();
       (this.pods || []).forEach(p => { if (p.status_reason) reasons.add(p.status_reason); });
       return [...reasons];
     },
-    // 滚动更新中：updated_replicas < replicas 且 Progressing=True
     get isRolling() {
       if (!this.info || !this.info.replicas) return false;
       if (this.info.updated_replicas >= this.info.replicas) return false;
       return (this.conditions || []).some(c => c.type === 'Progressing' && c.status === 'True');
+    },
+    // Pods 分页
+    get podTotalPages() { return Math.ceil(this.pods.length / this.podPageSize) || 1; },
+    get pagedPods() {
+      const s = (this.podPage - 1) * this.podPageSize;
+      return this.pods.slice(s, s + this.podPageSize);
+    },
+    // Events 分页
+    get eventTotalPages() { return Math.ceil(this.events.length / this.eventPageSize) || 1; },
+    get pagedEvents() {
+      const s = (this.eventPage - 1) * this.eventPageSize;
+      return this.events.slice(s, s + this.eventPageSize);
     },
     open(detail) {
       this.clusterPk = detail.pk;
@@ -1293,11 +1329,29 @@ function describeViewer() {
       this.tab = 'overview';
       this.info = {}; this.conditions = []; this.events = []; this.pods = [];
       this.error = null;
+      this.podPage = 1; this.eventPage = 1;
       describeModal.showModal();
       this.reload();
+      this._startAuto();
+    },
+    _startAuto() {
+      this._stopAuto();
+      this._autoTimer = setInterval(() => {
+        if (!describeModal.open) { this._stopAuto(); return; }
+        this._silentReload();
+      }, 6000);
+    },
+    _stopAuto() {
+      if (this._autoTimer) { clearInterval(this._autoTimer); this._autoTimer = null; }
     },
     reload() {
       this.loading = true;
+      this._fetch();
+    },
+    _silentReload() {
+      this._fetch();
+    },
+    _fetch() {
       fetch(`/resources/${this.clusterPk}/api/deployments/${this.meta.namespace}/${this.meta.name}/describe/`)
         .then(r => r.json())
         .then(d => {
@@ -1307,13 +1361,14 @@ function describeViewer() {
           this.conditions = d.conditions || [];
           this.events = d.events || [];
           this.pods = d.pods || [];
+          if (this.podPage > this.podTotalPages) this.podPage = this.podTotalPages;
+          if (this.eventPage > this.eventTotalPages) this.eventPage = this.eventTotalPages;
         })
         .catch(e => { this.loading = false; this.error = e.message; });
     },
     clusterPodLogsUrl(ns, podName) {
       return `/resources/${this.clusterPk}/pods/${ns}/${podName}/logs/`;
     },
-    // 监听 resource-updated 事件，删除 pod 后从列表移除
     handleResourceUpdate(event) {
       const d = event.detail;
       if (d && d.action === 'delete' && d.type === 'Pod') {
@@ -1330,12 +1385,19 @@ function rollbackViewer() {
     meta: {},
     revisions: [], currentRevision: null,
     loading: false, error: null, rolling: false,
-    pendingRevision: null,   // 用户点了"回滚到此"但还没确认时记下的目标 revision
+    pendingRevision: null,
+    page: 1, pageSize: 10,
+    get totalPages() { return Math.ceil(this.revisions.length / this.pageSize) || 1; },
+    get pagedRevisions() {
+      const s = (this.page - 1) * this.pageSize;
+      return this.revisions.slice(s, s + this.pageSize);
+    },
     open(detail) {
       this.clusterPk = detail.pk;
       this.meta = {namespace: detail.namespace, name: detail.name};
       this.revisions = []; this.currentRevision = null;
       this.error = null; this.rolling = false; this.pendingRevision = null;
+      this.page = 1;
       rollbackModal.showModal();
       this.loading = true;
       fetch(`/resources/${this.clusterPk}/api/deployments/${this.meta.namespace}/${this.meta.name}/revisions/`)

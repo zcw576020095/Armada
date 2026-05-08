@@ -7,6 +7,9 @@
 ## [Unreleased]
 
 ### 新增
+- **Deployment 详情弹框自动刷新**：打开期间每 6 秒自动拉取最新状态（Pod 变化、副本数收敛、Events 更新），关闭后停止。解决"容器退出后 Pod 列表不更新、需手动刷新"的问题
+- **弹框分页**：Deployment 详情的「关联 Pods」（10 条/页）、「Events」（20 条/页）、回滚历史（10 条/页）均加分页控件
+- **列表页不健康工作负载自动轮询 + 强制刷新缓存**：检测到 `ready < desired` 时前端每 5 秒带 `refresh=1` 请求后端，后端触发 `trigger_immediate_sync(wait=True)` 从 K8s 拉最新数据再返回。覆盖 Deployment/StatefulSet/DaemonSet/Pod。解决"YAML apply 后 Pod 已 Running 但列表副本数长时间 0/1"的问题
 - **Deployment 详情关联 Pods 支持删除操作**：非 Running / Succeeded 状态的 Pod（如 ImagePullBackOff、ErrImagePull、CrashLoopBackOff 等）在操作列显示红色删除按钮，复用通用删除弹窗（含 Pod 强制删除勾选项）。删除后 pod 立即从关联列表移除（监听 `resource-updated` 事件），Deployment controller 会自动补建新 pod 重试拉取。解决用户"重启 deployment 后旧的失败 pod 不消失、手动无法清理"的痛点
 
 ### 修复
