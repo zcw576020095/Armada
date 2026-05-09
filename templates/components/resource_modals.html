@@ -230,7 +230,11 @@
         .then(d => {
           if(d.success) {
             showToast('副本数调整成功', 'success');
-            window.dispatchEvent(new CustomEvent('resource-updated'));
+            if (d.resource) {
+              window.dispatchEvent(new CustomEvent('resource-updated', {detail: {action: 'update', resource: d.resource}}));
+            } else {
+              window.dispatchEvent(new CustomEvent('resource-updated'));
+            }
           } else {
             showToast(d.error, 'error');
           }
@@ -280,7 +284,11 @@
         .then(d => {
           if(d.success) {
             showToast('重启触发成功', 'success');
-            window.dispatchEvent(new CustomEvent('resource-updated'));
+            if (d.resource) {
+              window.dispatchEvent(new CustomEvent('resource-updated', {detail: {action: 'update', resource: d.resource}}));
+            } else {
+              window.dispatchEvent(new CustomEvent('resource-updated'));
+            }
           } else {
             showToast(d.error, 'error');
           }
@@ -1446,6 +1454,9 @@ function describeViewer() {
       const d = event.detail;
       if (d && d.action === 'delete' && d.type === 'Pod') {
         this.pods = this.pods.filter(p => !(p.name === d.name && p.namespace === d.namespace));
+      } else if (d && d.action === 'update') {
+        // 重启/扩缩容/YAML 编辑后立即刷新 describe modal 数据
+        this._silentReload();
       }
     },
   };

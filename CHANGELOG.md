@@ -22,6 +22,18 @@
 - **Deployment 详情关联 Pods 支持删除操作**：非 Running / Succeeded 状态的 Pod（如 ImagePullBackOff、ErrImagePull、CrashLoopBackOff 等）在操作列显示红色删除按钮，复用通用删除弹窗（含 Pod 强制删除勾选项）。删除后 pod 立即从关联列表移除（监听 `resource-updated` 事件），Deployment controller 会自动补建新 pod 重试拉取。解决用户"重启 deployment 后旧的失败 pod 不消失、手动无法清理"的痛点
 
 ### 修复
+- **StatefulSet / DaemonSet 详情弹框显示错误的 Pod 列表**：
+  - 根因：`describe_statefulset` 和 `describe_daemonset` 使用 `_list_pods_by_selector` 按标签过滤 pod，当 StatefulSet/DaemonSet 与 Deployment 共享相同的 selector labels 时（如 `app: test-zcw`），会把 Deployment 的 pod 也一起捞进来。用户场景：StatefulSet `test-zcw111` 配置 2 副本，实际只有 1 个 pod（`test-zcw111-0`），但详情弹框显示 5 个 pod（包含 4 个 Deployment `test-zcw` 的 pod）
+  - 修法：新增 `_list_pods_by_owner(namespace, owner_kind, owner_name)` 方法，按 `ownerReferences` 过滤 pod（StatefulSet/DaemonSet 的 pod 直接被它们拥有，不像 Deployment 通过 ReplicaSet 间接拥有）。`describe_statefulset` 和 `describe_daemonset` 改用 `_list_pods_by_owner`，`describe_deployment` 保持 `_list_pods_by_selector`（因为 Deployment pod 的 owner 是 ReplicaSet）
+  - 横向覆盖：StatefulSet 和 DaemonSet 的详情弹框「关联 Pods」标签页，现在只显示真正属于该资源的 pod，不再混入其他工作负载的 pod
+- **StatefulSet / DaemonSet 详情弹框 Pod 列表加载慢、重启后不实时更新**：
+  - 根因：`_list_pods_by_owner()` 无差别拉取 namespace 下所有 pod 再在 Python 里过滤 ownerReferences，大 namespace（数百 pod）下请求耗时可达数秒甚至超时。导致 6 秒自动刷新周期内数据刷新卡顿，重启/编辑 YAML 后弹框 pod 列表长时间显示旧数据
+  - 修法：`_list_pods_by_owner()` 新增可选参数 `match_labels`，优先用 label selector 在 K8s API 层面过滤（与 Deployment 的 `_list_pods_by_selector` 同等效率），再用 ownerReferences 二次过滤保证准确性。`describe_statefulset` 和 `describe_daemonset` 调用时传入 `spec.selector.matchLabels`
+  - 横向覆盖：StatefulSet 和 DaemonSet 的详情弹框均受益，describe API 响应时间从秒级降到毫秒级
+- **重启/扩缩容后列表页和详情弹框不实时更新**：
+  - 根因：重启弹框（line 283）和扩缩容弹框（line 233）dispatch 的 `resource-updated` 事件不带 `action` 和 `resource` 数据，导致列表页只能等 1.5 秒后 silent load 从 cache 读旧数据；describe modal 的 `handleResourceUpdate` 只处理 Pod 删除事件，完全忽略 workload 更新事件
+  - 修法：重启/扩缩容弹框改为 dispatch `{action: 'update', resource: d.resource}`（后端接口已返回最新 resource 数据），列表页的 `markUpdated()` 立即用新数据替换对应行；describe modal 的 `handleResourceUpdate` 新增 `action === 'update'` 分支，调用 `_silentReload()` 立即刷新弹框数据
+  - 横向覆盖：Deployment/StatefulSet/DaemonSet 的重启和扩缩容操作，以及所有资源类型的 YAML 编辑（YAML apply 已支持 action 派发）
 - **全局修复黄色文字在黄色背景上不可读的问题**：
   - 根因：多处警告/提示区域使用 `text-warning` / `color: #facc15` / `color: #ca8a04` 文字放在 `rgba(234,179,8,0.08~0.1)` 黄色背景上，深色主题下对比度极低、完全看不清文字
   - 修法：移除警告区域正文的黄色字体色，让文字继承默认 base-content 色（白/浅灰），仅保留图标用 `text-warning` 做视觉区分

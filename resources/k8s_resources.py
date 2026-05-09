@@ -784,6 +784,38 @@ class K8sResourceManager:
         from resources.sync_service import _serialize_item
         return [_serialize_item('pod', p) for p in res.items]
 
+    def _list_pods_by_owner(self, namespace, owner_kind, owner_name, match_labels=None):
+        """按 ownerReference 拉取 namespace 下的 pods（用于 StatefulSet/DaemonSet）
+
+        优化策略：先用 label selector 在 K8s API 层面过滤（高效），再用 ownerReferences 二次过滤（准确）
+        这样在大 namespace 里不会拉取所有 pod，避免超时和性能问题
+        """
+        try:
+            # 如果有 match_labels，先用 label selector 过滤（K8s API 层面，高效）
+            if match_labels:
+                label_selector = ','.join(f'{k}={v}' for k, v in match_labels.items())
+                res = self.core_v1.list_namespaced_pod(
+                    namespace, label_selector=label_selector, _request_timeout=15
+                )
+            else:
+                # 没有 selector 时回退到全量拉取（兼容性保底）
+                res = self.core_v1.list_namespaced_pod(namespace, _request_timeout=15)
+        except ApiException as e:
+            logger.warning(f'list pods by owner failed: {e.reason}')
+            return []
+
+        # 二次过滤：确保 pod 的 ownerReference 确实指向目标资源（准确性保证）
+        owned_pods = []
+        for pod in res.items:
+            if pod.metadata.owner_references:
+                for owner in pod.metadata.owner_references:
+                    if owner.kind == owner_kind and owner.name == owner_name:
+                        owned_pods.append(pod)
+                        break
+
+        from resources.sync_service import _serialize_item
+        return [_serialize_item('pod', p) for p in owned_pods]
+
     def describe_deployment(self, name, namespace):
         """汇总 Deployment 的状态/conditions/events/关联 Pods，给前端 describe modal"""
         try:
@@ -1076,7 +1108,7 @@ class K8sResourceManager:
             'info': info,
             'conditions': conditions,
             'events': self._list_events_for(namespace, 'StatefulSet', name, meta.uid),
-            'pods': self._list_pods_by_selector(namespace, match_labels),
+            'pods': self._list_pods_by_owner(namespace, 'StatefulSet', name, match_labels),
         }
 
     CONTROLLER_REVISION_HASH_LABEL = 'controller-revision-hash'
@@ -1246,7 +1278,7 @@ class K8sResourceManager:
             'info': info,
             'conditions': conditions,
             'events': self._list_events_for(namespace, 'DaemonSet', name, meta.uid),
-            'pods': self._list_pods_by_selector(namespace, match_labels),
+            'pods': self._list_pods_by_owner(namespace, 'DaemonSet', name, match_labels),
         }
 
     def list_daemonset_revisions(self, name, namespace):
