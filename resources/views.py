@@ -464,6 +464,18 @@ def daemonset_list_api(request, pk):
     return _workload_list_api(request, pk, 'daemonset')
 
 
+@require_POST
+def daemonset_restart(request, pk, ns, name):
+    cluster, mgr = _get_mgr(pk)
+    try:
+        mgr.restart_daemonset(name, ns)
+        trigger_immediate_sync(cluster, 'daemonset', wait=True)
+        trigger_immediate_sync(cluster, 'pod')
+        return JsonResponse({'success': True, 'resource': _serialize_resource(mgr, 'daemonset', name, ns)})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 def daemonset_describe_api(request, pk, ns, name):
     _, mgr = _get_mgr(pk)
     try:

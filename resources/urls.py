@@ -28,6 +28,7 @@ urlpatterns = [
 
     # DaemonSets
     path('<int:pk>/daemonsets/', views.daemonset_list, name='daemonsets'),
+    path('<int:pk>/daemonsets/<str:ns>/<str:name>/restart/', views.daemonset_restart, name='daemonset_restart'),
     path('<int:pk>/api/daemonsets/<str:ns>/<str:name>/describe/', views.daemonset_describe_api, name='daemonset_describe'),
     path('<int:pk>/api/daemonsets/<str:ns>/<str:name>/revisions/', views.daemonset_revisions_api, name='daemonset_revisions'),
     path('<int:pk>/daemonsets/<str:ns>/<str:name>/rollback/', views.daemonset_rollback, name='daemonset_rollback'),

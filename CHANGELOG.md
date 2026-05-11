@@ -7,6 +7,12 @@
 ## [Unreleased]
 
 ### 新增
+- **DaemonSet 重启功能**：DaemonSet 列表新增「重启」按钮，通过 `restartedAt` annotation 触发滚动更新，与 Deployment/StatefulSet 重启功能保持一致
+
+### 修复
+- **集群切换后资源列表仍显示旧集群数据**：顶部导航栏集群下拉切换后，`cluster_select` 视图仅把新集群 ID 存入 session 但重定向回原 URL（仍含旧集群 ID），导致 API 请求仍然查询旧集群。修改 `cluster_select` 将重定向 URL 中的 `/resources/<old_pk>/` 和 `/clusters/<old_pk>/` 替换为新集群 ID
+
+### 新增（历史）
 - **StatefulSet 详情 & 回滚**：StatefulSet 列表新增「详情」「回滚」按钮
   - 后端新增 `describe_statefulset`、`list_statefulset_revisions`、`rollback_statefulset` 三个方法，通过 ControllerRevision + ownerReferences 管理历史版本
   - 详情弹框显示 StatefulSet 特有字段：service_name、pod_management_policy、partition

@@ -39,6 +39,9 @@
       <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('DaemonSet: ' + r.name, '/resources/{{ cluster.pk }}/yaml/daemonset/' + r.namespace + '/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
         <i class="fas fa-file-code text-[10px]"></i> YAML
       </button>
+      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="{% if can_edit %}confirmRestart('/resources/{{ cluster.pk }}/daemonsets/' + r.namespace + '/' + r.name + '/restart/', r.name){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-redo text-[10px]"></i> 重启
+      </button>
       <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px] text-warning" @click="{% if can_edit %}$dispatch('open-daemonset-rollback', {pk: {{ cluster.pk }}, namespace: r.namespace, name: r.name}){% else %}noPermModal.showModal(){% endif %}">
         <i class="fas fa-undo text-[10px]"></i> 回滚
       </button>

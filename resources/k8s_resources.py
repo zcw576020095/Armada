@@ -729,6 +729,28 @@ class K8sResourceManager:
         except ApiException as e:
             raise Exception(f"Failed to restart statefulset: {e.reason}")
 
+    # DaemonSet 特定操作
+    def restart_daemonset(self, name, namespace):
+        """重启 DaemonSet（通过添加 annotation 触发滚动更新）"""
+        try:
+            from datetime import datetime
+            body = {
+                'spec': {
+                    'template': {
+                        'metadata': {
+                            'annotations': {
+                                'kubectl.kubernetes.io/restartedAt': datetime.utcnow().isoformat()
+                            }
+                        }
+                    }
+                }
+            }
+            self.apps_v1.patch_namespaced_daemon_set(
+                name, namespace, body, _request_timeout=10
+            )
+        except ApiException as e:
+            raise Exception(f"Failed to restart daemonset: {e.reason}")
+
     # ─── Describe / Events / 关联 Pod ───────────────────────────
     @staticmethod
     def _ts_to_str(ts):

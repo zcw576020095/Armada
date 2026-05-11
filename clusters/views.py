@@ -309,6 +309,12 @@ def cluster_select(request, pk):
     request.session['active_cluster_id'] = cluster.id
     messages.success(request, f'已切换到集群 "{cluster}"')
     next_url = request.GET.get('next', '/')
+
+    # Replace old cluster ID in URL with new cluster ID
+    import re
+    next_url = re.sub(r'/resources/\d+/', f'/resources/{pk}/', next_url)
+    next_url = re.sub(r'/clusters/\d+/', f'/clusters/{pk}/', next_url)
+
     return redirect(next_url)
 
 
