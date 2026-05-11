@@ -89,16 +89,57 @@ WSGI_APPLICATION = 'armada.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+#
+# 测试/开发环境：使用 SQLite（默认）
+#   - 优点：零配置，适合单机开发和演示
+#   - 限制：并发写性能有限，建议 10-20 人以下使用
+#   - 配置：无需额外环境变量，开箱即用
+#
+# 生产环境：使用 PostgreSQL（推荐）
+#   - 优点：支持高并发（100+ 用户），事务隔离完善，性能稳定
+#   - 配置：在 .env 中设置以下环境变量
+#       DB_ENGINE=postgresql
+#       DB_NAME=armada
+#       DB_USER=armada_user
+#       DB_PASSWORD=your_secure_password
+#       DB_HOST=localhost
+#       DB_PORT=5432
+#   - 初始化：
+#       1. 安装依赖：pip install psycopg2-binary
+#       2. 创建数据库：createdb armada
+#       3. 迁移表结构：python manage.py migrate
+#
+# 业务代码无需改动：Django ORM 自动适配不同数据库后端
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            'timeout': 30,
-        },
+_db_engine = os.environ.get('DB_ENGINE', 'sqlite3')
+
+if _db_engine == 'postgresql':
+    # 生产环境：PostgreSQL
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'armada'),
+            'USER': os.environ.get('DB_USER', 'armada_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+            'OPTIONS': {
+                'connect_timeout': 10,
+            },
+            'CONN_MAX_AGE': 600,  # 连接池：复用连接 10 分钟
+        }
     }
-}
+else:
+    # 测试/开发环境：SQLite（默认）
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+            'OPTIONS': {
+                'timeout': 30,
+            },
+        }
+    }
 
 
 # Password validation
