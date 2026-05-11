@@ -311,7 +311,6 @@ def cluster_select(request, pk):
     next_url = request.GET.get('next', '/')
 
     # Replace old cluster ID in URL with new cluster ID
-    import re
     next_url = re.sub(r'/resources/\d+/', f'/resources/{pk}/', next_url)
     next_url = re.sub(r'/clusters/\d+/', f'/clusters/{pk}/', next_url)
 
