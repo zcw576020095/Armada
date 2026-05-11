@@ -1056,9 +1056,23 @@ class K8sResourceManager:
         }
 
         try:
-            self.apps_v1.patch_namespaced_deployment(
-                name, namespace, patch_body,
-                _content_type='application/merge-patch+json',
+            # 直接用 api_client.call_api 设置 Content-Type 为 application/merge-patch+json
+            # kubernetes client v35 的 patch 方法不支持 _content_type 参数
+            path = f'/apis/apps/v1/namespaces/{namespace}/deployments/{name}'
+            header_params = {
+                'Content-Type': 'application/merge-patch+json',
+                'Accept': 'application/json',
+            }
+            self.apps_v1.api_client.call_api(
+                path, 'PATCH',
+                path_params={},
+                query_params=[],
+                header_params=header_params,
+                body=patch_body,
+                auth_settings=['BearerToken'],
+                response_type='V1Deployment',
+                _return_http_data_only=True,
+                _preload_content=True,
                 _request_timeout=15,
             )
         except ApiException as e:
@@ -1225,13 +1239,23 @@ class K8sResourceManager:
             raise Exception(f"Revision {target_rev} has no pod template")
 
         patch_body = {'spec': {'template': template}}
-        if sts.metadata.annotations is None:
-            sts.metadata.annotations = {}
 
         try:
-            self.apps_v1.patch_namespaced_stateful_set(
-                name, namespace, patch_body,
-                _content_type='application/merge-patch+json',
+            path = f'/apis/apps/v1/namespaces/{namespace}/statefulsets/{name}'
+            header_params = {
+                'Content-Type': 'application/merge-patch+json',
+                'Accept': 'application/json',
+            }
+            self.apps_v1.api_client.call_api(
+                path, 'PATCH',
+                path_params={},
+                query_params=[],
+                header_params=header_params,
+                body=patch_body,
+                auth_settings=['BearerToken'],
+                response_type='V1StatefulSet',
+                _return_http_data_only=True,
+                _preload_content=True,
                 _request_timeout=15,
             )
         except ApiException as e:
@@ -1393,9 +1417,21 @@ class K8sResourceManager:
 
         patch_body = {'spec': {'template': template}}
         try:
-            self.apps_v1.patch_namespaced_daemon_set(
-                name, namespace, patch_body,
-                _content_type='application/merge-patch+json',
+            path = f'/apis/apps/v1/namespaces/{namespace}/daemonsets/{name}'
+            header_params = {
+                'Content-Type': 'application/merge-patch+json',
+                'Accept': 'application/json',
+            }
+            self.apps_v1.api_client.call_api(
+                path, 'PATCH',
+                path_params={},
+                query_params=[],
+                header_params=header_params,
+                body=patch_body,
+                auth_settings=['BearerToken'],
+                response_type='V1DaemonSet',
+                _return_http_data_only=True,
+                _preload_content=True,
                 _request_timeout=15,
             )
         except ApiException as e:
