@@ -1007,10 +1007,10 @@ class K8sResourceManager:
     def rollback_deployment(self, name, namespace, target_revision):
         """把 deployment 的 spec.template 回滚到指定 revision 对应的 ReplicaSet template。
 
-        关键：必须用 replace（PUT 整个对象）而不是 patch。
-        K8s strategic merge patch 对 containers[].ports / env 这种 list 是按 merge key 合并，
-        只能"加项"不能"删项"——会出现回滚后端口越来越多的诡异现象。
-        replace 是整对象覆盖，没有 merge 语义，等价于 kubectl replace。
+        使用 JSON Merge Patch（content_type='application/merge-patch+json'）只 patch
+        spec.template 部分。相比 strategic merge patch，JSON merge patch 整体替换数组
+        （不会出现端口累积）；相比 replace（PUT），只发送 template 变更让 controller
+        能正确匹配已有 RS 并复用（不会每次回滚都多建一个 RS）。
         """
         target_rev = str(target_revision)
         try:
@@ -1019,7 +1019,6 @@ class K8sResourceManager:
             raise Exception(f"Failed to read deployment: {e.reason}")
 
         try:
-            # 全量拉 RS 用 owner_references 过滤，比 selector label 可靠
             rs_list = self.apps_v1.list_namespaced_replica_set(namespace, _request_timeout=15)
         except ApiException as e:
             raise Exception(f"Failed to list replica sets: {e.reason}")
@@ -1041,23 +1040,26 @@ class K8sResourceManager:
         if str(current_rev) == target_rev:
             raise Exception(f"Already at revision {target_rev}, no rollback needed")
 
-        # 整体替换 spec.template；剥掉旧 RS 的 pod-template-hash label——
-        # 这是 controller 自己加的，不剥的话 K8s 会把它当用户 label，每次回滚都
-        # 生成一个新 RS（revision 一直涨，即便实质内容一致）
-        dep.spec.template = target_rs.spec.template
-        self._strip_pod_template_hash(dep.spec.template)
+        # 将目标 RS 的 template 转为 dict，剥掉 pod-template-hash
+        from kubernetes.client import ApiClient
+        template_dict = ApiClient().sanitize_for_serialization(target_rs.spec.template)
+        labels = template_dict.get('metadata', {}).get('labels', {})
+        labels.pop(self.POD_TEMPLATE_HASH_LABEL, None)
 
-        if dep.metadata.annotations is None:
-            dep.metadata.annotations = {}
-        dep.metadata.annotations[self.CHANGE_CAUSE_ANNOTATION] = f'Rollback to revision {target_rev}'
-
-        # managed_fields 在 replace 时如果带上可能引发 server 端 conflict，去掉更稳
-        if hasattr(dep.metadata, 'managed_fields'):
-            dep.metadata.managed_fields = None
+        patch_body = {
+            'spec': {'template': template_dict},
+            'metadata': {
+                'annotations': {
+                    self.CHANGE_CAUSE_ANNOTATION: f'Rollback to revision {target_rev}',
+                }
+            }
+        }
 
         try:
-            self.apps_v1.replace_namespaced_deployment(
-                name, namespace, dep, _request_timeout=15
+            self.apps_v1.patch_namespaced_deployment(
+                name, namespace, patch_body,
+                _content_type='application/merge-patch+json',
+                _request_timeout=15,
             )
         except ApiException as e:
             raise Exception(f"Failed to rollback deployment: {e.reason}")
@@ -1228,7 +1230,9 @@ class K8sResourceManager:
 
         try:
             self.apps_v1.patch_namespaced_stateful_set(
-                name, namespace, patch_body, _request_timeout=15
+                name, namespace, patch_body,
+                _content_type='application/merge-patch+json',
+                _request_timeout=15,
             )
         except ApiException as e:
             raise Exception(f"Failed to rollback statefulset: {e.reason}")
@@ -1390,7 +1394,9 @@ class K8sResourceManager:
         patch_body = {'spec': {'template': template}}
         try:
             self.apps_v1.patch_namespaced_daemon_set(
-                name, namespace, patch_body, _request_timeout=15
+                name, namespace, patch_body,
+                _content_type='application/merge-patch+json',
+                _request_timeout=15,
             )
         except ApiException as e:
             raise Exception(f"Failed to rollback daemonset: {e.reason}")
