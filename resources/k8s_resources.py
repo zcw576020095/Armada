@@ -1,5 +1,6 @@
 """K8s 资源操作管理类"""
 import copy
+import json
 import logging
 import yaml
 from kubernetes import client
@@ -1152,7 +1153,7 @@ class K8sResourceManager:
     CONTROLLER_REVISION_HASH_LABEL = 'controller-revision-hash'
 
     def list_statefulset_revisions(self, name, namespace):
-        """列出 StatefulSet 的 ControllerRevision 历史，按 revision 倒序"""
+        """列出 StatefulSet 的 ControllerRevision 历史，按 revision 倒序，去重相同 pod template"""
         try:
             sts = self.apps_v1.read_namespaced_stateful_set(name, namespace, _request_timeout=10)
         except ApiException as e:
@@ -1180,8 +1181,21 @@ class K8sResourceManager:
         if sts.status and sts.status.update_revision:
             current_hash = sts.status.update_revision
 
-        revisions = []
+        # 按 template 去重：只保留每个唯一 template 的最新 revision
+        template_map = {}  # template_json -> highest revision CR
         for cr in owned:
+            template = None
+            if cr.data and isinstance(cr.data, dict):
+                spec_data = cr.data.get('spec', {})
+                template = spec_data.get('template') if isinstance(spec_data, dict) else None
+
+            template_key = json.dumps(template, sort_keys=True) if template else ''
+            existing = template_map.get(template_key)
+            if not existing or cr.revision > existing.revision:
+                template_map[template_key] = cr
+
+        revisions = []
+        for cr in template_map.values():
             containers = []
             if cr.data and isinstance(cr.data, dict):
                 spec_data = cr.data.get('spec', {})
@@ -1332,7 +1346,7 @@ class K8sResourceManager:
         }
 
     def list_daemonset_revisions(self, name, namespace):
-        """列出 DaemonSet 的 ControllerRevision 历史，按 revision 倒序"""
+        """列出 DaemonSet 的 ControllerRevision 历史，按 revision 倒序，去重相同 pod template"""
         try:
             ds = self.apps_v1.read_namespaced_daemon_set(name, namespace, _request_timeout=10)
         except ApiException as e:
@@ -1357,8 +1371,21 @@ class K8sResourceManager:
             labels = ds.spec.template.metadata.labels if ds.spec and ds.spec.template and ds.spec.template.metadata else {}
             current_hash = labels.get(self.CONTROLLER_REVISION_HASH_LABEL, '')
 
-        revisions = []
+        # 按 template 去重：只保留每个唯一 template 的最新 revision
+        template_map = {}  # template_json -> highest revision CR
         for cr in owned:
+            template = None
+            if cr.data and isinstance(cr.data, dict):
+                spec_data = cr.data.get('spec', {})
+                template = spec_data.get('template') if isinstance(spec_data, dict) else None
+
+            template_key = json.dumps(template, sort_keys=True) if template else ''
+            existing = template_map.get(template_key)
+            if not existing or cr.revision > existing.revision:
+                template_map[template_key] = cr
+
+        revisions = []
+        for cr in template_map.values():
             containers = []
             if cr.data and isinstance(cr.data, dict):
                 spec_data = cr.data.get('spec', {})

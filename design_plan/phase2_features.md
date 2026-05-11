@@ -386,11 +386,160 @@
 
 ---
 
-### 下一步计划
-- 继续重构其他资源管理页面（Pods、Deployments 等），统一使用 chart-card 外框 + 分页
-- 进入 Phase 2 功能开发（Events 查看器、资源详情页等）
+---
+
+## Phase 1 完成情况总结（截至 2026-05-11）
+
+### ✅ 已完成功能
+
+#### 核心资源管理（10 种资源类型）
+1. **Namespace** - 列表、创建、删除、强制完成、YAML 编辑
+2. **Deployment** - 列表、详情弹框、扩缩容、重启、回滚、YAML 编辑
+3. **StatefulSet** - 列表、详情弹框、扩缩容、重启、回滚、YAML 编辑
+4. **DaemonSet** - 列表、详情弹框、重启、回滚、YAML 编辑
+5. **Pod** - 列表、日志查看（静态 200 行）、删除（含强制删除）、YAML 查看（只读）
+6. **Service** - 列表、YAML 编辑、删除
+7. **Ingress** - 列表、YAML 编辑、删除
+8. **ConfigMap** - 列表、YAML 编辑、删除
+9. **Secret** - 列表、YAML 编辑、删除
+10. **PersistentVolumeClaim** - 列表、YAML 编辑、删除
+
+#### 集群管理
+- 多集群管理（添加/编辑/删除/刷新）
+- 节点列表（状态/角色/GPU/资源容量）
+- 节点详情（系统信息/Pod 列表/Cordon/Drain/删除）
+- Dashboard（节点卡片、资源统计、GPU 统计、分页）
+- Prometheus 集成（可选，CPU/内存使用率图表）
+
+#### 用户权限
+- 用户管理（创建/编辑/删除/禁用）
+- 权限管理（按集群/模块/操作的三维 RBAC）
+- 登录认证（Session + CSRF 保护）
+
+#### 基础设施
+- SQLite/PostgreSQL 双数据库配置（通过环境变量切换）
+- 后台 60 秒同步缓存（per-type 粒度锁，WAL 模式）
+- YAML server-side dry-run 校验（错误翻译为中文）
+- 乐观更新机制（写操作立即反馈，不等缓存同步）
+- Kubeconfig Fernet 加密存储
 
 ---
+
+### ❌ Phase 2 未完成功能
+
+#### 1. Events 查看器（高优先级）
+- **状态**：完全未实现
+- **缺失**：events 列表页、API、缓存同步、按资源类型/命名空间过滤
+- **预计工作量**：3-5 小时
+
+#### 2. 资源详情页（高优先级）
+- **状态**：部分完成
+  - ✅ Deployment/StatefulSet/DaemonSet 有详情弹框（概览/Events/关联 Pods）
+  - ❌ Pod 详情页（独立页面，显示 Conditions/Containers/Volumes/Events）
+  - ❌ Service 详情页（Endpoints/Selector）
+  - ❌ 其他资源详情页
+- **预计工作量**：10-14 小时
+
+#### 3. 实时日志流（中优先级）
+- **状态**：部分完成
+  - ✅ 静态日志查看（最近 200 行）
+  - ❌ WebSocket 实时推送、自动滚动、暂停/恢复、下载日志
+- **技术依赖**：Django Channels + Daphne
+- **预计工作量**：6-9 小时
+
+#### 4. Exec/Shell - Web Terminal（中优先级）
+- **状态**：完全未实现
+- **缺失**：WebSocket exec、xterm.js 终端、多容器选择
+- **技术依赖**：Django Channels + xterm.js
+- **预计工作量**：9-12 小时
+
+#### 5. CronJob/Job 管理（中优先级）
+- **状态**：完全未实现
+- **缺失**：列表、详情、暂停/恢复、手动触发、关联 Pod 列表
+- **预计工作量**：5-7 小时
+
+#### 6. HPA (Horizontal Pod Autoscaler)（低优先级）
+- **状态**：完全未实现
+- **缺失**：列表、创建、编辑、删除、Targets 显示
+- **预计工作量**：7-9 小时
+
+#### 7. StorageClass/PV 管理（低优先级）
+- **状态**：部分完成
+  - ✅ PVC 列表
+  - ❌ StorageClass 列表
+  - ❌ PV 列表
+- **预计工作量**：5-7 小时
+
+#### 8. RBAC 管理（低优先级）
+- **状态**：完全未实现
+- **缺失**：ServiceAccount、Role、ClusterRole、RoleBinding、ClusterRoleBinding
+- **预计工作量**：10-14 小时
+
+#### 9. Network Policy 管理（低优先级）
+- **状态**：完全未实现
+- **预计工作量**：4-6 小时
+
+#### 10. 资源使用趋势图（低优先级）
+- **状态**：部分完成
+  - ✅ Dashboard 显示当前时刻 CPU/内存使用率
+  - ❌ 历史趋势图（1h/6h/24h/7d）
+- **技术依赖**：Prometheus + PromQL 历史查询
+- **预计工作量**：10-13 小时
+
+---
+
+### 🆕 Phase 2 扩展功能（未在原规划中）
+
+#### 11. KEDA (Kubernetes Event Driven Autoscaling)
+- **状态**：完全未实现
+- **功能**：ScaledObject/ScaledJob 管理、Trigger 配置（Kafka/RabbitMQ/Prometheus 等）
+- **预计工作量**：8-12 小时
+- **备注**：需要集群安装 KEDA Operator
+
+---
+
+### 🔧 技术债务状态
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| Django Channels 集成 | ❌ 未完成 | 实时日志和 Exec 需要 WebSocket |
+| 前端框架升级 | ❌ 未完成 | 当前 Alpine.js，复杂交互可能需要 Vue/React |
+| 数据库迁移 | ✅ 已完成 | 支持 SQLite/PostgreSQL 双配置 |
+| 缓存优化 | ❌ 未完成 | LocMemCache → Redis（多进程支持）|
+| 权限系统完善 | ⚠️ 基本完成 | 已有三维 RBAC，可进一步细化 |
+
+---
+
+### 📊 Phase 2 剩余工作量统计
+
+| 优先级 | 功能数量 | 预计工作量 |
+|--------|---------|-----------|
+| 高 | 2 项 | 13-19 小时 |
+| 中 | 3 项 | 20-28 小时 |
+| 低 | 5 项 | 36-49 小时 |
+| **总计** | **10 项** | **69-96 小时** |
+
+---
+
+### 🎯 下一步实施建议
+
+#### 第一批（高优先级，立即实施）
+1. **Events 查看器**（3-5h）- 运维必备，快速定位集群问题
+2. **CronJob/Job 管理**（5-7h）- 常用资源类型，补全工作负载管理
+
+#### 第二批（中优先级，1-2 周后）
+3. **实时日志流**（6-9h）- 需要 Django Channels，提升日志查看体验
+4. **HPA 管理**（7-9h）- 自动扩缩容常用功能
+
+#### 第三批（中优先级，2-4 周后）
+5. **Exec/Shell**（9-12h）- 需要 Channels + xterm.js，调试利器
+
+#### 第四批（低优先级，按需实施）
+6. StorageClass/PV、RBAC、Network Policy、资源趋势图、KEDA
+
+---
+
+**最后更新：2026-05-11**
 
 ### 2026-04-22：节点管理分页 + Pod 日志查看
 
