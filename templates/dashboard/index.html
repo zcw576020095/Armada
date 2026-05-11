@@ -358,40 +358,92 @@
       <div id="capacityBar" style="width: 100%; height: 320px;"></div>
     </div>
 
-    <!-- Capacity Table -->
+    <!-- Node Detail Cards (same layout as metrics view, but showing capacity only) -->
     <div class="chart-card">
-      <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-4">节点容量明细</h3>
-      <div class="overflow-x-auto">
-        <table class="table table-sm">
-          <thead>
-            <tr class="border-b border-base-300">
-              <th class="font-semibold text-xs">节点</th>
-              <th class="font-semibold text-xs">类型</th>
-              <th class="font-semibold text-xs">CPU 容量</th>
-              <th class="font-semibold text-xs">内存容量</th>
-              <th class="font-semibold text-xs">容器运行时</th>
-              <th class="font-semibold text-xs">系统</th>
-              <th class="font-semibold text-xs">K8s</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="n in nodes" :key="n.name">
-              <tr class="hover:bg-base-200/50 border-b border-base-300/50">
-                <td class="font-mono text-xs" x-text="n.name"></td>
-                <td>
-                  <span class="badge badge-xs font-medium"
-                    :class="n.is_gpu ? 'bg-violet-500/15 text-violet-400 border-violet-500/30' : 'bg-sky-500/15 text-sky-400 border-sky-500/30'"
-                    x-text="n.is_gpu ? 'GPU' : 'CPU'"></span>
-                </td>
-                <td><span class="text-amber-400 font-medium text-xs" x-text="n.cpu_capacity + ' 核'"></span></td>
-                <td><span class="text-emerald-400 font-medium text-xs" x-text="n.mem_capacity_gb + ' GB'"></span></td>
-                <td><span class="text-[10px] opacity-40" x-text="n.container_runtime || '-'"></span></td>
-                <td><span class="text-[10px] opacity-40 truncate max-w-[120px] inline-block" x-text="n.os_image || '-'" :title="n.os_image"></span></td>
-                <td><span class="text-[10px] opacity-40" x-text="n.kubelet_version || '-'"></span></td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
+      <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">节点资源明细</h3>
+      <div class="flex items-center gap-2 mb-3">
+        <input type="text" x-model="nodeSearch" placeholder="搜索节点..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <template x-for="n in paginatedNodes" :key="n.name">
+          <div class="p-4 rounded-lg border border-base-300 bg-base-100 hover:border-base-content/15 transition-all">
+            <!-- Node Header -->
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="n.status === 'Ready' ? 'bg-green-400' : 'bg-red-400'" :title="n.status"></span>
+                <span class="badge badge-xs font-medium flex-shrink-0"
+                  :class="n.is_gpu ? 'bg-violet-500/15 text-violet-400 border-violet-500/30' : 'bg-sky-500/15 text-sky-400 border-sky-500/30'"
+                  x-text="n.is_gpu ? 'GPU' : 'CPU'"></span>
+                <span class="font-mono text-xs truncate" :title="n.name" x-text="n.name"></span>
+              </div>
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                <span x-show="n.is_gpu && n.gpu_model" class="text-[10px] text-violet-400 opacity-60" x-text="n.gpu_model + ' x' + n.gpu_count"></span>
+                <span class="text-[10px] opacity-30 px-1.5 py-0.5 rounded bg-base-200" x-text="n.roles"></span>
+              </div>
+            </div>
+            <!-- CPU Capacity -->
+            <div class="mb-2.5">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] opacity-40 flex items-center gap-1"><i class="fas fa-microchip text-[8px] text-amber-400"></i> CPU 容量</span>
+                <span class="text-[10px] font-medium text-amber-400" x-text="n.cpu_capacity + ' 核'"></span>
+              </div>
+              <div class="w-full bg-base-300/50 rounded-full h-1.5 overflow-hidden">
+                <div class="h-full rounded-full bg-amber-400/40" style="width: 100%"></div>
+              </div>
+            </div>
+            <!-- Memory Capacity -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] opacity-40 flex items-center gap-1"><i class="fas fa-memory text-[8px] text-emerald-400"></i> 内存容量</span>
+                <span class="text-[10px] font-medium text-emerald-400" x-text="n.mem_capacity_gb + ' GB'"></span>
+              </div>
+              <div class="w-full bg-base-300/50 rounded-full h-1.5 overflow-hidden">
+                <div class="h-full rounded-full bg-emerald-400/40" style="width: 100%"></div>
+              </div>
+            </div>
+            <!-- System Info -->
+            <div class="mt-3 pt-3 border-t border-base-300/50 grid grid-cols-2 gap-x-3 gap-y-1.5">
+              <div class="flex items-center gap-1.5" x-show="n.container_runtime">
+                <i class="fas fa-box text-[8px] text-cyan-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.container_runtime" :title="n.container_runtime"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.kubelet_version">
+                <i class="fab fa-kubernetes text-[8px] text-blue-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.kubelet_version"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.os_image">
+                <i class="fas fa-desktop text-[8px] text-violet-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.os_image" :title="n.os_image"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.kernel_version">
+                <i class="fas fa-terminal text-[8px] text-amber-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.kernel_version" :title="n.kernel_version"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.arch">
+                <i class="fas fa-cog text-[8px] text-emerald-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35" x-text="n.arch"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div x-show="paginatedNodes.length === 0 && filteredNodes.length > 0" class="text-center py-10 opacity-40 text-sm">没有匹配的节点</div>
+      <!-- Pagination -->
+      <div x-show="totalPages > 1" class="flex items-center justify-center gap-2 mt-4">
+        <button @click="currentPage = 1" :disabled="currentPage === 1" class="btn btn-ghost btn-xs gap-1" :class="currentPage === 1 ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-left text-[10px]"></i>
+        </button>
+        <button @click="currentPage--" :disabled="currentPage === 1" class="btn btn-ghost btn-xs gap-1" :class="currentPage === 1 ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-left text-[10px]"></i>
+        </button>
+        <span class="text-xs opacity-50 px-2">第 <span class="font-medium text-primary" x-text="currentPage"></span> / <span x-text="totalPages"></span> 页</span>
+        <span class="text-[10px] opacity-30">(<span x-text="filteredNodes.length"></span> 条)</span>
+        <button @click="currentPage++" :disabled="currentPage === totalPages" class="btn btn-ghost btn-xs gap-1" :class="currentPage === totalPages ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-right text-[10px]"></i>
+        </button>
+        <button @click="currentPage = totalPages" :disabled="currentPage === totalPages" class="btn btn-ghost btn-xs gap-1" :class="currentPage === totalPages ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-right text-[10px]"></i>
+        </button>
       </div>
     </div>
   </div>
