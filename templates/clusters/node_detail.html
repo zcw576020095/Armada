@@ -73,6 +73,7 @@
 
     <!-- Action Bar -->
     <div class="flex flex-wrap items-center gap-2 mb-5">
+      <!-- Cordon / Uncordon -->
       <template x-if="node.schedulable">
         <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all"
           @click="{% if can_edit %}cordonModal.showModal(){% else %}noPermission(){% endif %}">
@@ -85,18 +86,34 @@
           <i class="fas fa-check text-[10px]"></i> Uncordon
         </button>
       </template>
-      <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-amber-500/30 bg-base-100 text-amber-400 hover:bg-amber-500/10 transition-all"
-        @click="{% if can_edit %}drainModal.showModal(){% else %}noPermission(){% endif %}">
-        <i class="fas fa-water text-[10px]"></i> Drain
-      </button>
+      <!-- Drain / 已 Drain -->
+      <template x-if="!node.drained">
+        <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-amber-500/30 bg-base-100 text-amber-400 hover:bg-amber-500/10 transition-all"
+          @click="{% if can_edit %}drainModal.showModal(){% else %}noPermission(){% endif %}">
+          <i class="fas fa-water text-[10px]"></i> Drain
+        </button>
+      </template>
+      <template x-if="node.drained">
+        <span class="flex items-center gap-1.5 text-xs border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 px-3 h-8 rounded-lg">
+          <i class="fas fa-water text-[10px]"></i> 已 Drain
+          <span class="opacity-50 text-[10px]" x-show="node.drained_at" x-text="node.drained_at"></span>
+        </span>
+      </template>
       <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-rose-500/30 bg-base-100 text-rose-400 hover:bg-rose-500/10 transition-all"
         @click="{% if can_edit %}deleteNodeModal.showModal(){% else %}noPermission(){% endif %}">
         <i class="fas fa-trash-alt text-[10px]"></i> 移除节点
       </button>
-      <!-- Schedulable warning badge -->
-      <span x-show="!node.schedulable" class="ml-2 flex items-center gap-1.5 text-[10px] text-amber-400 border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 rounded-full">
-        <i class="fas fa-ban text-[8px]"></i> 已停止调度
-      </span>
+      <!-- 状态标签 -->
+      <template x-if="!node.schedulable && !node.drained">
+        <span class="ml-2 flex items-center gap-1.5 text-[10px] text-amber-400 border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 rounded-full">
+          <i class="fas fa-ban text-[8px]"></i> 已 Cordon（停止调度）
+        </span>
+      </template>
+      <template x-if="node.drained">
+        <span class="ml-2 flex items-center gap-1.5 text-[10px] text-cyan-400 border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 rounded-full">
+          <i class="fas fa-water text-[8px]"></i> 已 Drain（停止调度 + 已驱逐 Pod）
+        </span>
+      </template>
     </div>
 
     <!-- Top Info Cards -->

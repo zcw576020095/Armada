@@ -341,10 +341,13 @@ def node_info_api(request, pk, node_name):
         gpu_model = labels.get('nvidia.com/gpu.product', '')
         is_gpu = gpu_count and gpu_count != '0'
 
+        annotations = node.metadata.annotations or {}
         node_info = {
             'name': node.metadata.name,
             'status': 'Ready' if conditions.get('Ready') == 'True' else 'NotReady',
             'schedulable': node.spec.unschedulable is not True,
+            'drained': bool(annotations.get('armada.io/drained-at')),
+            'drained_at': annotations.get('armada.io/drained-at', ''),
             'roles': ','.join(
                 k.replace('node-role.kubernetes.io/', '')
                 for k in labels if k.startswith('node-role.kubernetes.io/')
@@ -405,11 +408,14 @@ def node_cordon(request, pk, node_name):
 
 @require_POST
 def node_uncordon(request, pk, node_name):
-    """Uncordon a node (mark as schedulable)."""
+    """Uncordon a node (mark as schedulable). Also clears drain annotation."""
     cluster = get_object_or_404(Cluster, pk=pk)
     try:
         core = k8s_pool.core_v1(cluster)
-        body = {"spec": {"unschedulable": None}}
+        body = {
+            "spec": {"unschedulable": None},
+            "metadata": {"annotations": {"armada.io/drained-at": None}}
+        }
         core.patch_node(node_name, body, _request_timeout=5)
         return JsonResponse({'success': True, 'message': f'节点 {node_name} 已恢复调度 (Uncordon)'})
     except Exception as e:
@@ -422,8 +428,12 @@ def node_drain(request, pk, node_name):
     cluster = get_object_or_404(Cluster, pk=pk)
     try:
         core = k8s_pool.core_v1(cluster)
-        # Step 1: cordon
-        core.patch_node(node_name, {"spec": {"unschedulable": True}}, _request_timeout=5)
+        # Step 1: cordon + 标记 drain annotation（区分 cordon 和 drain）
+        from django.utils import timezone
+        core.patch_node(node_name, {
+            "spec": {"unschedulable": True},
+            "metadata": {"annotations": {"armada.io/drained-at": timezone.now().strftime('%Y-%m-%d %H:%M:%S')}}
+        }, _request_timeout=5)
         # Step 2: evict non-daemonset pods
         pod_list = core.list_pod_for_all_namespaces(
             field_selector=f'spec.nodeName={node_name}', _request_timeout=5
