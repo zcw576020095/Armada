@@ -99,12 +99,23 @@
   <!-- ========== WITH Metrics ========== -->
   <div x-show="!loading && hasMetrics" x-cloak>
 
+    <!-- Pod Requests fallback banner -->
+    <div x-show="dataSource === 'pod_requests'" class="flex items-center gap-3 p-4 rounded-lg border border-blue-500/20 bg-blue-500/5 mb-5">
+      <div class="w-8 h-8 rounded-lg bg-blue-500/15 grid place-items-center flex-shrink-0">
+        <i class="fas fa-info-circle text-blue-400 text-sm"></i>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-blue-400">数据来源：Pod Requests 汇总</div>
+        <div class="text-xs opacity-50 mt-0.5">集群未安装 Metrics Server，CPU/内存数据基于各 Pod 的 resource requests 累加（已分配量），非实时使用量。安装 Metrics Server 后可获取实时数据。</div>
+      </div>
+    </div>
+
     <!-- Summary Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
       <div class="dash-card dash-card-amber">
         <div class="flex items-center justify-between">
           <div>
-            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">CPU 使用率</div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5" x-text="dataSource === 'pod_requests' ? 'CPU 已分配' : 'CPU 使用率'"></div>
             <div class="text-2xl font-bold text-amber-400" x-text="summary.cpu_percent + '%'"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-amber-500/15 grid place-items-center">
@@ -123,7 +134,7 @@
       <div class="dash-card dash-card-emerald">
         <div class="flex items-center justify-between">
           <div>
-            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">内存使用率</div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5" x-text="dataSource === 'pod_requests' ? '内存已分配' : '内存使用率'"></div>
             <div class="text-2xl font-bold text-emerald-400" x-text="summary.mem_percent + '%'"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-emerald-500/15 grid place-items-center">
@@ -466,6 +477,7 @@ function dashboard() {
     },
     error: null,
     hasMetrics: false,
+    dataSource: null,  // 'metrics_server' or 'pod_requests'
     nodeSearch: '',
     nodeSort: 'cpu_desc',
     currentPage: 1,
@@ -496,6 +508,7 @@ function dashboard() {
           this.summary = data.summary || this.summary;
           this.error = data.error;
           this.hasMetrics = data.has_metrics;
+          this.dataSource = data.data_source;
           this.loading = false;
           this.$nextTick(() => {
             if (this.hasMetrics) this.renderMetricsCharts();

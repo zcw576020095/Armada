@@ -551,6 +551,7 @@ def _fetch_metrics_data(cluster):
         core = k8s_pool.core_v1(cluster)
         node_cap = {}
         metrics_map = {}
+        requests_map = {}  # node_name -> {cpu_req, mem_req} from pod requests
 
         def fetch_nodes():
             node_list = core.list_node(_request_timeout=5)
@@ -600,21 +601,48 @@ def _fetch_metrics_data(cluster):
             except Exception:
                 pass
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        def fetch_pod_requests():
+            """Fallback: aggregate pod requests per node when metrics-server unavailable."""
+            try:
+                pod_list = core.list_pod_for_all_namespaces(field_selector='status.phase=Running', _request_timeout=5)
+                for pod in pod_list.items:
+                    node_name = pod.spec.node_name
+                    if not node_name:
+                        continue
+                    if node_name not in requests_map:
+                        requests_map[node_name] = {'cpu_req': 0.0, 'mem_req': 0}
+                    for container in (pod.spec.containers or []):
+                        requests = container.resources.requests or {}
+                        cpu_req = requests.get('cpu', '0')
+                        mem_req = requests.get('memory', '0')
+                        requests_map[node_name]['cpu_req'] += _parse_cpu_nano(cpu_req)
+                        requests_map[node_name]['mem_req'] += _parse_memory_bytes(mem_req)
+            except Exception:
+                pass
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
             executor.submit(fetch_nodes)
             executor.submit(fetch_metrics)
+            executor.submit(fetch_pod_requests)
 
         # Combine data
         nodes_data = []
         totals = {'cpu_capacity': 0.0, 'cpu_used': 0.0, 'mem_capacity': 0, 'mem_used': 0}
-        data_source = 'metrics_server' if metrics_map else None
+        data_source = 'metrics_server' if metrics_map else ('pod_requests' if requests_map else None)
 
         for name, cap in node_cap.items():
-            met = metrics_map.get(name, {'cpu_used': 0, 'mem_used': 0})
+            # Prefer metrics_server, fallback to pod requests
+            if metrics_map:
+                met = metrics_map.get(name, {'cpu_used': 0, 'mem_used': 0})
+                cpu_used = met['cpu_used']
+                mem_used = met['mem_used']
+            else:
+                req = requests_map.get(name, {'cpu_req': 0.0, 'mem_req': 0})
+                cpu_used = req['cpu_req']
+                mem_used = req['mem_req']
+
             cpu_cap = cap['cpu_capacity']
-            cpu_used = met['cpu_used']
             mem_cap = cap['mem_capacity']
-            mem_used = met['mem_used']
 
             totals['cpu_capacity'] += cpu_cap
             totals['cpu_used'] += cpu_used
@@ -655,7 +683,7 @@ def _fetch_metrics_data(cluster):
         return {
             'nodes': nodes_data,
             'summary': summary,
-            'has_metrics': len(metrics_map) > 0,
+            'has_metrics': len(metrics_map) > 0 or len(requests_map) > 0,
             'data_source': data_source,
         }
 
