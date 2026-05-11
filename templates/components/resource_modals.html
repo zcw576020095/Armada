@@ -304,7 +304,7 @@
 </dialog>
 
 <!-- Workload Describe Modal (Deployment/StatefulSet/DaemonSet) -->
-<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto()">
+<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto(); window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}))">
   <div class="modal-box bg-base-100 border border-base-300 rounded-2xl shadow-2xl flex flex-col p-0" style="width: 80vw; max-width: 80vw; height: 85vh;">
     <!-- Header -->
     <div class="flex items-center justify-between px-5 py-3 border-b border-base-300 flex-shrink-0">

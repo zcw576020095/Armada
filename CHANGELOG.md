@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### 修复
+- **详情弹框关闭后列表副本数未更新**：详情弹框实时从 K8s API 拉数据，关闭后列表页仍读旧缓存导致副本数显示滞后（如 Pod 已 Running 但列表仍显示 0/1）。修改详情弹框关闭时 dispatch `resource-updated` 事件，列表页收到无 action 的事件时带 `refresh=1` 强制后端 `trigger_immediate_sync` 拉最新数据
 - **集群切换后资源列表仍显示旧集群数据**：顶部导航栏集群下拉切换后，`cluster_select` 视图仅把新集群 ID 存入 session 但重定向回原 URL（仍含旧集群 ID），导致 API 请求仍然查询旧集群。修改 `cluster_select` 将重定向 URL 中的 `/resources/<old_pk>/` 和 `/clusters/<old_pk>/` 替换为新集群 ID
 
 ### 新增

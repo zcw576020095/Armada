@@ -24,7 +24,9 @@
       markUpdated(d.resource);
     }
     // 1.5s 后静默刷新拉后端真实数据；若仍有 Terminating 资源会自动轮询直到消失
-    setTimeout(() => load({silent: true}), 1500);
+    // 无具体 action 的事件（如详情弹框关闭）带 refresh 强制同步缓存
+    const needRefresh = !d || !d.action;
+    setTimeout(() => load({silent: true, refresh: needRefresh}), 1500);
   ">
   <div class="card-body p-5">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">

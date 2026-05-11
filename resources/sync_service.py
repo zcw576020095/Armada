@@ -52,6 +52,12 @@ def get_sync_error(cluster_id):
     return _sync_last_error.get(cluster_id)
 
 
+def _is_local_db_error(exc):
+    """判断是否为本地 SQLite 错误（不应当成集群连接问题展示给用户）"""
+    msg = str(exc).lower()
+    return 'database is locked' in msg or 'disk i/o error' in msg
+
+
 def _describe_sync_error(exc):
     """把底层异常翻译成对运维有意义的中文一句话。
 
@@ -178,7 +184,8 @@ def _sync_all_resources(cluster):
                 _sync_resource(cluster, resource_type, list_func)
             except Exception as e:
                 logger.error(f'[Cluster {cluster.name}] Failed to sync {resource_type}: {e}')
-                had_error = (resource_type, e)
+                if not _is_local_db_error(e):
+                    had_error = (resource_type, e)
                 continue
 
     elapsed = time.time() - start_time
@@ -197,6 +204,7 @@ def _sync_all_resources(cluster):
 def _sync_resource(cluster, resource_type, list_func):
     """同步单个资源类型"""
     from resources.models import K8sResourceCache
+    from django.db import OperationalError
 
     start = time.time()
 
@@ -214,16 +222,29 @@ def _sync_resource(cluster, resource_type, list_func):
             logger.warning(f'Failed to serialize {resource_type} {item.metadata.name}: {e}')
             continue
 
-    # 更新数据库
-    K8sResourceCache.objects.update_or_create(
-        cluster_id=cluster.pk,
-        resource_type=resource_type,
-        namespace='',  # 全量数据
-        defaults={
-            'data': serialized,
-            'synced_at': timezone.now(),
-        }
-    )
+    # 更新数据库（带重试，应对 SQLite 并发写锁冲突）
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            K8sResourceCache.objects.update_or_create(
+                cluster_id=cluster.pk,
+                resource_type=resource_type,
+                namespace='',  # 全量数据
+                defaults={
+                    'data': serialized,
+                    'synced_at': timezone.now(),
+                }
+            )
+            break  # 成功则退出重试循环
+        except OperationalError as e:
+            if 'database is locked' in str(e).lower() and attempt < max_retries - 1:
+                # SQLite 写锁冲突，等待后重试
+                wait_time = 0.1 * (2 ** attempt)  # 指数退避：0.1s, 0.2s, 0.4s
+                logger.warning(f'[{resource_type}] Database locked, retry {attempt+1}/{max_retries} after {wait_time}s')
+                time.sleep(wait_time)
+            else:
+                # 最后一次重试失败或其他 OperationalError，向上抛
+                raise
 
     elapsed = time.time() - start
     logger.info(f'[{resource_type}] Synced {len(serialized)} items in {elapsed:.1f}s')
@@ -453,11 +474,12 @@ def trigger_immediate_sync(cluster, resource_type, wait=False, timeout=5):
                 logger.info(f'[Cluster {cluster.name}] Immediate sync done for {resource_type}')
             except Exception as e:
                 logger.error(f'[Cluster {cluster.name}] Immediate sync failed for {resource_type}: {e}')
-                _sync_last_error[cluster_id] = {
-                    'resource_type': resource_type,
-                    'message': _describe_sync_error(e),
-                    'failed_at': timezone.now().isoformat(),
-                }
+                if not _is_local_db_error(e):
+                    _sync_last_error[cluster_id] = {
+                        'resource_type': resource_type,
+                        'message': _describe_sync_error(e),
+                        'failed_at': timezone.now().isoformat(),
+                    }
 
     thread = threading.Thread(target=_do_sync, daemon=True, name=f'ImmediateSync-{resource_type}')
     thread.start()
