@@ -15,6 +15,7 @@
 - 详情弹框关闭后列表副本数未同步更新
 - 节点 Drain 后状态误显示为 "Uncordon"
 - SQLite "database is locked" 误报为集群连接异常（PRAGMA 配置未生效，改用 connection_created 信号）
+- StatefulSet/DaemonSet 回滚版本列表显示扩缩容产生的重复版本（按 pod template 去重）
 
 ---
 
