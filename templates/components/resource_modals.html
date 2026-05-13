@@ -305,17 +305,17 @@
 
 <!-- Workload Describe Modal (Deployment/StatefulSet/DaemonSet) -->
 <dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto(); window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}))">
-  <div class="modal-box bg-base-100 border border-base-300 shadow-2xl flex flex-col p-0" style="width: 85vw; max-width: 85vw; height: 88vh; border-radius: 20px;">
+  <div class="modal-box bg-base-100 shadow-2xl flex flex-col p-0" style="width: 85vw; max-width: 85vw; height: 88vh; border-radius: 20px;">
     <!-- Header -->
-    <div class="flex items-center justify-between px-6 py-4 border-b border-base-300 flex-shrink-0 bg-base-200/50">
+    <div class="flex items-center justify-between px-7 py-5 border-b border-base-200 flex-shrink-0">
       <div class="flex items-center gap-4">
-        <div class="w-12 h-12 rounded-2xl grid place-items-center shadow-lg bg-primary/20">
+        <div class="w-12 h-12 rounded-2xl grid place-items-center shadow-lg bg-primary/15">
           <i class="fas text-lg text-primary" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : 'fa-clone'"></i>
         </div>
         <div>
-          <h3 class="font-bold text-lg mb-1" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : 'DaemonSet') + ' 详情'"></h3>
-          <div class="flex items-center gap-2 text-xs opacity-60">
-            <span class="px-2 py-0.5 rounded-md font-mono bg-primary/15 text-primary" x-text="meta.namespace"></span>
+          <h3 class="font-bold text-lg" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : 'DaemonSet') + ' 详情'"></h3>
+          <div class="flex items-center gap-2 text-xs opacity-50 mt-1">
+            <span class="px-2 py-0.5 rounded-md font-mono bg-base-200 text-base-content/70" x-text="meta.namespace"></span>
             <span>/</span>
             <span class="font-semibold" x-text="meta.name"></span>
           </div>
@@ -332,10 +332,10 @@
     </div>
 
     <!-- Tab 切换 -->
-    <div class="flex items-center gap-2 px-6 pt-4 flex-shrink-0">
+    <div class="flex items-center gap-2 px-7 pt-5 flex-shrink-0">
       <template x-for="t in tabs" :key="t.key">
         <button class="btn btn-sm h-10 min-h-0 gap-2 text-xs rounded-xl transition-all"
-                :class="tab === t.key ? 'btn-primary shadow-lg' : 'btn-ghost'"
+                :class="tab === t.key ? 'btn-primary shadow-md' : 'btn-ghost'"
                 @click="tab = t.key">
           <i class="fas text-xs" :class="t.icon"></i>
           <span x-text="t.label"></span>
@@ -345,7 +345,7 @@
     </div>
 
     <!-- 内容 -->
-    <div class="flex-1 overflow-y-auto px-6 py-5 text-xs">
+    <div class="flex-1 overflow-y-auto px-7 py-6 text-xs">
       <div x-show="loading" class="flex items-center justify-center py-20 gap-3 opacity-50">
         <span class="loading loading-spinner loading-md text-primary"></span>
         <span class="text-sm">加载中...</span>
@@ -353,33 +353,33 @@
       <div x-show="!loading && error" class="alert alert-error text-xs"><i class="fas fa-exclamation-triangle"></i><span x-text="error"></span></div>
 
       <!-- Tab: 概览 -->
-      <div x-show="!loading && !error && tab === 'overview'" x-cloak class="space-y-5">
+      <div x-show="!loading && !error && tab === 'overview'" x-cloak class="space-y-6">
         <!-- 健康总览：任意 condition 异常时强提示 -->
         <template x-if="abnormalConditions.length > 0">
-          <div class="rounded-xl p-4 bg-error/10 border border-error/25">
+          <div class="rounded-2xl p-5 bg-error/5 border border-error/20 shadow-sm">
             <div class="flex items-start gap-3">
-              <div class="w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 bg-error/15">
+              <div class="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0 bg-error/10 shadow-sm">
                 <i class="fas fa-exclamation-triangle text-sm text-error"></i>
               </div>
               <div class="flex-1">
-                <div class="font-semibold text-[13px] mb-2 text-error">
+                <div class="font-semibold text-sm mb-2.5 text-error">
                   <span x-text="resourceTypeLabel"></span> 当前不健康（<span x-text="abnormalConditions.length"></span> 个异常状态）
                 </div>
                 <template x-for="c in abnormalConditions" :key="c.type">
-                  <div class="text-xs mb-1.5 last:mb-0 text-error/80">
+                  <div class="text-xs mb-2 last:mb-0 text-error/80">
                     <span class="font-mono font-semibold" x-text="c.type + '=' + c.status"></span>
                     <span class="opacity-30"> &middot; </span>
                     <span class="font-mono" x-text="c.reason"></span>
-                    <div class="mt-0.5 ml-1 opacity-70" x-show="c.message" x-text="c.message"></div>
+                    <div class="mt-1 ml-1 opacity-70" x-show="c.message" x-text="c.message"></div>
                   </div>
                 </template>
                 <template x-if="podBlockReasons.length > 0">
-                  <div class="mt-2.5 pt-2.5 text-xs border-t border-error/20">
-                    <div class="mb-1 text-error/60">关联 Pod 卡点：</div>
+                  <div class="mt-3 pt-3 text-xs border-t border-error/15">
+                    <div class="mb-1.5 text-error/60 font-medium">关联 Pod 卡点：</div>
                     <template x-for="r in podBlockReasons" :key="r">
-                      <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-mono mr-1.5 mb-1 bg-error/15 border border-error/25 text-error/80" x-text="r"></span>
+                      <span class="inline-block text-[10px] px-2 py-1 rounded-lg font-mono mr-1.5 mb-1 bg-error/10 text-error shadow-sm" x-text="r"></span>
                     </template>
-                    <span class="opacity-40">→ 切到「关联 Pods」标签查看</span>
+                    <span class="opacity-40 text-xs">→ 切到「关联 Pods」标签查看</span>
                   </div>
                 </template>
               </div>
@@ -389,28 +389,29 @@
 
         <!-- Deployment: 滚动更新 Pod 数量超出解释 -->
         <template x-if="resourceType === 'deployment' && !isRolling && pods.length > info.replicas && info.replicas > 0">
-          <div class="rounded-xl p-4 bg-warning/10 border border-warning/20">
+          <div class="rounded-2xl p-5 bg-warning/5 border border-warning/20 shadow-sm">
             <div class="flex items-start gap-3">
-              <div class="w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 bg-warning/15">
+              <div class="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0 bg-warning/10 shadow-sm">
                 <i class="fas fa-info-circle text-sm text-warning"></i>
               </div>
               <div class="text-xs leading-relaxed text-warning/80">
-                <span class="font-semibold">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span><br>
+                <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
                 K8s 滚动更新时旧 ReplicaSet 的 Pod 需等新 Pod 就绪后才会被删除。
                 当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留。<br>
-                <span class="opacity-60">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
+                <span class="opacity-60 text-xs">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
               </div>
             </div>
           </div>
         </template>
         <template x-if="resourceType === 'deployment' && isRolling">
-          <div class="rounded-xl p-4 bg-warning/10 border border-warning/20">
+          <div class="rounded-2xl p-5 bg-info/5 border border-info/20 shadow-sm">
             <div class="flex items-start gap-3">
-              <div class="w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 bg-warning/15">
-                <i class="fas fa-sync-alt text-sm animate-spin text-warning"></i>
+              <div class="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0 bg-info/10 shadow-sm">
+                <i class="fas fa-sync-alt text-sm animate-spin text-info"></i>
               </div>
-              <div class="text-xs leading-relaxed text-warning/80">
-                <span class="font-semibold">滚动更新进行中</span>（已更新 <span x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span>）<br>
+              <div class="text-xs leading-relaxed text-info/80">
+                <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
+                已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本<br>
                 K8s 正在逐步替换旧 Pod，Pod 总数会暂时超过期望副本数，更新完成后恢复正常。
               </div>
             </div>
@@ -421,17 +422,19 @@
         <template x-if="resourceType === 'deployment'">
           <div class="grid grid-cols-4 gap-4">
             <template x-for="card in [
-              {label:'期望副本', val: info.replicas, icon: 'fa-crosshairs', cls: 'primary'},
-              {label:'就绪', val: info.ready_replicas, icon: 'fa-check-circle', cls: 'success'},
-              {label:'已更新', val: info.updated_replicas, icon: 'fa-arrow-up', cls: 'info'},
-              {label:'不可用', val: info.unavailable_replicas, icon: 'fa-times-circle', cls: 'error'}
+              {label:'期望副本', val: info.replicas, icon: 'fa-crosshairs', cls: 'primary', shadow: 'shadow-primary/20'},
+              {label:'就绪', val: info.ready_replicas, icon: 'fa-check-circle', cls: 'success', shadow: 'shadow-success/20'},
+              {label:'已更新', val: info.updated_replicas, icon: 'fa-arrow-up', cls: 'info', shadow: 'shadow-info/20'},
+              {label:'不可用', val: info.unavailable_replicas, icon: 'fa-times-circle', cls: 'error', shadow: 'shadow-error/20'}
             ]">
-              <div class="rounded-xl p-4 transition-all hover:scale-[1.02] border" :class="'bg-' + card.cls + '/10 border-' + card.cls + '/25'">
-                <div class="flex items-center gap-2 mb-2">
-                  <i class="fas text-xs" :class="card.icon + ' text-' + card.cls"></i>
-                  <span class="text-[11px] font-medium opacity-60" x-text="card.label"></span>
+              <div class="rounded-2xl p-5 transition-all hover:scale-[1.02] shadow-lg" :class="'bg-' + card.cls + '/5 ' + card.shadow" style="backdrop-filter: blur(10px);">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="w-8 h-8 rounded-xl grid place-items-center shadow-sm" :class="'bg-' + card.cls + '/15'">
+                    <i class="fas text-sm" :class="card.icon + ' text-' + card.cls"></i>
+                  </div>
+                  <span class="text-xs font-medium opacity-60" x-text="card.label"></span>
                 </div>
-                <div class="text-2xl font-bold" :class="'text-' + card.cls" x-text="card.val ?? 0"></div>
+                <div class="text-3xl font-bold tracking-tight" :class="'text-' + card.cls" x-text="card.val ?? 0"></div>
               </div>
             </template>
           </div>
@@ -441,17 +444,19 @@
         <template x-if="resourceType === 'statefulset'">
           <div class="grid grid-cols-4 gap-4">
             <template x-for="card in [
-              {label:'期望副本', val: info.replicas, icon: 'fa-crosshairs', cls: 'primary'},
-              {label:'就绪', val: info.ready_replicas, icon: 'fa-check-circle', cls: 'success'},
-              {label:'已更新', val: info.updated_replicas, icon: 'fa-arrow-up', cls: 'info'},
-              {label:'当前', val: info.current_replicas, icon: 'fa-server', cls: 'accent'}
+              {label:'期望副本', val: info.replicas, icon: 'fa-crosshairs', cls: 'primary', shadow: 'shadow-primary/20'},
+              {label:'就绪', val: info.ready_replicas, icon: 'fa-check-circle', cls: 'success', shadow: 'shadow-success/20'},
+              {label:'已更新', val: info.updated_replicas, icon: 'fa-arrow-up', cls: 'info', shadow: 'shadow-info/20'},
+              {label:'当前', val: info.current_replicas, icon: 'fa-server', cls: 'accent', shadow: 'shadow-accent/20'}
             ]">
-              <div class="rounded-xl p-4 transition-all hover:scale-[1.02] border" :class="'bg-' + card.cls + '/10 border-' + card.cls + '/25'">
-                <div class="flex items-center gap-2 mb-2">
-                  <i class="fas text-xs" :class="card.icon + ' text-' + card.cls"></i>
-                  <span class="text-[11px] font-medium opacity-60" x-text="card.label"></span>
+              <div class="rounded-2xl p-5 transition-all hover:scale-[1.02] shadow-lg" :class="'bg-' + card.cls + '/5 ' + card.shadow" style="backdrop-filter: blur(10px);">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="w-8 h-8 rounded-xl grid place-items-center shadow-sm" :class="'bg-' + card.cls + '/15'">
+                    <i class="fas text-sm" :class="card.icon + ' text-' + card.cls"></i>
+                  </div>
+                  <span class="text-xs font-medium opacity-60" x-text="card.label"></span>
                 </div>
-                <div class="text-2xl font-bold" :class="'text-' + card.cls" x-text="card.val ?? 0"></div>
+                <div class="text-3xl font-bold tracking-tight" :class="'text-' + card.cls" x-text="card.val ?? 0"></div>
               </div>
             </template>
           </div>
@@ -461,18 +466,20 @@
         <template x-if="resourceType === 'daemonset'">
           <div class="grid grid-cols-5 gap-3">
             <template x-for="card in [
-              {label:'期望节点数', val: info.desired, icon: 'fa-crosshairs', cls: 'primary'},
-              {label:'当前', val: info.current, icon: 'fa-server', cls: 'accent'},
-              {label:'就绪', val: info.ready, icon: 'fa-check-circle', cls: 'success'},
-              {label:'已更新', val: info.updated, icon: 'fa-arrow-up', cls: 'info'},
-              {label:'可用', val: info.available, icon: 'fa-check-double', cls: 'secondary'}
+              {label:'期望节点数', val: info.desired, icon: 'fa-crosshairs', cls: 'primary', shadow: 'shadow-primary/20'},
+              {label:'当前', val: info.current, icon: 'fa-server', cls: 'accent', shadow: 'shadow-accent/20'},
+              {label:'就绪', val: info.ready, icon: 'fa-check-circle', cls: 'success', shadow: 'shadow-success/20'},
+              {label:'已更新', val: info.updated, icon: 'fa-arrow-up', cls: 'info', shadow: 'shadow-info/20'},
+              {label:'可用', val: info.available, icon: 'fa-check-double', cls: 'secondary', shadow: 'shadow-secondary/20'}
             ]">
-              <div class="rounded-xl p-3 transition-all hover:scale-[1.02] border" :class="'bg-' + card.cls + '/10 border-' + card.cls + '/25'">
+              <div class="rounded-2xl p-4 transition-all hover:scale-[1.02] shadow-lg" :class="'bg-' + card.cls + '/5 ' + card.shadow" style="backdrop-filter: blur(10px);">
                 <div class="flex items-center gap-2 mb-2">
-                  <i class="fas text-[10px]" :class="card.icon + ' text-' + card.cls"></i>
+                  <div class="w-7 h-7 rounded-lg grid place-items-center shadow-sm" :class="'bg-' + card.cls + '/15'">
+                    <i class="fas text-xs" :class="card.icon + ' text-' + card.cls"></i>
+                  </div>
                   <span class="text-[10px] font-medium opacity-60" x-text="card.label"></span>
                 </div>
-                <div class="text-xl font-bold" :class="'text-' + card.cls" x-text="card.val ?? 0"></div>
+                <div class="text-2xl font-bold tracking-tight" :class="'text-' + card.cls" x-text="card.val ?? 0"></div>
               </div>
             </template>
           </div>
@@ -480,258 +487,282 @@
 
         <!-- 基本信息 - Deployment -->
         <template x-if="resourceType === 'deployment'">
-          <div class="rounded-xl p-5 bg-base-200/50 border border-base-300">
-            <div class="flex items-center gap-2 mb-4">
-              <i class="fas fa-info-circle text-xs text-primary"></i>
-              <span class="font-semibold text-xs uppercase tracking-wider text-primary">基本信息</span>
-            </div>
-            <div class="grid grid-cols-2 gap-y-3 gap-x-8">
-              <template x-for="item in [
-                {k:'命名空间', v: info.namespace},
-                {k:'创建时间', v: info.created},
-                {k:'更新策略', v: info.strategy?.type || '-'},
-                {k:'滚动参数', v: (info.strategy?.max_surge || '-') + ' / ' + (info.strategy?.max_unavailable || '-')},
-                {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
-                {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
-              ]">
-                <div class="flex items-baseline gap-3 text-xs">
-                  <span class="flex-shrink-0 w-20 text-right font-medium opacity-50" x-text="item.k"></span>
-                  <span class="font-mono break-all text-base-content" x-text="item.v"></span>
+          <div class="card bg-base-200/60 shadow-md rounded-2xl">
+            <div class="card-body p-5">
+              <div class="flex items-center gap-2 mb-4">
+                <div class="w-7 h-7 rounded-lg grid place-items-center bg-primary/10">
+                  <i class="fas fa-info-circle text-xs text-primary"></i>
                 </div>
-              </template>
+                <span class="font-semibold text-sm text-base-content">基本信息</span>
+              </div>
+              <div class="grid grid-cols-2 gap-y-3.5 gap-x-8">
+                <template x-for="item in [
+                  {k:'命名空间', v: info.namespace},
+                  {k:'创建时间', v: info.created},
+                  {k:'更新策略', v: info.strategy?.type || '-'},
+                  {k:'滚动参数', v: (info.strategy?.max_surge || '-') + ' / ' + (info.strategy?.max_unavailable || '-')},
+                  {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
+                  {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
+                ]">
+                  <div class="flex items-baseline gap-3 text-xs">
+                    <span class="flex-shrink-0 w-20 text-right font-medium opacity-40" x-text="item.k"></span>
+                    <span class="font-mono break-all text-base-content/90" x-text="item.v"></span>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </template>
 
         <!-- 基本信息 - StatefulSet -->
         <template x-if="resourceType === 'statefulset'">
-          <div class="rounded-xl p-5 bg-base-200/50 border border-base-300">
-            <div class="flex items-center gap-2 mb-4">
-              <i class="fas fa-info-circle text-xs text-primary"></i>
-              <span class="font-semibold text-xs uppercase tracking-wider text-primary">基本信息</span>
-            </div>
-            <div class="grid grid-cols-2 gap-y-3 gap-x-8">
-              <template x-for="item in [
-                {k:'命名空间', v: info.namespace},
-                {k:'创建时间', v: info.created},
-                {k:'Service', v: info.service_name || '-'},
-                {k:'Pod 管理策略', v: info.pod_management_policy || '-'},
-                {k:'更新策略', v: info.strategy?.type || '-'},
-                {k:'Partition', v: String(info.strategy?.partition ?? '-')},
-                {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
-                {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
-              ]">
-                <div class="flex items-baseline gap-3 text-xs">
-                  <span class="flex-shrink-0 w-24 text-right font-medium opacity-50" x-text="item.k"></span>
-                  <span class="font-mono break-all text-base-content" x-text="item.v"></span>
+          <div class="card bg-base-200/60 shadow-md rounded-2xl">
+            <div class="card-body p-5">
+              <div class="flex items-center gap-2 mb-4">
+                <div class="w-7 h-7 rounded-lg grid place-items-center bg-primary/10">
+                  <i class="fas fa-info-circle text-xs text-primary"></i>
                 </div>
-              </template>
+                <span class="font-semibold text-sm text-base-content">基本信息</span>
+              </div>
+              <div class="grid grid-cols-2 gap-y-3.5 gap-x-8">
+                <template x-for="item in [
+                  {k:'命名空间', v: info.namespace},
+                  {k:'创建时间', v: info.created},
+                  {k:'Service', v: info.service_name || '-'},
+                  {k:'Pod 管理策略', v: info.pod_management_policy || '-'},
+                  {k:'更新策略', v: info.strategy?.type || '-'},
+                  {k:'Partition', v: String(info.strategy?.partition ?? '-')},
+                  {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
+                  {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
+                ]">
+                  <div class="flex items-baseline gap-3 text-xs">
+                    <span class="flex-shrink-0 w-24 text-right font-medium opacity-40" x-text="item.k"></span>
+                    <span class="font-mono break-all text-base-content/90" x-text="item.v"></span>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </template>
 
         <!-- 基本信息 - DaemonSet -->
         <template x-if="resourceType === 'daemonset'">
-          <div class="rounded-xl p-5 bg-base-200/50 border border-base-300">
-            <div class="flex items-center gap-2 mb-4">
-              <i class="fas fa-info-circle text-xs text-primary"></i>
-              <span class="font-semibold text-xs uppercase tracking-wider text-primary">基本信息</span>
-            </div>
-            <div class="grid grid-cols-2 gap-y-3 gap-x-8">
-              <template x-for="item in [
-                {k:'命名空间', v: info.namespace},
-                {k:'创建时间', v: info.created},
-                {k:'更新策略', v: info.strategy?.type || '-'},
-                {k:'maxUnavailable', v: info.strategy?.max_unavailable || '-'},
-                {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
-                {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
-              ]">
-                <div class="flex items-baseline gap-3 text-xs">
-                  <span class="flex-shrink-0 w-24 text-right font-medium opacity-50" x-text="item.k"></span>
-                  <span class="font-mono break-all text-base-content" x-text="item.v"></span>
+          <div class="card bg-base-200/60 shadow-md rounded-2xl">
+            <div class="card-body p-5">
+              <div class="flex items-center gap-2 mb-4">
+                <div class="w-7 h-7 rounded-lg grid place-items-center bg-primary/10">
+                  <i class="fas fa-info-circle text-xs text-primary"></i>
                 </div>
-              </template>
+                <span class="font-semibold text-sm text-base-content">基本信息</span>
+              </div>
+              <div class="grid grid-cols-2 gap-y-3.5 gap-x-8">
+                <template x-for="item in [
+                  {k:'命名空间', v: info.namespace},
+                  {k:'创建时间', v: info.created},
+                  {k:'更新策略', v: info.strategy?.type || '-'},
+                  {k:'maxUnavailable', v: info.strategy?.max_unavailable || '-'},
+                  {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
+                  {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
+                ]">
+                  <div class="flex items-baseline gap-3 text-xs">
+                    <span class="flex-shrink-0 w-24 text-right font-medium opacity-40" x-text="item.k"></span>
+                    <span class="font-mono break-all text-base-content/90" x-text="item.v"></span>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </template>
 
         <!-- 容器 -->
-        <div class="rounded-xl p-5 bg-base-200/50 border border-base-300">
-          <div class="flex items-center gap-2 mb-4">
-            <i class="fas fa-cube text-xs text-info"></i>
-            <span class="font-semibold text-xs uppercase tracking-wider text-info">容器</span>
-          </div>
-          <template x-for="c in info.containers || []" :key="c.name">
-            <div class="flex items-center gap-3 mb-3 last:mb-0 p-3 rounded-lg bg-info/5 border border-info/10">
-              <div class="w-8 h-8 rounded-lg grid place-items-center flex-shrink-0 bg-info/15">
-                <i class="fas fa-box text-xs text-info"></i>
+        <div class="card bg-base-200/60 shadow-md rounded-2xl">
+          <div class="card-body p-5">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-7 h-7 rounded-lg grid place-items-center bg-info/10">
+                <i class="fas fa-cube text-xs text-info"></i>
               </div>
-              <div class="flex-1 min-w-0">
-                <div class="font-semibold text-xs mb-0.5 text-primary" x-text="c.name"></div>
-                <div class="font-mono text-xs truncate opacity-70" x-text="c.image"></div>
-              </div>
-              <div x-show="c.ports?.length" class="flex-shrink-0">
-                <template x-for="port in (c.ports || [])">
-                  <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-mono ml-1 bg-primary/15 text-primary" x-text="port"></span>
-                </template>
-              </div>
+              <span class="font-semibold text-sm text-base-content">容器</span>
             </div>
-          </template>
-          <div x-show="(info.containers || []).length === 0" class="text-xs py-2 opacity-50">无容器信息</div>
+            <template x-for="c in info.containers || []" :key="c.name">
+              <div class="flex items-center gap-3 mb-3 last:mb-0 p-3.5 rounded-xl bg-base-100/50 shadow-sm hover:shadow-md transition-shadow">
+                <div class="w-9 h-9 rounded-lg grid place-items-center flex-shrink-0 bg-info/10">
+                  <i class="fas fa-box text-sm text-info"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="font-semibold text-xs mb-1 text-base-content" x-text="c.name"></div>
+                  <div class="font-mono text-xs truncate opacity-60" x-text="c.image"></div>
+                </div>
+                <div x-show="c.ports?.length" class="flex-shrink-0">
+                  <template x-for="port in (c.ports || [])">
+                    <span class="inline-block text-[10px] px-2 py-1 rounded-lg font-mono ml-1 bg-primary/10 text-primary border border-primary/20" x-text="port"></span>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <div x-show="(info.containers || []).length === 0" class="text-xs py-3 text-center opacity-40">无容器信息</div>
+          </div>
         </div>
 
         <!-- Conditions -->
-        <div class="rounded-xl p-5 bg-base-200/50 border border-base-300">
-          <div class="flex items-center gap-2 mb-4">
-            <i class="fas fa-heartbeat text-xs text-success"></i>
-            <span class="font-semibold text-xs uppercase tracking-wider text-success">Conditions</span>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
-              <thead>
-                <tr class="opacity-50">
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">类型</th>
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">状态</th>
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">原因</th>
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">消息</th>
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">最近更新</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template x-for="c in conditions" :key="c.type">
-                  <tr :class="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'bg-error/5' : ''">
-                    <td class="py-2.5 px-3 font-medium border-b border-base-300/50 text-base-content" x-text="c.type"></td>
-                    <td class="py-2.5 px-3 border-b border-base-300/50">
-                      <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-semibold"
-                            :class="c.status === 'True' ? 'bg-success/15 text-success' : c.status === 'False' ? 'bg-error/15 text-error' : 'bg-warning/15 text-warning'"
-                            x-text="c.status"></span>
-                    </td>
-                    <td class="py-2.5 px-3 font-mono border-b border-base-300/50"
-                        :class="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'text-error font-semibold' : 'opacity-70'"
-                        x-text="c.reason"></td>
-                    <td class="py-2.5 px-3 border-b border-base-300/50 opacity-50" x-text="c.message"></td>
-                    <td class="py-2.5 px-3 whitespace-nowrap border-b border-base-300/50 opacity-50" x-text="c.last_update"></td>
+        <div class="card bg-base-200/60 shadow-md rounded-2xl">
+          <div class="card-body p-5">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-7 h-7 rounded-lg grid place-items-center bg-success/10">
+                <i class="fas fa-heartbeat text-xs text-success"></i>
+              </div>
+              <span class="font-semibold text-sm text-base-content">Conditions</span>
+            </div>
+            <div class="overflow-x-auto -mx-2">
+              <table class="w-full text-xs">
+                <thead>
+                  <tr class="border-b border-base-300/50">
+                    <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">类型</th>
+                    <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">状态</th>
+                    <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">原因</th>
+                    <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">消息</th>
+                    <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">最近更新</th>
                   </tr>
-                </template>
-                <tr x-show="conditions.length === 0"><td colspan="5" class="text-center py-6 opacity-50">无</td></tr>
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  <template x-for="c in conditions" :key="c.type">
+                    <tr class="border-b border-base-300/30 hover:bg-base-100/30 transition-colors" :class="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'bg-error/5' : ''">
+                      <td class="py-3 px-3 font-medium text-base-content" x-text="c.type"></td>
+                      <td class="py-3 px-3">
+                        <span class="inline-block text-[10px] px-2.5 py-1 rounded-lg font-semibold shadow-sm"
+                              :class="c.status === 'True' ? 'bg-success/15 text-success' : c.status === 'False' ? 'bg-error/15 text-error' : 'bg-warning/15 text-warning'"
+                              x-text="c.status"></span>
+                      </td>
+                      <td class="py-3 px-3 font-mono"
+                          :class="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'text-error font-semibold' : 'opacity-70'"
+                          x-text="c.reason"></td>
+                      <td class="py-3 px-3 opacity-50" x-text="c.message"></td>
+                      <td class="py-3 px-3 whitespace-nowrap opacity-40 text-xs" x-text="c.last_update"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="conditions.length === 0"><td colspan="5" class="text-center py-8 opacity-40">无</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Tab: Events -->
       <div x-show="!loading && !error && tab === 'events'" x-cloak>
-        <div class="rounded-xl overflow-hidden bg-base-200/50 border border-base-300">
-          <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
-            <thead>
-              <tr class="opacity-50 bg-base-300/30">
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">类型</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">原因</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">来源</th>
-                <th class="text-center py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">次数</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">消息</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">最近时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="(e, i) in pagedEvents" :key="i">
-                <tr class="border-b border-base-300/30 hover:bg-base-300/20 transition-colors">
-                  <td class="py-2.5 px-4">
-                    <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-semibold"
-                          :class="e.type === 'Normal' ? 'bg-info/15 text-info' : 'bg-warning/15 text-warning'"
-                          x-text="e.type"></span>
-                  </td>
-                  <td class="py-2.5 px-4 font-mono text-base-content" x-text="e.reason"></td>
-                  <td class="py-2.5 px-4 opacity-50" x-text="e.source"></td>
-                  <td class="py-2.5 px-4 text-center font-semibold opacity-70" x-text="e.count"></td>
-                  <td class="py-2.5 px-4 opacity-70" x-text="e.message"></td>
-                  <td class="py-2.5 px-4 whitespace-nowrap opacity-50" x-text="e.last_timestamp"></td>
+        <div class="card bg-base-200/60 shadow-md rounded-2xl">
+          <div class="card-body p-5">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-b border-base-300/50">
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">类型</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">原因</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">来源</th>
+                  <th class="text-center py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">次数</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">消息</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">最近时间</th>
                 </tr>
-              </template>
-              <tr x-show="events.length === 0"><td colspan="6" class="text-center py-10 opacity-50">暂无 events</td></tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                <template x-for="(e, i) in pagedEvents" :key="i">
+                  <tr class="border-b border-base-300/30 hover:bg-base-100/30 transition-colors">
+                    <td class="py-3 px-3">
+                      <span class="inline-block text-[10px] px-2.5 py-1 rounded-lg font-semibold shadow-sm"
+                            :class="e.type === 'Normal' ? 'bg-info/15 text-info' : 'bg-warning/15 text-warning'"
+                            x-text="e.type"></span>
+                    </td>
+                    <td class="py-3 px-3 font-mono font-medium text-base-content" x-text="e.reason"></td>
+                    <td class="py-3 px-3 opacity-50" x-text="e.source"></td>
+                    <td class="py-3 px-3 text-center font-semibold opacity-70" x-text="e.count"></td>
+                    <td class="py-3 px-3 opacity-60" x-text="e.message"></td>
+                    <td class="py-3 px-3 whitespace-nowrap opacity-40" x-text="e.last_timestamp"></td>
+                  </tr>
+                </template>
+                <tr x-show="events.length === 0"><td colspan="6" class="text-center py-10 opacity-40">暂无 events</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <div x-show="eventTotalPages > 1" class="flex items-center justify-between mt-4 text-xs opacity-50">
           <span>共 <span x-text="events.length"></span> 条事件</span>
-          <div class="flex items-center gap-1">
-            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg" :disabled="eventPage <= 1" @click="eventPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
-            <span class="px-3 text-xs opacity-70" x-text="eventPage + ' / ' + eventTotalPages"></span>
-            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg" :disabled="eventPage >= eventTotalPages" @click="eventPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
+          <div class="join">
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3" :disabled="eventPage <= 1" @click="eventPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3 no-animation" x-text="eventPage + ' / ' + eventTotalPages"></button>
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3" :disabled="eventPage >= eventTotalPages" @click="eventPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
           </div>
         </div>
       </div>
 
       <!-- Tab: 关联 Pods -->
       <div x-show="!loading && !error && tab === 'pods'" x-cloak>
-        <div class="rounded-xl overflow-hidden bg-base-200/50 border border-base-300">
-          <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
-            <thead>
-              <tr class="opacity-50 bg-base-300/30">
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">名称</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">状态</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">就绪</th>
-                <th class="text-center py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">重启</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">Age</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">节点</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">IP</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider border-b border-base-300">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="p in pagedPods" :key="p.name">
-                <tr class="border-b border-base-300/30 hover:bg-base-300/20 transition-colors">
-                  <td class="py-2.5 px-4 font-mono text-xs text-base-content" x-text="p.name"></td>
-                  <td class="py-2.5 px-4">
-                    <div class="flex flex-col gap-1">
-                      <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-semibold w-fit"
-                            :class="p.status_phase === 'Running' ? 'bg-success/15 text-success' : p.status_phase === 'Pending' ? 'bg-warning/15 text-warning' : p.status_phase === 'Succeeded' ? 'bg-info/15 text-info' : 'bg-error/15 text-error'"
-                            x-text="p.status_phase"></span>
-                      <template x-if="p.status_reason">
-                        <span class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-md font-mono w-fit cursor-help bg-error/10 border border-error/20 text-error"
-                              :title="p.status_message || p.status_reason">
-                          <i class="fas fa-exclamation-circle text-[8px]"></i>
-                          <span x-text="p.status_reason"></span>
-                        </span>
-                      </template>
-                    </div>
-                  </td>
-                  <td class="py-2.5 px-4 opacity-70" x-text="p.ready_str"></td>
-                  <td class="py-2.5 px-4 text-center opacity-70" x-text="p.restarts"></td>
-                  <td class="py-2.5 px-4 font-semibold whitespace-nowrap text-primary" x-text="p.age" :title="p.created"></td>
-                  <td class="py-2.5 px-4 opacity-50" x-text="p.node"></td>
-                  <td class="py-2.5 px-4 font-mono opacity-50" x-text="p.ip"></td>
-                  <td class="py-2.5 px-4">
-                    <div class="flex gap-1.5">
-                      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg"
-                              @click="$dispatch('open-pod-logs', {namespace: p.namespace, podName: p.name, logsUrl: clusterPodLogsUrl(p.namespace, p.name)})">
-                        <i class="fas fa-terminal text-[9px]"></i> 日志
-                      </button>
-                      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg"
-                              @click="openYaml('Pod: ' + p.name, '/resources/' + clusterPk + '/yaml/pod/' + p.namespace + '/' + p.name + '/', false)">
-                        <i class="fas fa-file-code text-[9px]"></i> YAML
-                      </button>
-                      <template x-if="p.status_phase !== 'Running' && p.status_phase !== 'Succeeded'">
-                        <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg hover:bg-error/10 text-error"
-                                @click="$dispatch('open-delete-modal', {type: 'Pod', name: p.name, namespace: p.namespace, deleteUrl: '/resources/' + clusterPk + '/delete/pod/' + p.namespace + '/' + p.name + '/'})">
-                          <i class="fas fa-trash-alt text-[9px]"></i> 删除
-                        </button>
-                      </template>
-                    </div>
-                  </td>
+        <div class="card bg-base-200/60 shadow-md rounded-2xl">
+          <div class="card-body p-5">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-b border-base-300/50">
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">名称</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">状态</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">就绪</th>
+                  <th class="text-center py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">重启</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">Age</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">节点</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">IP</th>
+                  <th class="text-left py-3 px-3 text-[10px] font-semibold uppercase tracking-wider opacity-40">操作</th>
                 </tr>
-              </template>
-              <tr x-show="pods.length === 0"><td colspan="8" class="text-center py-10 opacity-50">无关联 Pod</td></tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                <template x-for="p in pagedPods" :key="p.name">
+                  <tr class="border-b border-base-300/30 hover:bg-base-100/30 transition-colors">
+                    <td class="py-3 px-3 font-mono text-xs text-base-content" x-text="p.name"></td>
+                    <td class="py-3 px-3">
+                      <div class="flex flex-col gap-1">
+                        <span class="inline-block text-[10px] px-2.5 py-1 rounded-lg font-semibold w-fit shadow-sm"
+                              :class="p.status_phase === 'Running' ? 'bg-success/15 text-success' : p.status_phase === 'Pending' ? 'bg-warning/15 text-warning' : p.status_phase === 'Succeeded' ? 'bg-info/15 text-info' : 'bg-error/15 text-error'"
+                              x-text="p.status_phase"></span>
+                        <template x-if="p.status_reason">
+                          <span class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-md font-mono w-fit cursor-help bg-error/10 text-error"
+                                :title="p.status_message || p.status_reason">
+                            <i class="fas fa-exclamation-circle text-[8px]"></i>
+                            <span x-text="p.status_reason"></span>
+                          </span>
+                        </template>
+                      </div>
+                    </td>
+                    <td class="py-3 px-3 opacity-70" x-text="p.ready_str"></td>
+                    <td class="py-3 px-3 text-center opacity-70" x-text="p.restarts"></td>
+                    <td class="py-3 px-3 font-semibold whitespace-nowrap text-primary/80" x-text="p.age" :title="p.created"></td>
+                    <td class="py-3 px-3 opacity-50" x-text="p.node"></td>
+                    <td class="py-3 px-3 font-mono opacity-50" x-text="p.ip"></td>
+                    <td class="py-3 px-3">
+                      <div class="flex gap-1.5">
+                        <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg"
+                                @click="$dispatch('open-pod-logs', {namespace: p.namespace, podName: p.name, logsUrl: clusterPodLogsUrl(p.namespace, p.name)})">
+                          <i class="fas fa-terminal text-[9px]"></i> 日志
+                        </button>
+                        <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg"
+                                @click="openYaml('Pod: ' + p.name, '/resources/' + clusterPk + '/yaml/pod/' + p.namespace + '/' + p.name + '/', false)">
+                          <i class="fas fa-file-code text-[9px]"></i> YAML
+                        </button>
+                        <template x-if="p.status_phase !== 'Running' && p.status_phase !== 'Succeeded'">
+                          <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg hover:bg-error/10 text-error"
+                                  @click="$dispatch('open-delete-modal', {type: 'Pod', name: p.name, namespace: p.namespace, deleteUrl: '/resources/' + clusterPk + '/delete/pod/' + p.namespace + '/' + p.name + '/'})">
+                            <i class="fas fa-trash-alt text-[9px]"></i> 删除
+                          </button>
+                        </template>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+                <tr x-show="pods.length === 0"><td colspan="8" class="text-center py-10 opacity-40">无关联 Pod</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <div x-show="podTotalPages > 1" class="flex items-center justify-between mt-4 text-xs opacity-50">
           <span>共 <span x-text="pods.length"></span> 个 Pod</span>
-          <div class="flex items-center gap-1">
-            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg" :disabled="podPage <= 1" @click="podPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
-            <span class="px-3 text-xs opacity-70" x-text="podPage + ' / ' + podTotalPages"></span>
-            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg" :disabled="podPage >= podTotalPages" @click="podPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
+          <div class="join">
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3" :disabled="podPage <= 1" @click="podPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3 no-animation" x-text="podPage + ' / ' + podTotalPages"></button>
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3" :disabled="podPage >= podTotalPages" @click="podPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
           </div>
         </div>
       </div>
