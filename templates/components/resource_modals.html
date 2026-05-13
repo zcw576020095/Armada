@@ -307,35 +307,35 @@
 <dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto(); window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}))">
   <div class="modal-box bg-base-100 shadow-2xl flex flex-col p-0" style="width: 85vw; max-width: 85vw; height: 88vh; border-radius: 20px;">
     <!-- Header -->
-    <div class="flex items-center justify-between px-7 py-5 border-b border-base-200 flex-shrink-0">
-      <div class="flex items-center gap-4">
-        <div class="w-12 h-12 rounded-2xl grid place-items-center shadow-lg bg-primary/15">
-          <i class="fas text-lg text-primary" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : 'fa-clone'"></i>
+    <div class="flex items-center justify-between px-6 py-4 border-b border-base-200 flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl grid place-items-center bg-primary/10">
+          <i class="fas text-base text-primary" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : 'fa-clone'"></i>
         </div>
         <div>
-          <h3 class="font-bold text-lg" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : 'DaemonSet') + ' 详情'"></h3>
-          <div class="flex items-center gap-2 text-xs opacity-50 mt-1">
-            <span class="px-2 py-0.5 rounded-md font-mono bg-base-200 text-base-content/70" x-text="meta.namespace"></span>
+          <h3 class="font-bold text-base" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : 'DaemonSet') + ' 详情'"></h3>
+          <div class="flex items-center gap-2 text-xs opacity-50 mt-0.5">
+            <span class="font-mono" x-text="meta.namespace"></span>
             <span>/</span>
             <span class="font-semibold" x-text="meta.name"></span>
           </div>
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <button class="btn btn-ghost btn-sm h-9 min-h-0 gap-2 text-xs rounded-lg" @click="reload()" :disabled="loading">
+        <button class="btn btn-ghost btn-sm gap-1 text-xs" @click="reload()" :disabled="loading">
           <i class="fas fa-sync-alt text-xs" :class="loading ? 'animate-spin' : ''"></i> 刷新
         </button>
-        <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0" onclick="describeModal.close()">
-          <i class="fas fa-times text-sm"></i>
+        <button class="btn btn-ghost btn-sm btn-circle" onclick="describeModal.close()">
+          <i class="fas fa-times"></i>
         </button>
       </div>
     </div>
 
     <!-- Tab 切换 -->
-    <div class="flex items-center gap-2 px-7 pt-5 flex-shrink-0">
+    <div class="flex items-center gap-1 px-6 pt-3 pb-1 flex-shrink-0">
       <template x-for="t in tabs" :key="t.key">
-        <button class="btn btn-sm h-10 min-h-0 gap-2 text-xs rounded-xl transition-all"
-                :class="tab === t.key ? 'btn-primary shadow-md' : 'btn-ghost'"
+        <button class="btn btn-sm gap-1.5 text-xs"
+                :class="tab === t.key ? 'btn-primary' : 'btn-ghost'"
                 @click="tab = t.key">
           <i class="fas text-xs" :class="t.icon"></i>
           <span x-text="t.label"></span>
@@ -345,7 +345,7 @@
     </div>
 
     <!-- 内容 -->
-    <div class="flex-1 overflow-y-auto px-7 py-6 text-xs">
+    <div class="flex-1 overflow-y-auto px-6 py-4 text-sm">
       <div x-show="loading" class="flex items-center justify-center py-20 gap-3 opacity-50">
         <span class="loading loading-spinner loading-md text-primary"></span>
         <span class="text-sm">加载中...</span>
@@ -408,109 +408,83 @@
 
         <!-- 副本状态卡片 - Deployment -->
         <template x-if="resourceType === 'deployment'">
-          <div class="stats stats-vertical sm:stats-horizontal shadow-lg w-full">
-            <div class="stat">
-              <div class="stat-figure text-primary">
-                <i class="fas fa-crosshairs text-2xl"></i>
-              </div>
-              <div class="stat-title">期望副本</div>
-              <div class="stat-value text-primary" x-text="info.replicas ?? 0"></div>
+          <div class="grid grid-cols-4 gap-3">
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-crosshairs text-primary mb-1"></i>
+              <div class="text-2xl font-bold text-primary" x-text="info.replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">期望副本</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-success">
-                <i class="fas fa-check-circle text-2xl"></i>
-              </div>
-              <div class="stat-title">就绪</div>
-              <div class="stat-value text-success" x-text="info.ready_replicas ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-check-circle text-success mb-1"></i>
+              <div class="text-2xl font-bold text-success" x-text="info.ready_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">就绪</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-info">
-                <i class="fas fa-arrow-up text-2xl"></i>
-              </div>
-              <div class="stat-title">已更新</div>
-              <div class="stat-value text-info" x-text="info.updated_replicas ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-arrow-up text-info mb-1"></i>
+              <div class="text-2xl font-bold text-info" x-text="info.updated_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">已更新</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-error">
-                <i class="fas fa-times-circle text-2xl"></i>
-              </div>
-              <div class="stat-title">不可用</div>
-              <div class="stat-value text-error" x-text="info.unavailable_replicas ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-times-circle text-error mb-1"></i>
+              <div class="text-2xl font-bold text-error" x-text="info.unavailable_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">不可用</div>
             </div>
           </div>
         </template>
 
         <!-- 副本状态卡片 - StatefulSet -->
         <template x-if="resourceType === 'statefulset'">
-          <div class="stats stats-vertical sm:stats-horizontal shadow-lg w-full">
-            <div class="stat">
-              <div class="stat-figure text-primary">
-                <i class="fas fa-crosshairs text-2xl"></i>
-              </div>
-              <div class="stat-title">期望副本</div>
-              <div class="stat-value text-primary" x-text="info.replicas ?? 0"></div>
+          <div class="grid grid-cols-4 gap-3">
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-crosshairs text-primary mb-1"></i>
+              <div class="text-2xl font-bold text-primary" x-text="info.replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">期望副本</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-success">
-                <i class="fas fa-check-circle text-2xl"></i>
-              </div>
-              <div class="stat-title">就绪</div>
-              <div class="stat-value text-success" x-text="info.ready_replicas ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-check-circle text-success mb-1"></i>
+              <div class="text-2xl font-bold text-success" x-text="info.ready_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">就绪</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-info">
-                <i class="fas fa-arrow-up text-2xl"></i>
-              </div>
-              <div class="stat-title">已更新</div>
-              <div class="stat-value text-info" x-text="info.updated_replicas ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-arrow-up text-info mb-1"></i>
+              <div class="text-2xl font-bold text-info" x-text="info.updated_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">已更新</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-accent">
-                <i class="fas fa-server text-2xl"></i>
-              </div>
-              <div class="stat-title">当前</div>
-              <div class="stat-value text-accent" x-text="info.current_replicas ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-server text-accent mb-1"></i>
+              <div class="text-2xl font-bold text-accent" x-text="info.current_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">当前</div>
             </div>
           </div>
         </template>
 
         <!-- 副本状态卡片 - DaemonSet -->
         <template x-if="resourceType === 'daemonset'">
-          <div class="stats stats-vertical sm:stats-horizontal shadow-lg w-full">
-            <div class="stat">
-              <div class="stat-figure text-primary">
-                <i class="fas fa-crosshairs text-xl"></i>
-              </div>
-              <div class="stat-title text-xs">期望节点数</div>
-              <div class="stat-value text-primary text-2xl" x-text="info.desired ?? 0"></div>
+          <div class="grid grid-cols-5 gap-3">
+            <div class="bg-base-200 rounded-xl p-3 text-center">
+              <i class="fas fa-crosshairs text-primary mb-1 text-xs"></i>
+              <div class="text-xl font-bold text-primary" x-text="info.desired ?? 0"></div>
+              <div class="text-[10px] opacity-50 mt-1">期望节点数</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-accent">
-                <i class="fas fa-server text-xl"></i>
-              </div>
-              <div class="stat-title text-xs">当前</div>
-              <div class="stat-value text-accent text-2xl" x-text="info.current ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-3 text-center">
+              <i class="fas fa-server text-accent mb-1 text-xs"></i>
+              <div class="text-xl font-bold text-accent" x-text="info.current ?? 0"></div>
+              <div class="text-[10px] opacity-50 mt-1">当前</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-success">
-                <i class="fas fa-check-circle text-xl"></i>
-              </div>
-              <div class="stat-title text-xs">就绪</div>
-              <div class="stat-value text-success text-2xl" x-text="info.ready ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-3 text-center">
+              <i class="fas fa-check-circle text-success mb-1 text-xs"></i>
+              <div class="text-xl font-bold text-success" x-text="info.ready ?? 0"></div>
+              <div class="text-[10px] opacity-50 mt-1">就绪</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-info">
-                <i class="fas fa-arrow-up text-xl"></i>
-              </div>
-              <div class="stat-title text-xs">已更新</div>
-              <div class="stat-value text-info text-2xl" x-text="info.updated ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-3 text-center">
+              <i class="fas fa-arrow-up text-info mb-1 text-xs"></i>
+              <div class="text-xl font-bold text-info" x-text="info.updated ?? 0"></div>
+              <div class="text-[10px] opacity-50 mt-1">已更新</div>
             </div>
-            <div class="stat">
-              <div class="stat-figure text-secondary">
-                <i class="fas fa-check-double text-xl"></i>
-              </div>
-              <div class="stat-title text-xs">可用</div>
-              <div class="stat-value text-secondary text-2xl" x-text="info.available ?? 0"></div>
+            <div class="bg-base-200 rounded-xl p-3 text-center">
+              <i class="fas fa-check-double text-secondary mb-1 text-xs"></i>
+              <div class="text-xl font-bold text-secondary" x-text="info.available ?? 0"></div>
+              <div class="text-[10px] opacity-50 mt-1">可用</div>
             </div>
           </div>
         </template>
