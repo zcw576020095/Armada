@@ -305,27 +305,27 @@
 
 <!-- Workload Describe Modal (Deployment/StatefulSet/DaemonSet) -->
 <dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto(); window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}))">
-  <div class="modal-box flex flex-col p-0 shadow-2xl" style="width: 85vw; max-width: 85vw; height: 88vh; border-radius: 20px; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); border: 1px solid rgba(139,92,246,0.2);">
+  <div class="modal-box flex flex-col p-0 shadow-2xl" style="width: 85vw; max-width: 85vw; height: 88vh; border-radius: 20px; background: linear-gradient(135deg, #1e1e2e 0%, #252540 100%); border: 1px solid rgba(139,92,246,0.2);">
     <!-- Header -->
-    <div class="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style="border-color: rgba(139,92,246,0.15); background: linear-gradient(135deg, rgba(139,92,246,0.05), rgba(59,130,246,0.05));">
+    <div class="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style="border-color: rgba(139,92,246,0.15); background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,130,246,0.05));">
       <div class="flex items-center gap-4">
-        <div class="w-12 h-12 rounded-2xl grid place-items-center shadow-lg" style="background: linear-gradient(135deg, rgba(139,92,246,0.25), rgba(59,130,246,0.25));">
-          <i class="fas text-lg" style="color: #a78bfa;" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : 'fa-clone'"></i>
+        <div class="w-12 h-12 rounded-2xl grid place-items-center shadow-lg" style="background: linear-gradient(135deg, rgba(139,92,246,0.3), rgba(59,130,246,0.3));">
+          <i class="fas text-lg" style="color: #c4b5fd;" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : 'fa-clone'"></i>
         </div>
         <div>
-          <h3 class="font-bold text-lg mb-1" style="color: #f0f0f0;" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : 'DaemonSet') + ' 详情'"></h3>
-          <div class="flex items-center gap-2 text-xs" style="color: #9ca3af;">
-            <span class="px-2 py-0.5 rounded-md font-mono" style="background: rgba(139,92,246,0.15);" x-text="meta.namespace"></span>
+          <h3 class="font-bold text-lg mb-1" style="color: #f5f5f5;" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : 'DaemonSet') + ' 详情'"></h3>
+          <div class="flex items-center gap-2 text-xs" style="color: #a8a8b8;">
+            <span class="px-2 py-0.5 rounded-md font-mono" style="background: rgba(139,92,246,0.2); color: #c4b5fd;" x-text="meta.namespace"></span>
             <span>/</span>
-            <span class="font-semibold" x-text="meta.name"></span>
+            <span class="font-semibold" style="color: #d1d5db;" x-text="meta.name"></span>
           </div>
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <button class="btn btn-ghost btn-sm h-9 min-h-0 gap-2 text-xs rounded-lg hover:bg-white/10 transition-all" style="color: #9ca3af;" @click="reload()" :disabled="loading">
+        <button class="btn btn-ghost btn-sm h-9 min-h-0 gap-2 text-xs rounded-lg hover:bg-white/10 transition-all" style="color: #b8b8c8;" @click="reload()" :disabled="loading">
           <i class="fas fa-sync-alt text-xs" :class="loading ? 'animate-spin' : ''"></i> 刷新
         </button>
-        <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0 hover:bg-white/10 transition-all" style="color: #9ca3af;" onclick="describeModal.close()">
+        <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0 hover:bg-white/10 transition-all" style="color: #b8b8c8;" onclick="describeModal.close()">
           <i class="fas fa-times text-sm"></i>
         </button>
       </div>
@@ -335,8 +335,8 @@
     <div class="flex items-center gap-2 px-6 pt-4 flex-shrink-0">
       <template x-for="t in tabs" :key="t.key">
         <button class="btn btn-sm h-10 min-h-0 gap-2 text-xs rounded-xl transition-all"
-                :class="tab === t.key ? 'btn-primary shadow-lg' : 'btn-ghost hover:bg-white/5'"
-                :style="tab === t.key ? 'background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none; color: white;' : 'color: #9ca3af;'"
+                :class="tab === t.key ? 'btn-primary shadow-lg' : 'btn-ghost hover:bg-white/8'"
+                :style="tab === t.key ? 'background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none; color: white;' : 'color: #b8b8c8;'"
                 @click="tab = t.key">
           <i class="fas text-xs" :class="t.icon"></i>
           <span x-text="t.label"></span>
@@ -347,8 +347,8 @@
 
     <!-- 内容 -->
     <div class="flex-1 overflow-y-auto px-6 py-5 text-xs">
-      <div x-show="loading" class="flex items-center justify-center py-20 gap-3" style="color: #9ca3af;">
-        <span class="loading loading-spinner loading-md" style="color: #a78bfa;"></span>
+      <div x-show="loading" class="flex items-center justify-center py-20 gap-3" style="color: #b8b8c8;">
+        <span class="loading loading-spinner loading-md" style="color: #c4b5fd;"></span>
         <span class="text-sm">加载中...</span>
       </div>
       <div x-show="!loading && error" class="alert text-xs" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5;"><i class="fas fa-exclamation-triangle"></i><span x-text="error"></span></div>
@@ -430,7 +430,7 @@
               <div class="rounded-xl p-4 transition-all hover:scale-[1.02]" :style="'background: ' + card.gradient + '; border: 1px solid ' + card.border">
                 <div class="flex items-center gap-2 mb-2">
                   <i class="fas text-xs" :class="card.icon" :style="'color: ' + card.color"></i>
-                  <span class="text-[11px] font-medium" style="color: #9ca3af;" x-text="card.label"></span>
+                  <span class="text-[11px] font-medium" style="color: #b8b8c8;" x-text="card.label"></span>
                 </div>
                 <div class="text-2xl font-bold" :style="'color: ' + card.color" x-text="card.val ?? 0"></div>
               </div>
@@ -450,7 +450,7 @@
               <div class="rounded-xl p-4 transition-all hover:scale-[1.02]" :style="'background: ' + card.gradient + '; border: 1px solid ' + card.border">
                 <div class="flex items-center gap-2 mb-2">
                   <i class="fas text-xs" :class="card.icon" :style="'color: ' + card.color"></i>
-                  <span class="text-[11px] font-medium" style="color: #9ca3af;" x-text="card.label"></span>
+                  <span class="text-[11px] font-medium" style="color: #b8b8c8;" x-text="card.label"></span>
                 </div>
                 <div class="text-2xl font-bold" :style="'color: ' + card.color" x-text="card.val ?? 0"></div>
               </div>
@@ -471,7 +471,7 @@
               <div class="rounded-xl p-3 transition-all hover:scale-[1.02]" :style="'background: ' + card.gradient + '; border: 1px solid ' + card.border">
                 <div class="flex items-center gap-2 mb-2">
                   <i class="fas text-[10px]" :class="card.icon" :style="'color: ' + card.color"></i>
-                  <span class="text-[10px] font-medium" style="color: #9ca3af;" x-text="card.label"></span>
+                  <span class="text-[10px] font-medium" style="color: #b8b8c8;" x-text="card.label"></span>
                 </div>
                 <div class="text-xl font-bold" :style="'color: ' + card.color" x-text="card.val ?? 0"></div>
               </div>
@@ -481,10 +481,10 @@
 
         <!-- 基本信息 - Deployment -->
         <template x-if="resourceType === 'deployment'">
-          <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+          <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
             <div class="flex items-center gap-2 mb-4">
-              <i class="fas fa-info-circle text-xs" style="color: #a78bfa;"></i>
-              <span class="font-semibold text-xs uppercase tracking-wider" style="color: #a78bfa;">基本信息</span>
+              <i class="fas fa-info-circle text-xs" style="color: #c4b5fd;"></i>
+              <span class="font-semibold text-xs uppercase tracking-wider" style="color: #c4b5fd;">基本信息</span>
             </div>
             <div class="grid grid-cols-2 gap-y-3 gap-x-8">
               <template x-for="item in [
@@ -496,8 +496,8 @@
                 {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
               ]">
                 <div class="flex items-baseline gap-3 text-xs">
-                  <span class="flex-shrink-0 w-20 text-right font-medium" style="color: #6b7280;" x-text="item.k"></span>
-                  <span class="font-mono break-all" style="color: #d1d5db;" x-text="item.v"></span>
+                  <span class="flex-shrink-0 w-20 text-right font-medium" style="color: #8b8b9e;" x-text="item.k"></span>
+                  <span class="font-mono break-all" style="color: #e2e2ea;" x-text="item.v"></span>
                 </div>
               </template>
             </div>
@@ -506,10 +506,10 @@
 
         <!-- 基本信息 - StatefulSet -->
         <template x-if="resourceType === 'statefulset'">
-          <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+          <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
             <div class="flex items-center gap-2 mb-4">
-              <i class="fas fa-info-circle text-xs" style="color: #a78bfa;"></i>
-              <span class="font-semibold text-xs uppercase tracking-wider" style="color: #a78bfa;">基本信息</span>
+              <i class="fas fa-info-circle text-xs" style="color: #c4b5fd;"></i>
+              <span class="font-semibold text-xs uppercase tracking-wider" style="color: #c4b5fd;">基本信息</span>
             </div>
             <div class="grid grid-cols-2 gap-y-3 gap-x-8">
               <template x-for="item in [
@@ -523,8 +523,8 @@
                 {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
               ]">
                 <div class="flex items-baseline gap-3 text-xs">
-                  <span class="flex-shrink-0 w-24 text-right font-medium" style="color: #6b7280;" x-text="item.k"></span>
-                  <span class="font-mono break-all" style="color: #d1d5db;" x-text="item.v"></span>
+                  <span class="flex-shrink-0 w-24 text-right font-medium" style="color: #8b8b9e;" x-text="item.k"></span>
+                  <span class="font-mono break-all" style="color: #e2e2ea;" x-text="item.v"></span>
                 </div>
               </template>
             </div>
@@ -533,10 +533,10 @@
 
         <!-- 基本信息 - DaemonSet -->
         <template x-if="resourceType === 'daemonset'">
-          <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+          <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
             <div class="flex items-center gap-2 mb-4">
-              <i class="fas fa-info-circle text-xs" style="color: #a78bfa;"></i>
-              <span class="font-semibold text-xs uppercase tracking-wider" style="color: #a78bfa;">基本信息</span>
+              <i class="fas fa-info-circle text-xs" style="color: #c4b5fd;"></i>
+              <span class="font-semibold text-xs uppercase tracking-wider" style="color: #c4b5fd;">基本信息</span>
             </div>
             <div class="grid grid-cols-2 gap-y-3 gap-x-8">
               <template x-for="item in [
@@ -548,8 +548,8 @@
                 {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
               ]">
                 <div class="flex items-baseline gap-3 text-xs">
-                  <span class="flex-shrink-0 w-24 text-right font-medium" style="color: #6b7280;" x-text="item.k"></span>
-                  <span class="font-mono break-all" style="color: #d1d5db;" x-text="item.v"></span>
+                  <span class="flex-shrink-0 w-24 text-right font-medium" style="color: #8b8b9e;" x-text="item.k"></span>
+                  <span class="font-mono break-all" style="color: #e2e2ea;" x-text="item.v"></span>
                 </div>
               </template>
             </div>
@@ -557,10 +557,10 @@
         </template>
 
         <!-- 容器 -->
-        <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+        <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
           <div class="flex items-center gap-2 mb-4">
-            <i class="fas fa-cube text-xs" style="color: #60a5fa;"></i>
-            <span class="font-semibold text-xs uppercase tracking-wider" style="color: #60a5fa;">容器</span>
+            <i class="fas fa-cube text-xs" style="color: #93c5fd;"></i>
+            <span class="font-semibold text-xs uppercase tracking-wider" style="color: #93c5fd;">容器</span>
           </div>
           <template x-for="c in info.containers || []" :key="c.name">
             <div class="flex items-center gap-3 mb-3 last:mb-0 p-3 rounded-lg" style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.1);">
@@ -568,53 +568,53 @@
                 <i class="fas fa-box text-xs" style="color: #60a5fa;"></i>
               </div>
               <div class="flex-1 min-w-0">
-                <div class="font-semibold text-xs mb-0.5" style="color: #a78bfa;" x-text="c.name"></div>
-                <div class="font-mono text-xs truncate" style="color: #9ca3af;" x-text="c.image"></div>
+                <div class="font-semibold text-xs mb-0.5" style="color: #c4b5fd;" x-text="c.name"></div>
+                <div class="font-mono text-xs truncate" style="color: #b8b8c8;" x-text="c.image"></div>
               </div>
               <div x-show="c.ports?.length" class="flex-shrink-0">
                 <template x-for="port in (c.ports || [])">
-                  <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-mono ml-1" style="background: rgba(139,92,246,0.1); color: #c4b5fd;" x-text="port"></span>
+                  <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-mono ml-1" style="background: rgba(139,92,246,0.15); color: #ddd6fe;" x-text="port"></span>
                 </template>
               </div>
             </div>
           </template>
-          <div x-show="(info.containers || []).length === 0" class="text-xs py-2" style="color: #6b7280;">无容器信息</div>
+          <div x-show="(info.containers || []).length === 0" class="text-xs py-2" style="color: #8b8b9e;">无容器信息</div>
         </div>
 
         <!-- Conditions -->
-        <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+        <div class="rounded-xl p-5" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
           <div class="flex items-center gap-2 mb-4">
-            <i class="fas fa-heartbeat text-xs" style="color: #34d399;"></i>
-            <span class="font-semibold text-xs uppercase tracking-wider" style="color: #34d399;">Conditions</span>
+            <i class="fas fa-heartbeat text-xs" style="color: #6ee7b7;"></i>
+            <span class="font-semibold text-xs uppercase tracking-wider" style="color: #6ee7b7;">Conditions</span>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
               <thead>
-                <tr style="color: #6b7280;">
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">类型</th>
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">状态</th>
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">原因</th>
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">消息</th>
-                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">最近更新</th>
+                <tr style="color: #8b8b9e;">
+                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">类型</th>
+                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">状态</th>
+                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">原因</th>
+                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">消息</th>
+                  <th class="text-left py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">最近更新</th>
                 </tr>
               </thead>
               <tbody>
                 <template x-for="c in conditions" :key="c.type">
                   <tr :style="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'background: rgba(244,63,94,0.06);' : ''">
-                    <td class="py-2.5 px-3 font-medium" style="border-bottom: 1px solid rgba(255,255,255,0.04); color: #d1d5db;" x-text="c.type"></td>
+                    <td class="py-2.5 px-3 font-medium" style="border-bottom: 1px solid rgba(255,255,255,0.04); color: #e2e2ea;" x-text="c.type"></td>
                     <td class="py-2.5 px-3" style="border-bottom: 1px solid rgba(255,255,255,0.04);">
                       <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-semibold"
-                            :style="c.status === 'True' ? 'background: rgba(16,185,129,0.15); color: #34d399;' : c.status === 'False' ? 'background: rgba(244,63,94,0.15); color: #fb7185;' : 'background: rgba(234,179,8,0.15); color: #fbbf24;'"
+                            :style="c.status === 'True' ? 'background: rgba(16,185,129,0.15); color: #6ee7b7;' : c.status === 'False' ? 'background: rgba(244,63,94,0.15); color: #fda4af;' : 'background: rgba(234,179,8,0.15); color: #fde047;'"
                             x-text="c.status"></span>
                     </td>
                     <td class="py-2.5 px-3 font-mono" style="border-bottom: 1px solid rgba(255,255,255,0.04);"
-                        :style="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'color: #fb7185; font-weight: 600;' : 'color: #9ca3af;'"
+                        :style="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'color: #fda4af; font-weight: 600;' : 'color: #b8b8c8;'"
                         x-text="c.reason"></td>
-                    <td class="py-2.5 px-3" style="border-bottom: 1px solid rgba(255,255,255,0.04); color: #6b7280;" x-text="c.message"></td>
-                    <td class="py-2.5 px-3 whitespace-nowrap" style="border-bottom: 1px solid rgba(255,255,255,0.04); color: #6b7280;" x-text="c.last_update"></td>
+                    <td class="py-2.5 px-3" style="border-bottom: 1px solid rgba(255,255,255,0.04); color: #8b8b9e;" x-text="c.message"></td>
+                    <td class="py-2.5 px-3 whitespace-nowrap" style="border-bottom: 1px solid rgba(255,255,255,0.04); color: #8b8b9e;" x-text="c.last_update"></td>
                   </tr>
                 </template>
-                <tr x-show="conditions.length === 0"><td colspan="5" class="text-center py-6" style="color: #6b7280;">无</td></tr>
+                <tr x-show="conditions.length === 0"><td colspan="5" class="text-center py-6" style="color: #8b8b9e;">无</td></tr>
               </tbody>
             </table>
           </div>
@@ -623,71 +623,71 @@
 
       <!-- Tab: Events -->
       <div x-show="!loading && !error && tab === 'events'" x-cloak>
-        <div class="rounded-xl overflow-hidden" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+        <div class="rounded-xl overflow-hidden" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
             <thead>
-              <tr style="color: #6b7280; background: rgba(255,255,255,0.02);">
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">类型</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">原因</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">来源</th>
-                <th class="text-center py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">次数</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">消息</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">最近时间</th>
+              <tr style="color: #8b8b9e; background: rgba(255,255,255,0.03);">
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">类型</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">原因</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">来源</th>
+                <th class="text-center py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">次数</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">消息</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">最近时间</th>
               </tr>
             </thead>
             <tbody>
               <template x-for="(e, i) in pagedEvents" :key="i">
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);" class="hover:bg-white/[0.02] transition-colors">
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);" class="hover:bg-white/[0.03] transition-colors">
                   <td class="py-2.5 px-4">
                     <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-semibold"
-                          :style="e.type === 'Normal' ? 'background: rgba(59,130,246,0.15); color: #60a5fa;' : 'background: rgba(234,179,8,0.15); color: #fbbf24;'"
+                          :style="e.type === 'Normal' ? 'background: rgba(59,130,246,0.15); color: #93c5fd;' : 'background: rgba(234,179,8,0.15); color: #fde047;'"
                           x-text="e.type"></span>
                   </td>
-                  <td class="py-2.5 px-4 font-mono" style="color: #d1d5db;" x-text="e.reason"></td>
-                  <td class="py-2.5 px-4" style="color: #6b7280;" x-text="e.source"></td>
-                  <td class="py-2.5 px-4 text-center font-semibold" style="color: #9ca3af;" x-text="e.count"></td>
-                  <td class="py-2.5 px-4" style="color: #9ca3af;" x-text="e.message"></td>
-                  <td class="py-2.5 px-4 whitespace-nowrap" style="color: #6b7280;" x-text="e.last_timestamp"></td>
+                  <td class="py-2.5 px-4 font-mono" style="color: #e2e2ea;" x-text="e.reason"></td>
+                  <td class="py-2.5 px-4" style="color: #8b8b9e;" x-text="e.source"></td>
+                  <td class="py-2.5 px-4 text-center font-semibold" style="color: #b8b8c8;" x-text="e.count"></td>
+                  <td class="py-2.5 px-4" style="color: #b8b8c8;" x-text="e.message"></td>
+                  <td class="py-2.5 px-4 whitespace-nowrap" style="color: #8b8b9e;" x-text="e.last_timestamp"></td>
                 </tr>
               </template>
-              <tr x-show="events.length === 0"><td colspan="6" class="text-center py-10" style="color: #6b7280;">暂无 events</td></tr>
+              <tr x-show="events.length === 0"><td colspan="6" class="text-center py-10" style="color: #8b8b9e;">暂无 events</td></tr>
             </tbody>
           </table>
         </div>
-        <div x-show="eventTotalPages > 1" class="flex items-center justify-between mt-4 text-xs" style="color: #6b7280;">
+        <div x-show="eventTotalPages > 1" class="flex items-center justify-between mt-4 text-xs" style="color: #8b8b9e;">
           <span>共 <span x-text="events.length"></span> 条事件</span>
           <div class="flex items-center gap-1">
-            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg hover:bg-white/5" style="color: #9ca3af;" :disabled="eventPage <= 1" @click="eventPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
-            <span class="px-3 text-xs" style="color: #9ca3af;" x-text="eventPage + ' / ' + eventTotalPages"></span>
-            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg hover:bg-white/5" style="color: #9ca3af;" :disabled="eventPage >= eventTotalPages" @click="eventPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
+            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg hover:bg-white/5" style="color: #b8b8c8;" :disabled="eventPage <= 1" @click="eventPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
+            <span class="px-3 text-xs" style="color: #b8b8c8;" x-text="eventPage + ' / ' + eventTotalPages"></span>
+            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg hover:bg-white/5" style="color: #b8b8c8;" :disabled="eventPage >= eventTotalPages" @click="eventPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
           </div>
         </div>
       </div>
 
       <!-- Tab: 关联 Pods -->
       <div x-show="!loading && !error && tab === 'pods'" x-cloak>
-        <div class="rounded-xl overflow-hidden" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+        <div class="rounded-xl overflow-hidden" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
             <thead>
-              <tr style="color: #6b7280; background: rgba(255,255,255,0.02);">
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">名称</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">状态</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">就绪</th>
-                <th class="text-center py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">重启</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">Age</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">节点</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">IP</th>
-                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.06);">操作</th>
+              <tr style="color: #8b8b9e; background: rgba(255,255,255,0.03);">
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">名称</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">状态</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">就绪</th>
+                <th class="text-center py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">重启</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">Age</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">节点</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">IP</th>
+                <th class="text-left py-3 px-4 text-[10px] font-semibold uppercase tracking-wider" style="border-bottom: 1px solid rgba(255,255,255,0.08);">操作</th>
               </tr>
             </thead>
             <tbody>
               <template x-for="p in pagedPods" :key="p.name">
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);" class="hover:bg-white/[0.02] transition-colors">
-                  <td class="py-2.5 px-4 font-mono text-xs" style="color: #d1d5db;" x-text="p.name"></td>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);" class="hover:bg-white/[0.03] transition-colors">
+                  <td class="py-2.5 px-4 font-mono text-xs" style="color: #e2e2ea;" x-text="p.name"></td>
                   <td class="py-2.5 px-4">
                     <div class="flex flex-col gap-1">
                       <span class="inline-block text-[10px] px-2 py-0.5 rounded-md font-semibold w-fit"
-                            :style="p.status_phase === 'Running' ? 'background: rgba(16,185,129,0.15); color: #34d399;' : p.status_phase === 'Pending' ? 'background: rgba(234,179,8,0.15); color: #fbbf24;' : p.status_phase === 'Succeeded' ? 'background: rgba(59,130,246,0.15); color: #60a5fa;' : 'background: rgba(244,63,94,0.15); color: #fb7185;'"
+                            :style="p.status_phase === 'Running' ? 'background: rgba(16,185,129,0.15); color: #6ee7b7;' : p.status_phase === 'Pending' ? 'background: rgba(234,179,8,0.15); color: #fde047;' : p.status_phase === 'Succeeded' ? 'background: rgba(59,130,246,0.15); color: #93c5fd;' : 'background: rgba(244,63,94,0.15); color: #fda4af;'"
                             x-text="p.status_phase"></span>
                       <template x-if="p.status_reason">
                         <span class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-md font-mono w-fit cursor-help"
@@ -699,26 +699,26 @@
                       </template>
                     </div>
                   </td>
-                  <td class="py-2.5 px-4" style="color: #9ca3af;" x-text="p.ready_str"></td>
-                  <td class="py-2.5 px-4 text-center" style="color: #9ca3af;" x-text="p.restarts"></td>
-                  <td class="py-2.5 px-4 font-semibold whitespace-nowrap" style="color: #a78bfa;" x-text="p.age" :title="p.created"></td>
-                  <td class="py-2.5 px-4" style="color: #6b7280;" x-text="p.node"></td>
-                  <td class="py-2.5 px-4 font-mono" style="color: #6b7280;" x-text="p.ip"></td>
+                  <td class="py-2.5 px-4" style="color: #b8b8c8;" x-text="p.ready_str"></td>
+                  <td class="py-2.5 px-4 text-center" style="color: #b8b8c8;" x-text="p.restarts"></td>
+                  <td class="py-2.5 px-4 font-semibold whitespace-nowrap" style="color: #c4b5fd;" x-text="p.age" :title="p.created"></td>
+                  <td class="py-2.5 px-4" style="color: #8b8b9e;" x-text="p.node"></td>
+                  <td class="py-2.5 px-4 font-mono" style="color: #8b8b9e;" x-text="p.ip"></td>
                   <td class="py-2.5 px-4">
                     <div class="flex gap-1.5">
                       <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg hover:bg-white/5"
-                              style="color: #9ca3af;"
+                              style="color: #b8b8c8;"
                               @click="$dispatch('open-pod-logs', {namespace: p.namespace, podName: p.name, logsUrl: clusterPodLogsUrl(p.namespace, p.name)})">
                         <i class="fas fa-terminal text-[9px]"></i> 日志
                       </button>
                       <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg hover:bg-white/5"
-                              style="color: #9ca3af;"
+                              style="color: #b8b8c8;"
                               @click="openYaml('Pod: ' + p.name, '/resources/' + clusterPk + '/yaml/pod/' + p.namespace + '/' + p.name + '/', false)">
                         <i class="fas fa-file-code text-[9px]"></i> YAML
                       </button>
                       <template x-if="p.status_phase !== 'Running' && p.status_phase !== 'Succeeded'">
                         <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[10px] rounded-lg hover:bg-rose-500/10"
-                                style="color: #fb7185;"
+                                style="color: #fda4af;"
                                 @click="$dispatch('open-delete-modal', {type: 'Pod', name: p.name, namespace: p.namespace, deleteUrl: '/resources/' + clusterPk + '/delete/pod/' + p.namespace + '/' + p.name + '/'})">
                           <i class="fas fa-trash-alt text-[9px]"></i> 删除
                         </button>
@@ -727,16 +727,16 @@
                   </td>
                 </tr>
               </template>
-              <tr x-show="pods.length === 0"><td colspan="8" class="text-center py-10" style="color: #6b7280;">无关联 Pod</td></tr>
+              <tr x-show="pods.length === 0"><td colspan="8" class="text-center py-10" style="color: #8b8b9e;">无关联 Pod</td></tr>
             </tbody>
           </table>
         </div>
-        <div x-show="podTotalPages > 1" class="flex items-center justify-between mt-4 text-xs" style="color: #6b7280;">
+        <div x-show="podTotalPages > 1" class="flex items-center justify-between mt-4 text-xs" style="color: #8b8b9e;">
           <span>共 <span x-text="pods.length"></span> 个 Pod</span>
           <div class="flex items-center gap-1">
-            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg hover:bg-white/5" style="color: #9ca3af;" :disabled="podPage <= 1" @click="podPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
-            <span class="px-3 text-xs" style="color: #9ca3af;" x-text="podPage + ' / ' + podTotalPages"></span>
-            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg hover:bg-white/5" style="color: #9ca3af;" :disabled="podPage >= podTotalPages" @click="podPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
+            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg hover:bg-white/5" style="color: #b8b8c8;" :disabled="podPage <= 1" @click="podPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
+            <span class="px-3 text-xs" style="color: #b8b8c8;" x-text="podPage + ' / ' + podTotalPages"></span>
+            <button class="btn btn-ghost btn-xs h-8 min-h-0 px-3 rounded-lg hover:bg-white/5" style="color: #b8b8c8;" :disabled="podPage >= podTotalPages" @click="podPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
           </div>
         </div>
       </div>
@@ -832,67 +832,69 @@
 <!-- Pod Logs Modal（共享：pod 列表、deployment describe 都用） -->
 <dialog id="logModal" class="modal" x-data="podLogViewer()"
         @open-pod-logs.window="viewLogs($event.detail.namespace, $event.detail.podName, $event.detail.logsUrl)">
-  <div class="modal-box max-w-3xl flex flex-col bg-base-100 shadow-xl rounded-xl p-0" style="height:55vh;">
-    <div class="flex items-center justify-between px-5 py-3 border-b border-base-200 flex-shrink-0">
-      <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-lg bg-violet-500/15 grid place-items-center">
-          <i class="fas fa-terminal text-violet-500 text-[10px]"></i>
+  <div class="modal-box flex flex-col p-0 shadow-2xl" style="max-width: 1000px; height:65vh; border-radius: 20px; background: linear-gradient(135deg, #1e1e2e 0%, #252540 100%); border: 1px solid rgba(139,92,246,0.2);">
+    <div class="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style="border-color: rgba(139,92,246,0.15); background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,130,246,0.05));">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl grid place-items-center shadow-lg" style="background: linear-gradient(135deg, rgba(139,92,246,0.3), rgba(59,130,246,0.3));">
+          <i class="fas fa-terminal text-sm" style="color: #c4b5fd;"></i>
         </div>
-        <span class="font-semibold text-sm">Pod 日志</span>
-        <span class="text-xs opacity-40" x-text="podName"></span>
+        <div>
+          <span class="font-semibold text-base" style="color: #f5f5f5;">Pod 日志</span>
+          <div class="text-xs mt-0.5" style="color: #a8a8b8;" x-text="namespace + ' / ' + podName"></div>
+        </div>
       </div>
-      <button class="btn btn-ghost btn-sm btn-circle h-7 w-7 min-h-0" @click="stopLive(); $el.closest('dialog').close()">
-        <i class="fas fa-times text-xs"></i>
+      <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0 hover:bg-white/10 transition-all" style="color: #b8b8c8;" @click="stopLive(); $el.closest('dialog').close()">
+        <i class="fas fa-times text-sm"></i>
       </button>
     </div>
 
-    <div class="flex items-center justify-between px-5 py-2 border-b border-base-200 flex-shrink-0">
+    <div class="flex items-center justify-between px-6 py-3 border-b flex-shrink-0" style="border-color: rgba(255,255,255,0.06); background: rgba(255,255,255,0.02);">
       <div class="flex items-center gap-3">
-        <span class="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-500 font-medium" x-text="container || 'default'"></span>
+        <span class="text-[11px] px-2.5 py-1 rounded-lg font-medium" style="background: rgba(139,92,246,0.15); color: #c4b5fd;" x-text="container || 'default'"></span>
         <select x-model="tailLines" @change="viewLogs(namespace, podName, baseUrl, false, true)"
-                class="select select-bordered select-xs h-7 min-h-0 text-[11px] w-28 focus:select-primary">
+                class="select select-bordered select-sm h-8 min-h-0 text-xs rounded-lg" style="width: 140px; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #e2e2ea;">
           <option value="100">最近 100 行</option>
           <option value="200">最近 200 行</option>
           <option value="500">最近 500 行</option>
           <option value="1000">最近 1000 行</option>
         </select>
-        <label class="flex items-center gap-1.5 cursor-pointer select-none">
-          <input type="checkbox" class="toggle toggle-xs toggle-success" :checked="liveMode" @change="toggleLive()">
-          <span class="text-[11px]" :class="liveMode ? 'text-emerald-500 font-medium' : 'opacity-40'">实时</span>
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" class="toggle toggle-sm" :checked="liveMode" @change="toggleLive()" style="--tglbg: #6366f1;">
+          <span class="text-xs font-medium" :style="liveMode ? 'color: #6ee7b7;' : 'color: #8b8b9e;'">实时</span>
         </label>
       </div>
       <div class="flex items-center gap-2">
         <button @click="viewLogs(namespace, podName, baseUrl, false, true)"
-                class="btn btn-ghost btn-xs h-7 min-h-0 gap-1 text-[11px]">
-          <i class="fas fa-sync-alt text-[9px]" :class="loading ? 'animate-spin' : ''"></i> 刷新
+                class="btn btn-ghost btn-sm h-8 min-h-0 gap-1.5 text-xs rounded-lg hover:bg-white/5" style="color: #b8b8c8;">
+          <i class="fas fa-sync-alt text-[10px]" :class="loading ? 'animate-spin' : ''"></i> 刷新
         </button>
         <button @click="if(liveMode) stopLive(); previous = !previous; viewLogs(namespace, podName, baseUrl, false, true)"
-                class="btn btn-xs h-7 min-h-0 gap-1 text-[11px] transition-all"
-                :class="previous ? 'btn-warning' : 'btn-ghost'">
-          <i class="fas fa-history text-[9px]"></i> 上次日志
+                class="btn btn-sm h-8 min-h-0 gap-1.5 text-xs rounded-lg transition-all"
+                :style="previous ? 'background: rgba(234,179,8,0.15); border: 1px solid rgba(234,179,8,0.25); color: #fde047;' : 'background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #b8b8c8;'">
+          <i class="fas fa-history text-[10px]"></i> 上次日志
         </button>
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed" x-ref="logBox"
-         style="background:#0d1117; color:#c9d1d9;">
-      <div x-show="loading && !logs" class="flex flex-col items-center justify-center h-full gap-2">
-        <span class="loading loading-spinner loading-sm text-primary"></span>
-        <span class="text-[11px] opacity-40">获取日志中...</span>
+    <div class="flex-1 overflow-y-auto px-5 py-4 font-mono text-xs leading-relaxed" x-ref="logBox"
+         style="background: #0d1117; color: #e6edf3;">
+      <div x-show="loading && !logs" class="flex flex-col items-center justify-center h-full gap-3">
+        <span class="loading loading-spinner loading-md" style="color: #c4b5fd;"></span>
+        <span class="text-xs" style="color: #8b8b9e;">获取日志中...</span>
       </div>
-      <div x-show="!loading && error" class="text-error text-xs" x-text="error"></div>
+      <div x-show="!loading && error" class="text-xs" style="color: #fda4af;" x-text="error"></div>
       <pre x-show="logs" class="whitespace-pre-wrap break-all m-0" x-text="logs"></pre>
-      <div x-show="!loading && !error && !logs" class="flex flex-col items-center justify-center h-full gap-2 opacity-30">
-        <i class="fas fa-file-alt text-2xl"></i>
+      <div x-show="!loading && !error && !logs" class="flex flex-col items-center justify-center h-full gap-3" style="color: #6b7280;">
+        <i class="fas fa-file-alt text-3xl"></i>
         <span class="text-xs">暂无日志输出</span>
       </div>
     </div>
 
-    <div class="flex items-center justify-between px-5 py-1.5 border-t border-base-200 text-[10px] opacity-40 flex-shrink-0">
+    <div class="flex items-center justify-between px-5 py-2.5 border-t text-[11px] flex-shrink-0" style="border-color: rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); color: #8b8b9e;">
       <span x-text="namespace + ' / ' + podName"></span>
-      <div class="flex items-center gap-3">
-        <span x-show="liveMode" class="text-emerald-500 flex items-center gap-1 opacity-100">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> 每 3s 刷新
+      <div class="flex items-center gap-4">
+        <span x-show="liveMode" class="flex items-center gap-1.5" style="color: #6ee7b7;">
+          <span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background: #6ee7b7;"></span> 每 3s 刷新
         </span>
         <span x-text="logs ? (logs.split('\n').length + ' 行') : ''"></span>
       </div>
