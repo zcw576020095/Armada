@@ -10,6 +10,8 @@ kubeconfig
 # ---- Database (contains encrypted kubeconfigs & user data) ----
 db.sqlite3
 db.sqlite3-journal
+db.sqlite3-shm
+db.sqlite3-wal
 *.db
 
 # ---- Python ----
