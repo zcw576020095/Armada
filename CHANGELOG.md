@@ -7,7 +7,7 @@
 ## 2026-05-13
 
 ### 优化
-- Deployment/StatefulSet/DaemonSet 详情弹框视觉重设计（深色渐变背景、卡片式布局、更大间距、图标增强）
+- Deployment/StatefulSet/DaemonSet 详情弹框 + Pod 日志弹框全面改用 DaisyUI 语义化主题类，跟随系统亮/暗主题切换
 
 ---
 
