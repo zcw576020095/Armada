@@ -805,7 +805,7 @@
             <td class="opacity-70" x-text="r.change_cause || '-'"></td>
             <td class="opacity-50 whitespace-nowrap" x-text="r.created"></td>
             <td>
-              <button class="btn btn-warning btn-xs h-6 min-h-0 gap-1 text-[10px]"
+              <button class="btn btn-warning btn-xs h-6 min-h-0 gap-1 text-[10px] whitespace-nowrap"
                       :disabled="r.is_current || rolling || pendingRevision"
                       @click="pendingRevision = r.revision">
                 <i class="fas fa-undo text-[9px]"></i> 回滚到此
