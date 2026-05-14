@@ -385,7 +385,7 @@
 
         <!-- Deployment: 滚动更新 Pod 数量超出解释 -->
         <template x-if="resourceType === 'deployment' && !isRolling && pods.length > info.replicas && info.replicas > 0">
-          <div class="alert alert-warning">
+          <div class="alert alert-warning bg-warning/20">
             <i class="fas fa-info-circle"></i>
             <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
@@ -396,7 +396,7 @@
           </div>
         </template>
         <template x-if="resourceType === 'deployment' && isRolling">
-          <div class="alert alert-info">
+          <div class="alert alert-info bg-info/20">
             <i class="fas fa-sync-alt animate-spin"></i>
             <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
