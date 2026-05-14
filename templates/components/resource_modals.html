@@ -385,20 +385,20 @@
 
         <!-- Deployment: 滚动更新 Pod 数量超出解释 -->
         <template x-if="resourceType === 'deployment' && !isRolling && pods.length > info.replicas && info.replicas > 0">
-          <div class="flex items-start gap-3 rounded-xl border border-amber-300 p-4" style="background-color: #fef9c3;">
-            <i class="fas fa-info-circle text-amber-600 mt-0.5"></i>
-            <div class="text-xs leading-relaxed text-amber-900">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
+            <i class="fas fa-info-circle mt-0.5" style="color: #d97706;"></i>
+            <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
               K8s 滚动更新时旧 ReplicaSet 的 Pod 需等新 Pod 就绪后才会被删除。
               当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留。<br>
-              <span class="opacity-70 text-xs">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
+              <span class="text-xs" style="opacity: 0.7;">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
             </div>
           </div>
         </template>
         <template x-if="resourceType === 'deployment' && isRolling">
-          <div class="flex items-start gap-3 rounded-xl border border-sky-300 p-4" style="background-color: #e0f2fe;">
-            <i class="fas fa-sync-alt animate-spin text-sky-600 mt-0.5"></i>
-            <div class="text-xs leading-relaxed text-sky-900">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e;">
+            <i class="fas fa-sync-alt animate-spin mt-0.5" style="color: #0284c7;"></i>
+            <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
               已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本<br>
               K8s 正在逐步替换旧 Pod，Pod 总数会暂时超过期望副本数，更新完成后恢复正常。
