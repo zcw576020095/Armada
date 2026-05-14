@@ -406,6 +406,41 @@
           </div>
         </template>
 
+        <!-- StatefulSet: 滚动更新 Pod 数量超出解释 -->
+        <template x-if="resourceType === 'statefulset' && !isRolling && pods.length > info.replicas && info.replicas > 0">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
+            <i class="fas fa-info-circle mt-0.5" style="color: #d97706;"></i>
+            <div class="text-xs leading-relaxed">
+              <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
+              StatefulSet 滚动更新时旧 Pod 需等新 Pod 就绪后才会被删除。
+              当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留。<br>
+              <span class="text-xs" style="opacity: 0.7;">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
+            </div>
+          </div>
+        </template>
+        <template x-if="resourceType === 'statefulset' && isRolling">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e;">
+            <i class="fas fa-sync-alt animate-spin mt-0.5" style="color: #0284c7;"></i>
+            <div class="text-xs leading-relaxed">
+              <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
+              已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本<br>
+              StatefulSet 按序号逆序更新（从大到小），Pod 总数会暂时超过期望副本数，更新完成后恢复正常。
+            </div>
+          </div>
+        </template>
+
+        <!-- DaemonSet: 更新进行中提示 -->
+        <template x-if="resourceType === 'daemonset' && isRolling">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e;">
+            <i class="fas fa-sync-alt animate-spin mt-0.5" style="color: #0284c7;"></i>
+            <div class="text-xs leading-relaxed">
+              <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
+              已更新 <span class="font-semibold" x-text="info.updated"></span> / <span x-text="info.desired"></span> 个节点<br>
+              DaemonSet 正在逐节点更新 Pod，更新完成后所有节点将运行新版本。
+            </div>
+          </div>
+        </template>
+
         <!-- 副本状态卡片 - Deployment -->
         <template x-if="resourceType === 'deployment'">
           <div class="grid grid-cols-4 gap-3">
