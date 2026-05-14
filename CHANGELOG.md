@@ -6,8 +6,15 @@
 
 ## 2026-05-14
 
+### 新功能
+- StatefulSet/DaemonSet 详情弹框增加滚动更新提示横幅（与 Deployment 对齐）
+
+### Bug 修复
+- StatefulSet/DaemonSet 回滚版本列表扩缩容产生重复版本（controller-revision-hash 未剥离导致 template 去重失效）
+
 ### 优化
-- 详情弹框警告/提示横幅增强背景色（浅黄色/浅蓝色），提升视觉辨识度
+- 详情弹框警告/提示横幅增强背景色（浅黄色/浅蓝色），暗色主题下文字可读性修复
+- 回滚弹框「回滚到此」按钮加 whitespace-nowrap 防止缩小浏览器时换行
 
 ---
 

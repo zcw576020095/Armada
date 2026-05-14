@@ -1182,12 +1182,18 @@ class K8sResourceManager:
             current_hash = sts.status.update_revision
 
         # 按 template 去重：只保留每个唯一 template 的最新 revision
+        # 注意：template 内的 labels 含 controller-revision-hash，每个 revision 都不同，
+        # 必须剥掉才能正确去重（和 Deployment 剥 pod-template-hash 同理）
         template_map = {}  # template_json -> highest revision CR
         for cr in owned:
             template = None
             if cr.data and isinstance(cr.data, dict):
                 spec_data = cr.data.get('spec', {})
-                template = spec_data.get('template') if isinstance(spec_data, dict) else None
+                template = copy.deepcopy(spec_data.get('template')) if isinstance(spec_data, dict) else None
+
+            if template and isinstance(template, dict):
+                tmpl_labels = template.get('metadata', {}).get('labels', {})
+                tmpl_labels.pop(self.CONTROLLER_REVISION_HASH_LABEL, None)
 
             template_key = json.dumps(template, sort_keys=True) if template else ''
             existing = template_map.get(template_key)
@@ -1372,12 +1378,18 @@ class K8sResourceManager:
             current_hash = labels.get(self.CONTROLLER_REVISION_HASH_LABEL, '')
 
         # 按 template 去重：只保留每个唯一 template 的最新 revision
+        # 注意：template 内的 labels 含 controller-revision-hash，每个 revision 都不同，
+        # 必须剥掉才能正确去重（和 Deployment 剥 pod-template-hash 同理）
         template_map = {}  # template_json -> highest revision CR
         for cr in owned:
             template = None
             if cr.data and isinstance(cr.data, dict):
                 spec_data = cr.data.get('spec', {})
-                template = spec_data.get('template') if isinstance(spec_data, dict) else None
+                template = copy.deepcopy(spec_data.get('template')) if isinstance(spec_data, dict) else None
+
+            if template and isinstance(template, dict):
+                tmpl_labels = template.get('metadata', {}).get('labels', {})
+                tmpl_labels.pop(self.CONTROLLER_REVISION_HASH_LABEL, None)
 
             template_key = json.dumps(template, sort_keys=True) if template else ''
             existing = template_map.get(template_key)
