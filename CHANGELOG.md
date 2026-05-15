@@ -11,6 +11,7 @@
 
 ### Bug 修复
 - StatefulSet/DaemonSet 回滚版本列表扩缩容产生重复版本（controller-revision-hash 未剥离导致 template 去重失效）
+- Deployment 详情弹框关联 Pods 显示了其他资源类型的 Pod（纯 label selector 过滤不够精确，改为 label + ownerReferences 双重过滤）
 
 ### 优化
 - 详情弹框警告/提示横幅增强背景色（浅黄色/浅蓝色），暗色主题下文字可读性修复

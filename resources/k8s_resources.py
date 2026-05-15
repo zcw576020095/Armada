@@ -906,8 +906,49 @@ class K8sResourceManager:
             'info': info,
             'conditions': conditions,
             'events': self._list_events_for(namespace, 'Deployment', name, meta.uid),
-            'pods': self._list_pods_by_selector(namespace, match_labels),
+            'pods': self._list_pods_for_deployment(namespace, name, match_labels),
         }
+
+    def _list_pods_for_deployment(self, namespace, deploy_name, match_labels):
+        """按 label selector + ownerReferences 双重过滤 Deployment 关联 Pod。
+        Deployment 的 owner 链是 Deployment → ReplicaSet → Pod，
+        所以先找属于该 Deployment 的 RS，再过滤 Pod owner 指向这些 RS。
+        """
+        if not match_labels:
+            return []
+        label_selector = ','.join(f'{k}={v}' for k, v in match_labels.items())
+        try:
+            pod_list = self.core_v1.list_namespaced_pod(
+                namespace, label_selector=label_selector, _request_timeout=15
+            )
+        except ApiException as e:
+            logger.warning(f'list pods for deployment failed: {e.reason}')
+            return []
+
+        try:
+            rs_list = self.apps_v1.list_namespaced_replica_set(
+                namespace, label_selector=label_selector, _request_timeout=15
+            )
+        except ApiException as e:
+            logger.warning(f'list rs for deployment failed: {e.reason}')
+            return []
+
+        owned_rs_names = set()
+        for rs in rs_list.items:
+            for owner in (rs.metadata.owner_references or []):
+                if owner.kind == 'Deployment' and owner.name == deploy_name:
+                    owned_rs_names.add(rs.metadata.name)
+                    break
+
+        owned_pods = []
+        for pod in pod_list.items:
+            for owner in (pod.metadata.owner_references or []):
+                if owner.kind == 'ReplicaSet' and owner.name in owned_rs_names:
+                    owned_pods.append(pod)
+                    break
+
+        from resources.sync_service import _serialize_item
+        return [_serialize_item('pod', p) for p in owned_pods]
 
     # ─── Rollout 历史 / 回滚 ─────────────────────────────────────
     REVISION_ANNOTATION = 'deployment.kubernetes.io/revision'
