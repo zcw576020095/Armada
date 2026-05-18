@@ -257,6 +257,7 @@ function resourceList() {
     pageSize: 20,
     _pollTimer: null,
     _pollDeadline: 0,
+    _loadController: null,
     // 乐观操作存档：让 load() 不会瞬间覆盖最近用户操作的状态
     // key: "ns|name" -> {action: 'add'|'remove'|'terminate', resource?, until: timestamp}
     _pendingOps: {},
@@ -474,13 +475,16 @@ function resourceList() {
       else this.loading = true;
       this.error = null;
       this.serviceDown = false;
+      // 取消上一次未完成的请求，防止旧请求的响应覆盖新筛选条件的结果
+      if (this._loadController) this._loadController.abort();
+      this._loadController = new AbortController();
       let apiUrl = '{% block api_url %}{% endblock %}';
       const params = new URLSearchParams();
       if (this.nsFilter) params.set('namespace', this.nsFilter);
       if (refresh) params.set('refresh', '1');
       const qs = params.toString();
       if (qs) apiUrl += '?' + qs;
-      return fetch(apiUrl)
+      return fetch(apiUrl, {signal: this._loadController.signal})
         .then(r => {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
@@ -516,6 +520,7 @@ function resourceList() {
           }
         })
         .catch(e => {
+          if (e.name === 'AbortError') return;
           // fetch reject = 网络层 / 后端服务挂了 / HTTP 5xx
           this.serviceDown = true;
           this.error = null;
