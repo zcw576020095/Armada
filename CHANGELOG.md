@@ -10,7 +10,7 @@
 - StatefulSet/DaemonSet 详情弹框增加滚动更新提示横幅（与 Deployment 对齐）
 
 ### Bug 修复
-- StatefulSet/DaemonSet 回滚版本列表扩缩容产生重复版本（controller-revision-hash 未剥离导致 template 去重失效）
+- StatefulSet/DaemonSet 回滚版本列表重启后产生重复版本（kubectl.kubernetes.io/restartedAt annotation 带时间戳导致 template 去重失效）
 - Deployment 详情弹框关联 Pods 显示了其他资源类型的 Pod（纯 label selector 过滤不够精确，改为 label + ownerReferences 双重过滤）
 - 资源列表切换命名空间后页面闪回全部数据再跳回筛选结果（并发 fetch 竞态，用 AbortController 取消旧请求）
 
