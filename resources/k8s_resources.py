@@ -1223,8 +1223,10 @@ class K8sResourceManager:
             current_hash = sts.status.update_revision
 
         # 按 template 去重：只保留每个唯一 template 的最新 revision
-        # 注意：template 内的 labels 含 controller-revision-hash，每个 revision 都不同，
-        # 必须剥掉才能正确去重（和 Deployment 剥 pod-template-hash 同理）
+        # 需要剥掉的干扰字段：
+        # 1. controller-revision-hash label（每个 revision 不同）
+        # 2. kubectl.kubernetes.io/restartedAt annotation（每次重启都带时间戳）
+        # 3. $patch 字段（ControllerRevision 内部标记，不属于 pod template 本身）
         template_map = {}  # template_json -> highest revision CR
         for cr in owned:
             template = None
@@ -1233,8 +1235,13 @@ class K8sResourceManager:
                 template = copy.deepcopy(spec_data.get('template')) if isinstance(spec_data, dict) else None
 
             if template and isinstance(template, dict):
-                tmpl_labels = template.get('metadata', {}).get('labels', {})
-                tmpl_labels.pop(self.CONTROLLER_REVISION_HASH_LABEL, None)
+                template.pop('$patch', None)
+                meta = template.get('metadata', {})
+                meta.get('labels', {}).pop(self.CONTROLLER_REVISION_HASH_LABEL, None)
+                annotations = meta.get('annotations', {})
+                annotations.pop('kubectl.kubernetes.io/restartedAt', None)
+                if not annotations:
+                    meta.pop('annotations', None)
 
             template_key = json.dumps(template, sort_keys=True) if template else ''
             existing = template_map.get(template_key)
@@ -1419,8 +1426,10 @@ class K8sResourceManager:
             current_hash = labels.get(self.CONTROLLER_REVISION_HASH_LABEL, '')
 
         # 按 template 去重：只保留每个唯一 template 的最新 revision
-        # 注意：template 内的 labels 含 controller-revision-hash，每个 revision 都不同，
-        # 必须剥掉才能正确去重（和 Deployment 剥 pod-template-hash 同理）
+        # 需要剥掉的干扰字段：
+        # 1. controller-revision-hash label（每个 revision 不同）
+        # 2. kubectl.kubernetes.io/restartedAt annotation（每次重启都带时间戳）
+        # 3. $patch 字段（ControllerRevision 内部标记，不属于 pod template 本身）
         template_map = {}  # template_json -> highest revision CR
         for cr in owned:
             template = None
@@ -1429,8 +1438,13 @@ class K8sResourceManager:
                 template = copy.deepcopy(spec_data.get('template')) if isinstance(spec_data, dict) else None
 
             if template and isinstance(template, dict):
-                tmpl_labels = template.get('metadata', {}).get('labels', {})
-                tmpl_labels.pop(self.CONTROLLER_REVISION_HASH_LABEL, None)
+                template.pop('$patch', None)
+                meta = template.get('metadata', {})
+                meta.get('labels', {}).pop(self.CONTROLLER_REVISION_HASH_LABEL, None)
+                annotations = meta.get('annotations', {})
+                annotations.pop('kubectl.kubernetes.io/restartedAt', None)
+                if not annotations:
+                    meta.pop('annotations', None)
 
             template_key = json.dumps(template, sort_keys=True) if template else ''
             existing = template_map.get(template_key)
