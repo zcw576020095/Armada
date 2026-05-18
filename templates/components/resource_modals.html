@@ -383,60 +383,63 @@
           </div>
         </template>
 
-        <!-- Deployment: 滚动更新 Pod 数量超出解释 -->
-        <template x-if="resourceType === 'deployment' && !isRolling && pods.length > info.replicas && info.replicas > 0">
-          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
-            <i class="fas fa-info-circle mt-0.5" style="color: #d97706;"></i>
-            <div class="text-xs leading-relaxed">
-              <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
-              K8s 滚动更新时旧 ReplicaSet 的 Pod 需等新 Pod 就绪后才会被删除。
-              当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留。<br>
-              <span class="text-xs" style="opacity: 0.7;">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
-            </div>
-          </div>
-        </template>
-        <template x-if="resourceType === 'deployment' && isRolling">
+        <!-- 通用健康状态提示横幅（适用于 Deployment / StatefulSet / DaemonSet） -->
+
+        <!-- 滚动更新进行中（蓝色） -->
+        <template x-if="isRolling">
           <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e;">
             <i class="fas fa-sync-alt animate-spin mt-0.5" style="color: #0284c7;"></i>
             <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
-              已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本<br>
-              K8s 正在逐步替换旧 Pod，Pod 总数会暂时超过期望副本数，更新完成后恢复正常。
+              <template x-if="resourceType === 'daemonset'">
+                <span>已更新 <span class="font-semibold" x-text="info.updated"></span> / <span x-text="info.desired"></span> 个节点，DaemonSet 正在逐节点更新 Pod。</span>
+              </template>
+              <template x-if="resourceType === 'statefulset'">
+                <span>已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本，StatefulSet 按序号逆序更新（从大到小）。</span>
+              </template>
+              <template x-if="resourceType === 'deployment'">
+                <span>已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本，K8s 正在逐步替换旧 Pod。</span>
+              </template>
             </div>
           </div>
         </template>
 
-        <!-- StatefulSet: 滚动更新 Pod 数量超出解释 -->
-        <template x-if="resourceType === 'statefulset' && !isRolling && pods.length > info.replicas && info.replicas > 0">
-          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
-            <i class="fas fa-info-circle mt-0.5" style="color: #d97706;"></i>
+        <!-- Pod 启动异常（红色）：有 Pod 处于异常状态 -->
+        <template x-if="podBlockReasons.length > 0">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef2f2; border-color: #fca5a5; color: #7f1d1d;">
+            <i class="fas fa-exclamation-triangle mt-0.5" style="color: #dc2626;"></i>
             <div class="text-xs leading-relaxed">
-              <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
-              StatefulSet 滚动更新时旧 Pod 需等新 Pod 就绪后才会被删除。
-              当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留。<br>
-              <span class="text-xs" style="opacity: 0.7;">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
-            </div>
-          </div>
-        </template>
-        <template x-if="resourceType === 'statefulset' && isRolling">
-          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e;">
-            <i class="fas fa-sync-alt animate-spin mt-0.5" style="color: #0284c7;"></i>
-            <div class="text-xs leading-relaxed">
-              <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
-              已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本<br>
-              StatefulSet 按序号逆序更新（从大到小），Pod 总数会暂时超过期望副本数，更新完成后恢复正常。
+              <span class="font-semibold text-sm block mb-1">Pod 异常</span>
+              存在异常状态的 Pod：<span class="font-semibold" x-text="podBlockReasons.join('、')"></span><br>
+              <span class="text-xs" style="opacity: 0.7;">→ 请检查镜像地址是否正确、资源配额是否充足；或在「关联 Pods」标签中删除异常 Pod 触发重建。</span>
             </div>
           </div>
         </template>
 
-        <!-- DaemonSet: 更新进行中提示 -->
-        <template x-if="resourceType === 'daemonset' && isRolling">
-          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e;">
-            <i class="fas fa-sync-alt animate-spin mt-0.5" style="color: #0284c7;"></i>
+        <!-- 扩容/启动中（黄色）：就绪数 < 期望数，但没有异常 Pod -->
+        <template x-if="isScaling && podBlockReasons.length === 0">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
+            <i class="fas fa-spinner fa-spin mt-0.5" style="color: #d97706;"></i>
             <div class="text-xs leading-relaxed">
-              <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
-              已更新 <span class="font-semibold" x-text="info.updated"></span> / <span x-text="info.desired"></span> 个节点<br>
-              DaemonSet 正在逐节点更新 Pod，更新完成后所有节点将运行新版本。
+              <span class="font-semibold text-sm block mb-1">副本启动中</span>
+              <template x-if="resourceType !== 'daemonset'">
+                <span>就绪 <span class="font-semibold" x-text="info.ready_replicas || 0"></span> / 期望 <span x-text="info.replicas"></span> 个副本，Pod 正在拉取镜像或等待调度。</span>
+              </template>
+              <template x-if="resourceType === 'daemonset'">
+                <span>就绪 <span class="font-semibold" x-text="info.ready || 0"></span> / 期望 <span x-text="info.desired"></span> 个节点，Pod 正在拉取镜像或等待调度。</span>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Pod 数量超出期望（黄色）：缩容后旧 Pod 未删除 -->
+        <template x-if="!isRolling && !isScaling && podBlockReasons.length === 0 && (resourceType === 'deployment' || resourceType === 'statefulset') && pods.length > (info.replicas || 0) && (info.replicas || 0) > 0">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
+            <i class="fas fa-info-circle mt-0.5" style="color: #d97706;"></i>
+            <div class="text-xs leading-relaxed">
+              <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
+              滚动更新时旧 Pod 需等新 Pod 就绪后才会被删除。当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留。<br>
+              <span class="text-xs" style="opacity: 0.7;">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
             </div>
           </div>
         </template>
@@ -495,31 +498,26 @@
 
         <!-- 副本状态卡片 - DaemonSet -->
         <template x-if="resourceType === 'daemonset'">
-          <div class="grid grid-cols-5 gap-3">
-            <div class="bg-base-200 rounded-xl p-3 text-center">
-              <i class="fas fa-crosshairs text-primary mb-1 text-xs"></i>
-              <div class="text-xl font-bold text-primary" x-text="info.desired ?? 0"></div>
-              <div class="text-[10px] opacity-50 mt-1">期望节点数</div>
+          <div class="grid grid-cols-4 gap-3">
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-crosshairs text-primary mb-1"></i>
+              <div class="text-2xl font-bold text-primary" x-text="info.desired ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">期望节点数</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-3 text-center">
-              <i class="fas fa-server text-accent mb-1 text-xs"></i>
-              <div class="text-xl font-bold text-accent" x-text="info.current ?? 0"></div>
-              <div class="text-[10px] opacity-50 mt-1">当前</div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-check-circle text-success mb-1"></i>
+              <div class="text-2xl font-bold text-success" x-text="info.ready ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">就绪</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-3 text-center">
-              <i class="fas fa-check-circle text-success mb-1 text-xs"></i>
-              <div class="text-xl font-bold text-success" x-text="info.ready ?? 0"></div>
-              <div class="text-[10px] opacity-50 mt-1">就绪</div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-arrow-up text-info mb-1"></i>
+              <div class="text-2xl font-bold text-info" x-text="info.updated ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">已更新</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-3 text-center">
-              <i class="fas fa-arrow-up text-info mb-1 text-xs"></i>
-              <div class="text-xl font-bold text-info" x-text="info.updated ?? 0"></div>
-              <div class="text-[10px] opacity-50 mt-1">已更新</div>
-            </div>
-            <div class="bg-base-200 rounded-xl p-3 text-center">
-              <i class="fas fa-check-double text-secondary mb-1 text-xs"></i>
-              <div class="text-xl font-bold text-secondary" x-text="info.available ?? 0"></div>
-              <div class="text-[10px] opacity-50 mt-1">可用</div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-check-double text-secondary mb-1"></i>
+              <div class="text-2xl font-bold text-secondary" x-text="info.available ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">可用</div>
             </div>
           </div>
         </template>
@@ -1539,10 +1537,36 @@ function describeViewer() {
       return [...reasons];
     },
     get isRolling() {
-      if (this.resourceType !== 'deployment') return false;
-      if (!this.info || !this.info.replicas) return false;
-      if (this.info.updated_replicas >= this.info.replicas) return false;
-      return (this.conditions || []).some(c => c.type === 'Progressing' && c.status === 'True');
+      if (!this.info) return false;
+      if (this.resourceType === 'deployment') {
+        if (!this.info.replicas) return false;
+        if ((this.info.updated_replicas || 0) >= this.info.replicas) return false;
+        return (this.conditions || []).some(c => c.type === 'Progressing' && c.status === 'True');
+      }
+      if (this.resourceType === 'statefulset') {
+        if (!this.info.replicas) return false;
+        return (this.info.updated_replicas || 0) < this.info.replicas;
+      }
+      if (this.resourceType === 'daemonset') {
+        return (this.info.updated || 0) < (this.info.desired || 0);
+      }
+      return false;
+    },
+    get isScaling() {
+      if (!this.info) return false;
+      if (this.resourceType === 'deployment' || this.resourceType === 'statefulset') {
+        const ready = this.info.ready_replicas || 0;
+        const desired = this.info.replicas || 0;
+        if (desired === 0) return false;
+        return ready < desired && !this.isRolling;
+      }
+      if (this.resourceType === 'daemonset') {
+        const ready = this.info.ready || 0;
+        const desired = this.info.desired || 0;
+        if (desired === 0) return false;
+        return ready < desired && !this.isRolling;
+      }
+      return false;
     },
     get podTotalPages() { return Math.ceil(this.pods.length / this.podPageSize) || 1; },
     get pagedPods() {
