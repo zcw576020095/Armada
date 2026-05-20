@@ -839,6 +839,96 @@ class K8sResourceManager:
         from resources.sync_service import _serialize_item
         return [_serialize_item('pod', p) for p in owned_pods]
 
+    # ─── Service 详情 ──────────────────────────────────────────
+    def describe_service(self, name, namespace):
+        """汇总 Service 的基础信息 + Endpoints + Events + 关联 Pods"""
+        try:
+            svc = self.core_v1.read_namespaced_service(name, namespace, _request_timeout=10)
+        except ApiException as e:
+            if e.status == 404:
+                raise Exception(f"Service '{name}' not found in namespace '{namespace}'")
+            raise Exception(f"Failed to read service: {e.reason}")
+
+        spec = svc.spec
+        meta = svc.metadata
+        status = svc.status
+
+        ports = []
+        for p in (spec.ports or []):
+            port_info = {
+                'name': p.name or '-',
+                'protocol': p.protocol or 'TCP',
+                'port': p.port,
+                'target_port': str(p.target_port) if p.target_port is not None else '-',
+            }
+            if p.node_port:
+                port_info['node_port'] = p.node_port
+            ports.append(port_info)
+
+        selector = dict(spec.selector or {}) if spec.selector else {}
+
+        lb_ingress = []
+        if status and status.load_balancer and status.load_balancer.ingress:
+            for ing in status.load_balancer.ingress:
+                lb_ingress.append(ing.ip or ing.hostname or '-')
+
+        info = {
+            'name': meta.name,
+            'namespace': meta.namespace,
+            'created': self._ts_to_str(meta.creation_timestamp),
+            'labels': dict(meta.labels or {}),
+            'annotations': {k: v for k, v in (meta.annotations or {}).items()
+                           if not k.startswith('kubectl.kubernetes.io/last-applied')},
+            'type': spec.type or 'ClusterIP',
+            'cluster_ip': spec.cluster_ip or '-',
+            'external_ips': spec.external_i_ps or [],
+            'ports': ports,
+            'selector': selector,
+            'session_affinity': spec.session_affinity or 'None',
+            'lb_ingress': lb_ingress,
+        }
+
+        # Endpoints
+        endpoints = []
+        try:
+            ep = self.core_v1.read_namespaced_endpoints(name, namespace, _request_timeout=10)
+            for subset in (ep.subsets or []):
+                ep_ports = [{'port': p.port, 'protocol': p.protocol or 'TCP', 'name': p.name or '-'}
+                            for p in (subset.ports or [])]
+                for addr in (subset.addresses or []):
+                    target = ''
+                    if addr.target_ref:
+                        target = f"{addr.target_ref.kind}/{addr.target_ref.name}" if addr.target_ref.kind else addr.target_ref.name or ''
+                    endpoints.append({
+                        'ip': addr.ip,
+                        'node': addr.node_name or '-',
+                        'target': target,
+                        'ready': True,
+                        'ports': ep_ports,
+                    })
+                for addr in (subset.not_ready_addresses or []):
+                    target = ''
+                    if addr.target_ref:
+                        target = f"{addr.target_ref.kind}/{addr.target_ref.name}" if addr.target_ref.kind else addr.target_ref.name or ''
+                    endpoints.append({
+                        'ip': addr.ip,
+                        'node': addr.node_name or '-',
+                        'target': target,
+                        'ready': False,
+                        'ports': ep_ports,
+                    })
+        except ApiException:
+            pass
+
+        pods = self._list_pods_by_selector(namespace, selector) if selector else []
+
+        return {
+            'info': info,
+            'endpoints': endpoints,
+            'events': self._list_events_for(namespace, 'Service', name, meta.uid),
+            'pods': pods,
+        }
+
     def describe_deployment(self, name, namespace):
         """汇总 Deployment 的状态/conditions/events/关联 Pods，给前端 describe modal"""
         try:

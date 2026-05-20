@@ -39,6 +39,7 @@ urlpatterns = [
 
     # Services
     path('<int:pk>/services/', views.service_list, name='services'),
+    path('<int:pk>/api/services/<str:ns>/<str:name>/describe/', views.service_describe_api, name='service_describe'),
 
     # Ingresses
     path('<int:pk>/ingresses/', views.ingress_list, name='ingresses'),

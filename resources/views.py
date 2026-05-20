@@ -537,6 +537,15 @@ def service_list_api(request, pk):
     return _workload_list_api(request, pk, 'service')
 
 
+def service_describe_api(request, pk, ns, name):
+    """Service describe modal 用：基础信息 + Endpoints + Events + 关联 Pods"""
+    _, mgr = _get_mgr(pk)
+    try:
+        return JsonResponse(mgr.describe_service(name, ns))
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 # ─── Ingresses ───────────────────────────────────────────────
 
 def ingress_list(request, pk):
