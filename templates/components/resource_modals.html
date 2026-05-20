@@ -304,16 +304,16 @@
 </dialog>
 
 <!-- Workload Describe Modal (Deployment/StatefulSet/DaemonSet) -->
-<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto(); window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}))">
+<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @open-service-describe.window="open($event.detail, 'service')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto(); window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}))">
   <div class="modal-box bg-base-100 shadow-2xl flex flex-col p-0" style="width: 85vw; max-width: 85vw; height: 88vh; border-radius: 20px;">
     <!-- Header -->
     <div class="flex items-center justify-between px-6 py-4 border-b border-base-200 flex-shrink-0">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl grid place-items-center bg-primary/10">
-          <i class="fas text-base text-primary" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : 'fa-clone'"></i>
+          <i class="fas text-base text-primary" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : resourceType === 'service' ? 'fa-network-wired' : 'fa-clone'"></i>
         </div>
         <div>
-          <h3 class="font-bold text-base" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : 'DaemonSet') + ' 详情'"></h3>
+          <h3 class="font-bold text-base" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : resourceType === 'service' ? 'Service' : 'DaemonSet') + ' 详情'"></h3>
           <div class="flex items-center gap-2 text-xs opacity-50 mt-0.5">
             <span class="font-mono" x-text="meta.namespace"></span>
             <span>/</span>
@@ -602,8 +602,73 @@
           </div>
         </template>
 
-        <!-- 容器 -->
-        <div class="card bg-base-200 shadow">
+        <!-- 基本信息 - Service -->
+        <template x-if="resourceType === 'service'">
+          <div class="card bg-base-200 shadow">
+            <div class="card-body p-5 gap-4">
+              <h4 class="card-title text-sm">
+                <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
+              </h4>
+              <div class="grid grid-cols-2 gap-y-3 gap-x-6">
+                <template x-for="item in [
+                  {k:'命名空间', v: info.namespace},
+                  {k:'创建时间', v: info.created},
+                  {k:'类型', v: info.type || '-'},
+                  {k:'Cluster IP', v: info.cluster_ip || '-'},
+                  {k:'Session Affinity', v: info.session_affinity || '-'},
+                  {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
+                ]">
+                  <div class="flex items-baseline gap-3 text-xs">
+                    <span class="flex-shrink-0 w-24 text-right opacity-50" x-text="item.k"></span>
+                    <span class="font-mono break-all" x-text="item.v"></span>
+                  </div>
+                </template>
+              </div>
+              <template x-if="(info.lb_ingress || []).length > 0">
+                <div class="flex items-baseline gap-3 text-xs mt-1">
+                  <span class="flex-shrink-0 w-24 text-right opacity-50">External IP</span>
+                  <span class="font-mono break-all" x-text="info.lb_ingress.join(', ')"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- 端口映射 - Service -->
+        <template x-if="resourceType === 'service'">
+          <div class="card bg-base-200 shadow">
+            <div class="card-body p-5 gap-4">
+              <h4 class="card-title text-sm">
+                <i class="fas fa-exchange-alt text-xs text-info"></i> 端口映射
+              </h4>
+              <div class="overflow-x-auto">
+                <table class="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>名称</th><th>协议</th><th>端口</th><th>目标端口</th>
+                      <template x-if="(info.ports || []).some(p => p.node_port)"><th>NodePort</th></template>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="p in info.ports || []" :key="p.port + p.protocol">
+                      <tr>
+                        <td class="font-mono text-xs" x-text="p.name"></td>
+                        <td class="text-xs" x-text="p.protocol"></td>
+                        <td class="font-mono text-xs font-semibold" x-text="p.port"></td>
+                        <td class="font-mono text-xs" x-text="p.target_port"></td>
+                        <template x-if="p.node_port"><td class="font-mono text-xs text-primary font-semibold" x-text="p.node_port"></td></template>
+                      </tr>
+                    </template>
+                    <tr x-show="(info.ports || []).length === 0"><td colspan="5" class="text-center opacity-40">无端口配置</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 容器 (仅工作负载，Service 不显示) -->
+        <div class="card bg-base-200 shadow" x-show="resourceType !== 'service'">
           <div class="card-body p-5 gap-4">
             <h4 class="card-title text-sm">
               <i class="fas fa-cube text-xs text-info"></i> 容器
@@ -630,8 +695,8 @@
           </div>
         </div>
 
-        <!-- Conditions -->
-        <div class="card bg-base-200 shadow">
+        <!-- Conditions (仅工作负载) -->
+        <div class="card bg-base-200 shadow" x-show="resourceType !== 'service'">
           <div class="card-body p-5 gap-4">
             <h4 class="card-title text-sm">
               <i class="fas fa-heartbeat text-xs text-success"></i> Conditions
@@ -664,6 +729,45 @@
                     </tr>
                   </template>
                   <tr x-show="conditions.length === 0"><td colspan="5" class="text-center opacity-40">无</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Endpoints (Service only) -->
+      <div x-show="!loading && !error && tab === 'endpoints'" x-cloak>
+        <div class="card bg-base-200 shadow">
+          <div class="card-body p-5 gap-4">
+            <h4 class="card-title text-sm">
+              <i class="fas fa-plug text-xs text-success"></i> Endpoints
+              <span class="badge badge-sm" x-text="endpoints.length"></span>
+            </h4>
+            <div class="overflow-x-auto">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>IP</th>
+                    <th>端口</th>
+                    <th>状态</th>
+                    <th>目标</th>
+                    <th>节点</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="ep in endpoints" :key="ep.ip + ep.target">
+                    <tr>
+                      <td class="font-mono text-xs font-semibold" x-text="ep.ip"></td>
+                      <td class="font-mono text-xs opacity-70" x-text="(ep.ports || []).map(p => p.port + '/' + p.protocol).join(', ')"></td>
+                      <td>
+                        <span class="badge badge-sm" :class="ep.ready ? 'badge-success' : 'badge-error'" x-text="ep.ready ? 'Ready' : 'NotReady'"></span>
+                      </td>
+                      <td class="text-xs opacity-70" x-text="ep.target || '-'"></td>
+                      <td class="text-xs opacity-50" x-text="ep.node"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="endpoints.length === 0"><td colspan="5" class="text-center opacity-40">无 Endpoint</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1509,16 +1613,24 @@ function describeViewer() {
     clusterPk: 0,
     meta: {},
     resourceType: 'deployment',
-    info: {}, conditions: [], events: [], pods: [],
+    info: {}, conditions: [], events: [], pods: [], endpoints: [],
     loading: false, error: null,
     tab: 'overview',
     _autoTimer: null,
     podPage: 1, podPageSize: 15,
     eventPage: 1, eventPageSize: 20,
     get resourceTypeLabel() {
-      return {deployment: 'Deployment', statefulset: 'StatefulSet', daemonset: 'DaemonSet'}[this.resourceType] || '';
+      return {deployment: 'Deployment', statefulset: 'StatefulSet', daemonset: 'DaemonSet', service: 'Service'}[this.resourceType] || '';
     },
     get tabs() {
+      if (this.resourceType === 'service') {
+        return [
+          {key: 'overview', label: '概览', icon: 'fa-info-circle'},
+          {key: 'endpoints', label: 'Endpoints', icon: 'fa-plug', count: this.endpoints.length},
+          {key: 'events', label: 'Events', icon: 'fa-bell', count: this.events.length},
+          {key: 'pods', label: '关联 Pods', icon: 'fa-cubes', count: this.pods.length},
+        ];
+      }
       return [
         {key: 'overview', label: '概览', icon: 'fa-info-circle'},
         {key: 'events', label: 'Events', icon: 'fa-bell', count: this.events.length},
@@ -1583,7 +1695,7 @@ function describeViewer() {
       this.clusterPk = detail.pk;
       this.meta = {namespace: detail.namespace, name: detail.name};
       this.tab = 'overview';
-      this.info = {}; this.conditions = []; this.events = []; this.pods = [];
+      this.info = {}; this.conditions = []; this.events = []; this.pods = []; this.endpoints = [];
       this.error = null;
       this.podPage = 1; this.eventPage = 1;
       describeModal.showModal();
@@ -1618,6 +1730,7 @@ function describeViewer() {
           this.conditions = d.conditions || [];
           this.events = d.events || [];
           this.pods = d.pods || [];
+          this.endpoints = d.endpoints || [];
           if (this.podPage > this.podTotalPages) this.podPage = this.podTotalPages;
           if (this.eventPage > this.eventTotalPages) this.eventPage = this.eventTotalPages;
         })

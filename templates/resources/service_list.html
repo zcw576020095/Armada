@@ -35,6 +35,9 @@
   <td class="font-medium text-xs text-primary" x-text="r.age"></td>
   <td>
     <div class="flex gap-1 flex-nowrap">
+      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="$dispatch('open-service-describe', {pk: {{ cluster.pk }}, namespace: r.namespace, name: r.name})">
+        <i class="fas fa-info-circle text-[10px]"></i> 详情
+      </button>
       <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('Service: ' + r.name, '/resources/{{ cluster.pk }}/yaml/service/' + r.namespace + '/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
         <i class="fas fa-file-code text-[10px]"></i> YAML
       </button>
