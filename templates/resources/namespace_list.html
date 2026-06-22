@@ -35,23 +35,24 @@
     </template>
   </td>
   <td class="font-medium text-xs text-primary" x-text="r.age"></td>
-  <td class="flex gap-1">
-    <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('Namespace: ' + r.name, '/resources/{{ cluster.pk }}/yaml/namespace/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
-      <i class="fas fa-file-code text-[10px]"></i> YAML
-    </button>
-    <!-- Terminating 状态下的应急按钮：移除 finalizer 强制完成删除 -->
-    <template x-if="r.status == 'Terminating' && {{ can_delete|yesno:'true,false' }}">
-      <button class="btn btn-ghost btn-xs text-warning gap-1 h-7 min-h-0 text-[11px]"
-        @click="$dispatch('open-force-finalize', {name: r.name})"
-        title="移除 finalizer 强制完成（卡住超过 1 分钟时使用）">
-        <i class="fas fa-bolt text-[10px]"></i> 强制完成
+  <td>
+    <div class="row-actions">
+      <button type="button" class="row-action" title="YAML" @click="openYaml('Namespace: ' + r.name, '/resources/{{ cluster.pk }}/yaml/namespace/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
+        <i class="fas fa-file-code"></i>
       </button>
-    </template>
-    <template x-if="r.status != 'Terminating' && r.name != 'default' && r.name != 'kube-system' && r.name != 'kube-public' && r.name != 'kube-node-lease'">
-      <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Namespace', name: r.name, namespace: '', deleteUrl: '/resources/{{ cluster.pk }}/namespaces/' + r.name + '/delete/'}){% else %}noPermModal.showModal(){% endif %}">
-        <i class="fas fa-trash-alt text-[10px]"></i>
-      </button>
-    </template>
+      <!-- Terminating 状态下的应急按钮：移除 finalizer 强制完成删除 -->
+      <template x-if="r.status == 'Terminating' && {{ can_delete|yesno:'true,false' }}">
+        <button type="button" class="row-action is-warn" title="移除 finalizer 强制完成（卡住超过 1 分钟时使用）"
+          @click="$dispatch('open-force-finalize', {name: r.name})">
+          <i class="fas fa-bolt"></i>
+        </button>
+      </template>
+      <template x-if="r.status != 'Terminating' && r.name != 'default' && r.name != 'kube-system' && r.name != 'kube-public' && r.name != 'kube-node-lease'">
+        <button type="button" class="row-action is-danger" title="删除" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Namespace', name: r.name, namespace: '', deleteUrl: '/resources/{{ cluster.pk }}/namespaces/' + r.name + '/delete/'}){% else %}noPermModal.showModal(){% endif %}">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      </template>
+    </div>
   </td>
 </tr>
 {% endblock %}

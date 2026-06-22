@@ -62,6 +62,22 @@
     /* Table */
     .table tbody tr { transition: background-color 0.1s ease; }
 
+    /* 行内操作图标按钮：替代一排带文字的按钮，紧凑且现代。
+       用原生 title 做 tooltip，避免 DaisyUI CSS tooltip 在 overflow-x-auto 表格里被裁切。 */
+    .row-actions { display: inline-flex; align-items: center; gap: 2px; }
+    .row-action {
+      width: 28px; height: 28px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 7px; font-size: 12px; line-height: 1;
+      color: oklch(var(--bc) / 0.5); background: transparent; border: none;
+      cursor: pointer; transition: background-color 0.12s ease, color 0.12s ease;
+    }
+    .row-action:hover { background: oklch(var(--bc) / 0.09); color: oklch(var(--bc) / 0.9); }
+    .row-action:focus-visible { outline: 2px solid oklch(var(--p) / 0.5); outline-offset: 1px; }
+    .row-action.is-warn:hover { background: oklch(var(--wa) / 0.14); color: oklch(var(--wa)); }
+    .row-action.is-danger:hover { background: oklch(var(--er) / 0.14); color: oklch(var(--er)); }
+    .row-action-sep { width: 1px; height: 15px; flex-shrink: 0; background: oklch(var(--bc) / 0.12); margin: 0 3px; }
+
     /* Page transition */
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(4px); }

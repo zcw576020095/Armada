@@ -32,24 +32,26 @@
   </td>
   <td class="font-medium text-xs text-primary" x-text="r.age"></td>
   <td>
-    <div class="flex gap-1 flex-nowrap">
-      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="$dispatch('open-statefulset-describe', {pk: {{ cluster.pk }}, namespace: r.namespace, name: r.name})">
-        <i class="fas fa-info-circle text-[10px]"></i> 详情
+    <div class="row-actions">
+      <button type="button" class="row-action" title="详情" @click="$dispatch('open-statefulset-describe', {pk: {{ cluster.pk }}, namespace: r.namespace, name: r.name})">
+        <i class="fas fa-info-circle"></i>
       </button>
-      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('StatefulSet: ' + r.name, '/resources/{{ cluster.pk }}/yaml/statefulset/' + r.namespace + '/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
-        <i class="fas fa-file-code text-[10px]"></i> YAML
+      <button type="button" class="row-action" title="YAML" @click="openYaml('StatefulSet: ' + r.name, '/resources/{{ cluster.pk }}/yaml/statefulset/' + r.namespace + '/' + r.name + '/', {{ can_edit|yesno:'true,false' }})">
+        <i class="fas fa-file-code"></i>
       </button>
-      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="{% if can_edit %}$dispatch('open-scale-modal', {name: r.name, current: r.replicas, scaleUrl: '/resources/{{ cluster.pk }}/statefulsets/' + r.namespace + '/' + r.name + '/scale/'}){% else %}noPermModal.showModal(){% endif %}">
-        <i class="fas fa-expand-arrows-alt text-[10px]"></i> 扩缩
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action" title="扩缩容" @click="{% if can_edit %}$dispatch('open-scale-modal', {name: r.name, current: r.replicas, scaleUrl: '/resources/{{ cluster.pk }}/statefulsets/' + r.namespace + '/' + r.name + '/scale/'}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-expand-arrows-alt"></i>
       </button>
-      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="{% if can_edit %}confirmRestart('/resources/{{ cluster.pk }}/statefulsets/' + r.namespace + '/' + r.name + '/restart/', r.name){% else %}noPermModal.showModal(){% endif %}">
-        <i class="fas fa-redo text-[10px]"></i> 重启
+      <button type="button" class="row-action" title="重启" @click="{% if can_edit %}confirmRestart('/resources/{{ cluster.pk }}/statefulsets/' + r.namespace + '/' + r.name + '/restart/', r.name){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-redo"></i>
       </button>
-      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px] text-warning" @click="{% if can_edit %}$dispatch('open-statefulset-rollback', {pk: {{ cluster.pk }}, namespace: r.namespace, name: r.name}){% else %}noPermModal.showModal(){% endif %}">
-        <i class="fas fa-undo text-[10px]"></i> 回滚
+      <button type="button" class="row-action is-warn" title="回滚" @click="{% if can_edit %}$dispatch('open-statefulset-rollback', {pk: {{ cluster.pk }}, namespace: r.namespace, name: r.name}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-undo"></i>
       </button>
-      <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'StatefulSet', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{ cluster.pk }}/delete/statefulset/' + r.namespace + '/' + r.name + '/'}){% else %}noPermModal.showModal(){% endif %}">
-        <i class="fas fa-trash-alt text-[10px]"></i>
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action is-danger" title="删除" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'StatefulSet', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{ cluster.pk }}/delete/statefulset/' + r.namespace + '/' + r.name + '/'}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-trash-alt"></i>
       </button>
     </div>
   </td>

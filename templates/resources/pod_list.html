@@ -56,16 +56,17 @@
   <td class="text-xs opacity-70" x-text="r.node"></td>
   <td class="text-xs opacity-70 font-mono" x-text="r.ip"></td>
   <td>
-    <div class="flex gap-1 flex-nowrap">
+    <div class="row-actions">
       {# Pod 由上层 controller 管理，K8s 不允许直接改 spec 大部分字段；canEdit 强制 false 进只读，避免用户白编辑被 K8s 拒。要改容器配置请去对应 Deployment/StatefulSet 的 YAML #}
-      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="openYaml('Pod: ' + r.name, '/resources/{{ cluster.pk }}/yaml/pod/' + r.namespace + '/' + r.name + '/', false)">
-        <i class="fas fa-file-code text-[10px]"></i> YAML
+      <button type="button" class="row-action" title="YAML" @click="openYaml('Pod: ' + r.name, '/resources/{{ cluster.pk }}/yaml/pod/' + r.namespace + '/' + r.name + '/', false)">
+        <i class="fas fa-file-code"></i>
       </button>
-      <button class="btn btn-ghost btn-xs gap-1 h-7 min-h-0 text-[11px]" @click="$dispatch('open-pod-logs', {namespace: r.namespace, podName: r.name, logsUrl: '/resources/{{ cluster.pk }}/pods/' + r.namespace + '/' + r.name + '/logs/'})">
-        <i class="fas fa-terminal text-[10px]"></i> 日志
+      <button type="button" class="row-action" title="日志" @click="$dispatch('open-pod-logs', {namespace: r.namespace, podName: r.name, logsUrl: '/resources/{{ cluster.pk }}/pods/' + r.namespace + '/' + r.name + '/logs/'})">
+        <i class="fas fa-terminal"></i>
       </button>
-      <button class="btn btn-ghost btn-xs text-error gap-1 h-7 min-h-0" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Pod', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{ cluster.pk }}/delete/pod/' + r.namespace + '/' + r.name + '/'}){% else %}noPermModal.showModal(){% endif %}">
-        <i class="fas fa-trash-alt text-[10px]"></i>
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action is-danger" title="删除" @click="{% if can_delete %}$dispatch('open-delete-modal', {type: 'Pod', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{ cluster.pk }}/delete/pod/' + r.namespace + '/' + r.name + '/'}){% else %}noPermModal.showModal(){% endif %}">
+        <i class="fas fa-trash-alt"></i>
       </button>
     </div>
   </td>

@@ -7,45 +7,44 @@
   <title>登录 - Armada</title>
   <link rel="stylesheet" href="{% static 'css/output.css' %}">
   <link rel="stylesheet" href="{% static 'css/all.min.css' %}">
+  <!-- 登录页跟随用户在主应用里保存的主题；提前同步执行避免闪烁 -->
+  <script>
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       min-height: 100vh;
       display: flex;
-      background: #09090b;
+      background: oklch(var(--b1));
+      color: oklch(var(--bc));
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
       overflow: hidden;
     }
 
-    /* 左侧视觉面板 - 参考Linear风格 */
+    /* 左侧视觉面板 */
     .visual-panel {
       flex: 1;
       position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #0a0a0f 0%, #18181b 50%, #27272a 100%);
+      background: oklch(var(--b2));
       overflow: hidden;
     }
 
-    /* 微妙的渐变光晕 */
+    /* 微妙的渐变光晕，用主题主色驱动 */
     .visual-panel::before {
       content: '';
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      inset: 0;
       background:
-        radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
-      animation: breathe 8s ease-in-out infinite;
-    }
-
-    @keyframes breathe {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
+        radial-gradient(circle at 20% 30%, oklch(var(--p) / 0.10) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, oklch(var(--s) / 0.08) 0%, transparent 50%);
     }
 
     /* 精致的网格背景 */
@@ -53,26 +52,16 @@
       position: absolute;
       inset: 0;
       background-image:
-        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        linear-gradient(oklch(var(--bc) / 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, oklch(var(--bc) / 0.03) 1px, transparent 1px);
       background-size: 80px 80px;
       mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 40%, transparent 100%);
     }
-
-    /* 简化的装饰元素 */
-    .accent-line {
-      position: absolute;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.3), transparent);
-    }
-    .accent-line-1 { width: 300px; top: 25%; left: 15%; transform: rotate(-15deg); }
-    .accent-line-2 { width: 200px; bottom: 30%; right: 20%; transform: rotate(20deg); }
 
     .visual-content {
       position: relative;
       z-index: 10;
       text-align: center;
-      color: white;
       padding: 2rem;
       max-width: 480px;
     }
@@ -82,16 +71,16 @@
       height: 64px;
       margin: 0 auto 2rem;
       border-radius: 16px;
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      background: linear-gradient(135deg, oklch(var(--p)) 0%, oklch(var(--s)) 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.25);
+      box-shadow: 0 8px 32px oklch(var(--p) / 0.25);
     }
 
     .brand-icon i {
       font-size: 2rem;
-      color: white;
+      color: oklch(var(--pc));
     }
 
     .visual-content h1 {
@@ -99,17 +88,13 @@
       font-weight: 700;
       letter-spacing: -0.03em;
       margin-bottom: 1rem;
-      background: linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.6) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      color: oklch(var(--bc));
     }
 
     .visual-content p {
       font-size: 1.05rem;
-      color: rgba(255, 255, 255, 0.5);
+      color: oklch(var(--bc) / 0.55);
       line-height: 1.7;
-      font-weight: 400;
     }
 
     .feature-list {
@@ -124,16 +109,16 @@
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      color: rgba(255, 255, 255, 0.6);
+      color: oklch(var(--bc) / 0.65);
       font-size: 0.9rem;
     }
 
     .feature-item i {
-      color: #6366f1;
+      color: oklch(var(--p));
       font-size: 0.75rem;
     }
 
-    /* 右侧登录面板 - 更现代的设计 */
+    /* 右侧登录面板 */
     .login-panel {
       width: 460px;
       min-width: 460px;
@@ -141,37 +126,32 @@
       flex-direction: column;
       justify-content: center;
       padding: 3rem 2.5rem;
-      background: #0a0a0f;
-      border-left: 1px solid rgba(255, 255, 255, 0.05);
+      background: oklch(var(--b1));
+      border-left: 1px solid oklch(var(--bc) / 0.08);
     }
 
-    .login-header {
-      margin-bottom: 2.5rem;
-    }
+    .login-header { margin-bottom: 2.5rem; }
 
     .login-title {
       font-size: 1.75rem;
       font-weight: 600;
-      color: #fafafa;
+      color: oklch(var(--bc));
       margin-bottom: 0.5rem;
       letter-spacing: -0.02em;
     }
 
     .login-subtitle {
       font-size: 0.9rem;
-      color: #71717a;
-      font-weight: 400;
+      color: oklch(var(--bc) / 0.5);
     }
 
-    .form-group {
-      margin-bottom: 1.5rem;
-    }
+    .form-group { margin-bottom: 1.5rem; }
 
     .form-label {
       display: block;
       font-size: 0.875rem;
       font-weight: 500;
-      color: #a1a1aa;
+      color: oklch(var(--bc) / 0.7);
       margin-bottom: 0.5rem;
     }
 
@@ -180,32 +160,24 @@
       height: 44px;
       padding: 0 14px;
       border-radius: 8px;
-      border: 1px solid #27272a;
-      background: #18181b;
-      color: #fafafa;
+      border: 1px solid oklch(var(--bc) / 0.15);
+      background: oklch(var(--b2));
+      color: oklch(var(--bc));
       font-size: 0.9rem;
       outline: none;
-      transition: all 0.15s ease;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     }
 
-    .form-input::placeholder {
-      color: #52525b;
-    }
+    .form-input::placeholder { color: oklch(var(--bc) / 0.35); }
 
     .form-input:focus {
-      border-color: #6366f1;
-      background: #1a1a1f;
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      border-color: oklch(var(--p));
+      background: oklch(var(--b1));
+      box-shadow: 0 0 0 3px oklch(var(--p) / 0.12);
     }
 
-    /* 密码显示/隐藏切换按钮 */
-    .password-wrap {
-      position: relative;
-    }
-
-    .password-wrap .form-input {
-      padding-right: 44px;
-    }
+    .password-wrap { position: relative; }
+    .password-wrap .form-input { padding-right: 44px; }
 
     .password-toggle {
       position: absolute;
@@ -216,7 +188,7 @@
       height: 32px;
       border: none;
       background: transparent;
-      color: #71717a;
+      color: oklch(var(--bc) / 0.5);
       cursor: pointer;
       border-radius: 6px;
       display: flex;
@@ -227,45 +199,37 @@
     }
 
     .password-toggle:hover {
-      color: #a1a1aa;
-      background: rgba(255, 255, 255, 0.04);
+      color: oklch(var(--bc) / 0.8);
+      background: oklch(var(--bc) / 0.06);
     }
 
-    .password-toggle:focus {
-      outline: none;
-      color: #6366f1;
-    }
+    .password-toggle:focus { outline: none; color: oklch(var(--p)); }
 
     .login-btn {
       width: 100%;
       height: 44px;
       border: none;
       border-radius: 8px;
-      background: #6366f1;
-      color: white;
+      background: oklch(var(--p));
+      color: oklch(var(--pc));
       font-size: 0.9rem;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: filter 0.15s ease, box-shadow 0.15s ease;
       margin-top: 0.5rem;
     }
 
     .login-btn:hover {
-      background: #5558e3;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-
-    .login-btn:active {
-      transform: translateY(0);
+      filter: brightness(1.08);
+      box-shadow: 0 4px 12px oklch(var(--p) / 0.3);
     }
 
     .error-box {
       padding: 0.875rem 1rem;
       border-radius: 8px;
-      background: rgba(239, 68, 68, 0.08);
-      border: 1px solid rgba(239, 68, 68, 0.15);
-      color: #fca5a5;
+      background: oklch(var(--er) / 0.10);
+      border: 1px solid oklch(var(--er) / 0.20);
+      color: oklch(var(--er));
       font-size: 0.875rem;
       margin-bottom: 1.5rem;
       display: flex;
@@ -274,18 +238,15 @@
       line-height: 1.5;
     }
 
-    .error-box i {
-      margin-top: 2px;
-      flex-shrink: 0;
-    }
+    .error-box i { margin-top: 2px; flex-shrink: 0; }
 
     .login-footer {
       margin-top: 3rem;
       padding-top: 2rem;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      border-top: 1px solid oklch(var(--bc) / 0.08);
       text-align: center;
       font-size: 0.8rem;
-      color: #52525b;
+      color: oklch(var(--bc) / 0.4);
     }
 
     /* 响应式 */
@@ -296,13 +257,12 @@
         min-width: unset;
         max-width: 420px;
         margin: 0 auto;
-        background: #0a0a0f;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        border: 1px solid oklch(var(--bc) / 0.08);
         border-radius: 16px;
       }
       body {
         justify-content: center;
-        background: linear-gradient(135deg, #0a0a0f 0%, #18181b 100%);
+        background: oklch(var(--b2));
         padding: 1rem;
       }
     }
@@ -313,8 +273,6 @@
   <!-- 左侧视觉面板 -->
   <div class="visual-panel">
     <div class="grid-bg"></div>
-    <div class="accent-line accent-line-1"></div>
-    <div class="accent-line accent-line-2"></div>
 
     <div class="visual-content">
       <div class="brand-icon">

@@ -4,7 +4,12 @@
 
 ---
 
-## 2026-05-20
+## 2026-06-22
+
+### 优化改进
+- 资源列表操作列图标化：原先 icon+文字按钮（依赖横向滚动）统一改为 28px 紧凑图标按钮，按语义分组（查看 | 操作 | 危险）并用细分隔线分隔，危险/警告操作 hover 用主题色高亮；native title 做 tooltip 避免在 overflow-x-auto 表格中被裁剪。覆盖全部 10 种资源（Deployment/StatefulSet/DaemonSet/Pod/Service/Ingress/PVC/ConfigMap/Secret/Namespace），其中 Namespace 保留 Terminating 强制完成与受保护命名空间的条件渲染
+- 仪表盘统计卡视觉降噪：去掉重渐变背景、漂浮光斑和 hover 上浮，改为纯色 base-100 面板 + 左侧细色条标识类别，仅保留极轻的 hover 边框/阴影
+- 登录页跟随主题：原 397 行硬编码深色内联样式重写为复用 DaisyUI 语义 token（oklch 变量），并在页面加载时同步读取 localStorage 主题，登录页与主应用明暗一致、不再写死深色
 
 ### 新功能
 - Service 详情弹框（概览/Endpoints/Events/关联 Pods），展示端口映射、Endpoint 就绪状态、关联 Pod 列表

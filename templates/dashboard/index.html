@@ -6,43 +6,28 @@
 
 {% block extra_head %}
 <style>
+  /* 降噪后的统计卡：纯色 base-100 面板，左侧一条细色条标识类别，
+     去掉了渐变背景 / 漂浮光斑 / hover 上浮，只保留极轻的 hover 边框与阴影 */
   .dash-card {
-    position: relative; overflow: hidden; border-radius: 0.75rem; padding: 1.25rem;
-    border: 1px solid oklch(var(--bc) / 0.06);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    position: relative; border-radius: 0.75rem; padding: 1.25rem;
+    background: oklch(var(--b1));
+    border: 1px solid oklch(var(--bc) / 0.08);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
-  .dash-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
-  .dash-card::before { content: ''; position: absolute; top: -25px; right: -25px; width: 100px; height: 100px; border-radius: 50%; opacity: 0.12; }
+  .dash-card:hover { border-color: oklch(var(--bc) / 0.16); box-shadow: 0 1px 4px oklch(var(--bc) / 0.05); }
+  .dash-card::before {
+    content: ''; position: absolute; left: 0; top: 0.875rem; bottom: 0.875rem;
+    width: 3px; border-radius: 0 3px 3px 0; opacity: 0.9;
+  }
 
-  .dash-card-amber { background: linear-gradient(135deg, #2a2415, #221c10); border-color: rgba(245,158,11,0.15); }
-  .dash-card-amber::before { background: #f59e0b; }
-  .dash-card-amber:hover { border-color: rgba(245,158,11,0.3); }
-
-  .dash-card-emerald { background: linear-gradient(135deg, #1a2e22, #152618); border-color: rgba(16,185,129,0.15); }
+  .dash-card-amber::before   { background: #f59e0b; }
   .dash-card-emerald::before { background: #10b981; }
-  .dash-card-emerald:hover { border-color: rgba(16,185,129,0.3); }
-
-  .dash-card-blue { background: linear-gradient(135deg, #1e2a4a, #172040); border-color: rgba(59,130,246,0.15); }
-  .dash-card-blue::before { background: #3b82f6; }
-  .dash-card-blue:hover { border-color: rgba(59,130,246,0.3); }
-
-  .dash-card-violet { background: linear-gradient(135deg, #231e3a, #1c1730); border-color: rgba(139,92,246,0.15); }
-  .dash-card-violet::before { background: #8b5cf6; }
-  .dash-card-violet:hover { border-color: rgba(139,92,246,0.3); }
-
-  .dash-card-rose { background: linear-gradient(135deg, #2d1a22, #261418); border-color: rgba(244,63,94,0.15); }
-  .dash-card-rose::before { background: #f43f5e; }
-  .dash-card-rose:hover { border-color: rgba(244,63,94,0.3); }
-
-  [data-theme="light"] .dash-card-amber { background: linear-gradient(135deg, #fef3c7, #fde68a); border-color: rgba(245,158,11,0.2); }
-  [data-theme="light"] .dash-card-emerald { background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-color: rgba(16,185,129,0.2); }
-  [data-theme="light"] .dash-card-blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-color: rgba(59,130,246,0.2); }
-  [data-theme="light"] .dash-card-violet { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-color: rgba(139,92,246,0.2); }
-  [data-theme="light"] .dash-card-rose { background: linear-gradient(135deg, #ffe4e6, #fecdd3); border-color: rgba(244,63,94,0.2); }
-  [data-theme="light"] .dash-card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+  .dash-card-blue::before    { background: #3b82f6; }
+  .dash-card-violet::before  { background: #8b5cf6; }
+  .dash-card-rose::before    { background: #f43f5e; }
 
   .chart-card {
-    border-radius: 0.75rem; border: 1px solid oklch(var(--bc) / 0.06);
+    border-radius: 0.75rem; border: 1px solid oklch(var(--bc) / 0.08);
     background: oklch(var(--b1)); padding: 1.25rem;
   }
 </style>
