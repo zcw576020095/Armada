@@ -761,27 +761,45 @@ class K8sResourceManager:
         from django.utils import timezone as tz
         return tz.localtime(ts).strftime('%Y-%m-%d %H:%M:%S')
 
-    def _list_events_for(self, namespace, kind, name, uid=None):
-        """查 involvedObject 是 (kind,name) 的 events，按时间倒序"""
+    def _list_events_for_tree(self, namespace, kind, name, pod_names=None):
+        """聚合「控制器自身 + 它管理的 Pod」的 events，合并后按时间倒序。
+
+        关键：镜像拉取失败(ErrImagePull/ImagePullBackOff)、CrashLoopBackOff、
+        调度失败(FailedScheduling) 这些真正能告诉用户「为什么没起来」的事件，
+        K8s 都是挂在 Pod（或 kubelet/scheduler）上的，而不是挂在 Deployment 上。
+        Deployment 自己的 events 基本只有 deployment-controller 发的
+        ScalingReplicaSet 这类 Normal 事件。所以只查控制器 events 会永远漏掉
+        真正的失败原因——必须把关联 Pod 的 events 一起捞进来。
+
+        实现上一次性拉取整个 namespace 的 events（单次 API 调用，不随 Pod 数量
+        放大），再在内存里按 involvedObject 过滤出「目标控制器」或「我们关联的
+        Pod」的事件，并给每条打上 object 标识（Kind/Name）让前端能区分来源。
+        """
         try:
-            field_selector = f'involvedObject.kind={kind},involvedObject.name={name}'
-            if uid:
-                field_selector += f',involvedObject.uid={uid}'
-            evs = self.core_v1.list_namespaced_event(
-                namespace, field_selector=field_selector, _request_timeout=10
-            )
+            evs = self.core_v1.list_namespaced_event(namespace, _request_timeout=15)
         except ApiException as e:
-            logger.warning(f'list events for {kind}/{name} failed: {e.reason}')
+            logger.warning(f'list events in {namespace} failed: {e.reason}')
             return []
 
+        pod_name_set = set(pod_names or [])
         out = []
         for e in evs.items:
+            io = e.involved_object
+            if not io:
+                continue
+            if io.kind == kind and io.name == name:
+                obj = f'{kind}/{name}'
+            elif io.kind == 'Pod' and io.name in pod_name_set:
+                obj = f'Pod/{io.name}'
+            else:
+                continue
             ts = e.last_timestamp or e.event_time or e.first_timestamp or e.metadata.creation_timestamp
             out.append({
                 'type': e.type or '-',
                 'reason': e.reason or '-',
                 'message': e.message or '',
                 'source': (e.source.component if e.source else '') or '-',
+                'object': obj,
                 'count': e.count or 1,
                 'last_timestamp': self._ts_to_str(ts),
                 '_sort_key': ts.timestamp() if ts else 0,
@@ -925,7 +943,7 @@ class K8sResourceManager:
         return {
             'info': info,
             'endpoints': endpoints,
-            'events': self._list_events_for(namespace, 'Service', name, meta.uid),
+            'events': self._list_events_for_tree(namespace, 'Service', name, [p['name'] for p in pods]),
             'pods': pods,
         }
 
@@ -992,11 +1010,12 @@ class K8sResourceManager:
             'generation': meta.generation or 0,
         }
 
+        pods = self._list_pods_for_deployment(namespace, name, match_labels)
         return {
             'info': info,
             'conditions': conditions,
-            'events': self._list_events_for(namespace, 'Deployment', name, meta.uid),
-            'pods': self._list_pods_for_deployment(namespace, name, match_labels),
+            'events': self._list_events_for_tree(namespace, 'Deployment', name, [p['name'] for p in pods]),
+            'pods': pods,
         }
 
     def _list_pods_for_deployment(self, namespace, deploy_name, match_labels):
@@ -1274,11 +1293,12 @@ class K8sResourceManager:
             'generation': meta.generation or 0,
         }
 
+        pods = self._list_pods_by_owner(namespace, 'StatefulSet', name, match_labels)
         return {
             'info': info,
             'conditions': conditions,
-            'events': self._list_events_for(namespace, 'StatefulSet', name, meta.uid),
-            'pods': self._list_pods_by_owner(namespace, 'StatefulSet', name, match_labels),
+            'events': self._list_events_for_tree(namespace, 'StatefulSet', name, [p['name'] for p in pods]),
+            'pods': pods,
         }
 
     CONTROLLER_REVISION_HASH_LABEL = 'controller-revision-hash'
@@ -1482,11 +1502,12 @@ class K8sResourceManager:
             'generation': meta.generation or 0,
         }
 
+        pods = self._list_pods_by_owner(namespace, 'DaemonSet', name, match_labels)
         return {
             'info': info,
             'conditions': conditions,
-            'events': self._list_events_for(namespace, 'DaemonSet', name, meta.uid),
-            'pods': self._list_pods_by_owner(namespace, 'DaemonSet', name, match_labels),
+            'events': self._list_events_for_tree(namespace, 'DaemonSet', name, [p['name'] for p in pods]),
+            'pods': pods,
         }
 
     def list_daemonset_revisions(self, name, namespace):

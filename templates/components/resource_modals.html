@@ -785,6 +785,7 @@
                   <tr>
                     <th>类型</th>
                     <th>原因</th>
+                    <th>对象</th>
                     <th>来源</th>
                     <th class="text-center">次数</th>
                     <th>消息</th>
@@ -800,13 +801,14 @@
                               x-text="e.type"></span>
                       </td>
                       <td class="font-mono font-medium" x-text="e.reason"></td>
+                      <td class="font-mono text-xs opacity-50 whitespace-nowrap" :title="e.object" x-text="e.object || '-'"></td>
                       <td class="opacity-50" x-text="e.source"></td>
                       <td class="text-center font-semibold" x-text="e.count"></td>
-                      <td class="opacity-70 max-w-sm truncate" x-text="e.message"></td>
+                      <td class="opacity-70 min-w-64 whitespace-pre-wrap break-words" x-text="e.message"></td>
                       <td class="whitespace-nowrap opacity-50" x-text="e.last_timestamp"></td>
                     </tr>
                   </template>
-                  <tr x-show="events.length === 0"><td colspan="6" class="text-center opacity-40">暂无 events</td></tr>
+                  <tr x-show="events.length === 0"><td colspan="7" class="text-center opacity-40">暂无 events</td></tr>
                 </tbody>
               </table>
             </div>

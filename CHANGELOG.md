@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-06-23
+
+### Bug 修复
+- 资源详情弹框 Events 标签看不到真正的失败原因：原先只查 `involvedObject.kind=<控制器>` 的事件，而镜像拉取失败(ErrImagePull/ImagePullBackOff)、CrashLoopBackOff、调度失败(FailedScheduling) 等关键事件 K8s 都挂在 Pod 上，导致 Deployment/StatefulSet/DaemonSet/Service 的 Events 里永远只有 controller 发的 ScalingReplicaSet 这类 Normal 事件。改为聚合「控制器自身 + 其管理的 Pod」的事件（单次拉取 namespace events 后内存过滤，不随 Pod 数放大），并新增「对象」列标识每条事件来源，四种资源统一修复
+- Events 消息列原 `truncate` 截断且无 tooltip，长消息（如完整镜像拉取错误）看不全：改为自动换行展示完整内容
+
+---
+
 ## 2026-06-22
 
 ### 优化改进
