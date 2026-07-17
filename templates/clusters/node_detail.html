@@ -13,7 +13,7 @@
 <style>
   .dash-card {
     position: relative; overflow: hidden; border-radius: 0.75rem; padding: 1.25rem;
-    border: 1px solid oklch(var(--bc) / 0.06);
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 6%, transparent);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
   .dash-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
@@ -49,7 +49,7 @@
   .info-row {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.5rem 0.75rem; border-radius: 0.5rem;
-    background: oklch(var(--b2) / 0.5);
+    background: color-mix(in oklab, var(--color-base-200) 50%, transparent);
   }
 </style>
 {% endblock %}

@@ -10,11 +10,11 @@
      去掉了渐变背景 / 漂浮光斑 / hover 上浮，只保留极轻的 hover 边框与阴影 */
   .dash-card {
     position: relative; border-radius: 0.75rem; padding: 1.25rem;
-    background: oklch(var(--b1));
-    border: 1px solid oklch(var(--bc) / 0.08);
+    background: var(--color-base-100);
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
-  .dash-card:hover { border-color: oklch(var(--bc) / 0.16); box-shadow: 0 1px 4px oklch(var(--bc) / 0.05); }
+  .dash-card:hover { border-color: color-mix(in oklab, var(--color-base-content) 16%, transparent); box-shadow: 0 1px 4px color-mix(in oklab, var(--color-base-content) 5%, transparent); }
   .dash-card::before {
     content: ''; position: absolute; left: 0; top: 0.875rem; bottom: 0.875rem;
     width: 3px; border-radius: 0 3px 3px 0; opacity: 0.9;
@@ -27,8 +27,8 @@
   .dash-card-rose::before    { background: #f43f5e; }
 
   .chart-card {
-    border-radius: 0.75rem; border: 1px solid oklch(var(--bc) / 0.08);
-    background: oklch(var(--b1)); padding: 1.25rem;
+    border-radius: 0.75rem; border: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    background: var(--color-base-100); padding: 1.25rem;
   }
 </style>
 {% endblock %}

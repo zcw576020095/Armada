@@ -13,8 +13,8 @@
     /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: oklch(var(--bc) / 0.15); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: oklch(var(--bc) / 0.25); }
+    ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--color-base-content) 15%, transparent); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--color-base-content) 25%, transparent); }
 
     /* Sidebar */
     .sidebar { width: 15rem; transition: width 0.2s ease; }
@@ -39,10 +39,10 @@
       content: ''; position: absolute; top: -20px; right: -20px;
       width: 80px; height: 80px; border-radius: 50%; opacity: 0.06;
     }
-    .stat-card-primary::before { background: oklch(var(--p)); }
-    .stat-card-success::before { background: oklch(var(--su)); }
-    .stat-card-error::before { background: oklch(var(--er)); }
-    .stat-card-info::before { background: oklch(var(--in)); }
+    .stat-card-primary::before { background: var(--color-primary); }
+    .stat-card-success::before { background: var(--color-success); }
+    .stat-card-error::before { background: var(--color-error); }
+    .stat-card-info::before { background: var(--color-info); }
     .stat-card-violet::before { background: #8b5cf6; }
     .stat-card-amber::before { background: #f59e0b; }
     .stat-card-emerald::before { background: #10b981; }
@@ -50,14 +50,14 @@
 
     /* Sidebar active */
     .sidebar-nav-item.active {
-      background: oklch(var(--p) / 0.12) !important;
-      color: oklch(var(--p));
+      background: color-mix(in oklab, var(--color-primary) 12%, transparent) !important;
+      color: var(--color-primary);
     }
-    .sidebar-nav-item.active .sidebar-nav-icon { color: oklch(var(--p)); }
+    .sidebar-nav-item.active .sidebar-nav-icon { color: var(--color-primary); }
 
     /* Sidebar hover */
     .sidebar-nav-item:not(.active):hover {
-      background: oklch(var(--bc) / 0.05);
+      background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
     }
 
     /* Table */
@@ -70,14 +70,14 @@
       width: 28px; height: 28px; flex-shrink: 0;
       display: inline-flex; align-items: center; justify-content: center;
       border-radius: 7px; font-size: 12px; line-height: 1;
-      color: oklch(var(--bc) / 0.5); background: transparent; border: none;
+      color: color-mix(in oklab, var(--color-base-content) 50%, transparent); background: transparent; border: none;
       cursor: pointer; transition: background-color 0.12s ease, color 0.12s ease;
     }
-    .row-action:hover { background: oklch(var(--bc) / 0.09); color: oklch(var(--bc) / 0.9); }
-    .row-action:focus-visible { outline: 2px solid oklch(var(--p) / 0.5); outline-offset: 1px; }
-    .row-action.is-warn:hover { background: oklch(var(--wa) / 0.14); color: oklch(var(--wa)); }
-    .row-action.is-danger:hover { background: oklch(var(--er) / 0.14); color: oklch(var(--er)); }
-    .row-action-sep { width: 1px; height: 15px; flex-shrink: 0; background: oklch(var(--bc) / 0.12); margin: 0 3px; }
+    .row-action:hover { background: color-mix(in oklab, var(--color-base-content) 9%, transparent); color: color-mix(in oklab, var(--color-base-content) 90%, transparent); }
+    .row-action:focus-visible { outline: 2px solid color-mix(in oklab, var(--color-primary) 50%, transparent); outline-offset: 1px; }
+    .row-action.is-warn:hover { background: color-mix(in oklab, var(--color-warning) 14%, transparent); color: var(--color-warning); }
+    .row-action.is-danger:hover { background: color-mix(in oklab, var(--color-error) 14%, transparent); color: var(--color-error); }
+    .row-action-sep { width: 1px; height: 15px; flex-shrink: 0; background: color-mix(in oklab, var(--color-base-content) 12%, transparent); margin: 0 3px; }
 
     /* Page transition */
     @keyframes fadeIn {
@@ -95,7 +95,7 @@
 
     /* Gradient text */
     .text-gradient {
-      background: linear-gradient(135deg, oklch(var(--p)), oklch(var(--s)));
+      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;

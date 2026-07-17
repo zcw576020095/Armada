@@ -7,7 +7,8 @@
 ## 2026-07-17
 
 ### Bug 修复
-- 前端样式/颜色丢失：output.css 为旧构建产物（缺少后续模板新增的类），且浏览器缓存了旧 CSS 导致布局或颜色错乱。重新构建 CSS，并新增基于文件 mtime 的缓存破除标签 `static_v`（accounts/templatetags/static_version.py），CSS URL 自动拼 `?v=<mtime>`，重建后浏览器强制重新下载，根治「改了样式但看到旧缓存」的反复问题。base.html 与 login.html 的 output.css 引用改用 `{% static_v %}`
+- 前端整页丢颜色（白底黑字）：8 个模板的自定义 `<style>` 里有 78 处沿用 DaisyUI v4 的短变量名（`var(--bc)`/`var(--p)`/`var(--b1)` 等），而项目实际是 DaisyUI v5——v5 变量已改名为 `--color-base-content`/`--color-primary`/`--color-base-100`，且变量值本身就是完整的 `oklch(...)`。旧写法 `oklch(var(--bc))` 既引用了不存在的变量、又构成 `oklch(oklch(...))` 双层非法嵌套，导致背景/文字/边框全部失效退回浏览器默认色。统一修复：短名→v5 全名；纯色 `oklch(var(--color-x))`→裸 `var(--color-x)`；带透明度 `oklch(var(--color-x) / .5)`→`color-mix(in oklab, var(--color-x) 50%, transparent)`。涉及 base.html、login.html、dashboard/index.html 及 clusters/ 下 5 个模板
+- 新增基于文件 mtime 的缓存破除标签 `static_v`（accounts/templatetags/static_version.py），output.css 的 URL 自动拼 `?v=<mtime>`，重建 CSS 后浏览器强制重新下载，避免样式改了却看到旧缓存。base.html 与 login.html 的 output.css 引用改用 `{% static_v %}`
 
 ---
 
