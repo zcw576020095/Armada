@@ -1,11 +1,12 @@
 {% load static %}
+{% load static_version %}
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>登录 - Armada</title>
-  <link rel="stylesheet" href="{% static 'css/output.css' %}">
+  <link rel="stylesheet" href="{% static_v 'css/output.css' %}">
   <link rel="stylesheet" href="{% static 'css/all.min.css' %}">
   <!-- 登录页跟随用户在主应用里保存的主题；提前同步执行避免闪烁 -->
   <script>
