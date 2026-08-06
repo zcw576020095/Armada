@@ -24,6 +24,37 @@
 - **踩坑记录（CSS 层叠优先级）**：Tailwind v4 的工具类位于 `@layer utilities` 内，而无 `@layer` 的普通样式优先级**高于**任何 `@layer`。最初在 fx 文件里写 `nav, aside, main { position: relative }` 想把内容抬到光晕之上，结果直接压掉了 Tailwind 的 `.fixed`，顶栏与侧边栏丢失固定定位、主内容区塌出整屏空白。正确做法是让背景伪元素用负 `z-index` 自然沉底（并把 `bg-base-200` 从 `body` 移到 `html`、`body` 置透明，否则不透明底色会盖住负层伪元素），完全不碰内容层定位。文件内已留注释警告
 - 验证方式：Playwright 实登录后巡检 12 个页面（集群列表/节点/Deployment/Pod/StatefulSet/Service/Namespace/ConfigMap/用户/权限/个人设置/集群详情），逐页断言 `nav` 与 `aside` 的 computed position 仍为 `fixed` 作为布局回归探针，明暗两主题各截图核对，控制台零报错
 
+### 视觉层扩展：移植 vue-bits 组件库
+
+新增 `static/css/vue-bits.css` + `static/js/vue-bits.js`，组件取自 [vue-bits](https://github.com/DavidHDev/vue-bits)（`src/content/**`，本地 clone 后按源码逐个移植）。Armada 是 Django 模板 + Alpine、没有 Vue，因此每个组件都从 SFC 拆成「CSS 那一半 + JS 行为那一半」，靠 `data-vb-*` 属性挂载；原版颜色全是硬编码 hex（`#27FF64`/`#060010`/`#333`，按深色底设计），统一换成 DaisyUI 的 `--color-*` token，同一份代码在 light/dark 下都成立。
+
+已移植：`MagicBento`、`SpotlightCard`、`StarBorder`、`ShinyText`、`GradientText`、`DecryptedText`、`GlareHover`、`Magnet`、`ElectricBorder`、`DotGrid`、`LetterGlitch`、`ClickSpark`、`GradualBlur`、`AnimatedContent`/`AnimatedList`、`Counter`。
+
+保留原版算法与数值的几处关键细节：
+- **MagicBento 的邻近度**是它区别于普通 `:hover` 卡片的核心：`proximity = radius*0.5`、`fadeDistance = radius*0.75`，距离在两者之间线性插值写入 `--vb-glow-intensity`，于是整片卡片墙有亮度**梯度**而不是只有鼠标下那张亮；另配一个 `position:fixed` 的全局聚光灯跟随鼠标。亮色主题下 `mix-blend-mode` 从 `screen` 换成 `multiply`（screen 在亮底上会把整片洗白）
+- **DotGrid 的推开-回弹**原版依赖 GSAP 的 `InertiaPlugin`，那是付费插件、免费包里没有（已 grep 确认 vendor 的 gsap.min.js 内无此插件）。改为自己积分：推开给初速度，每帧按 resistance 做指数衰减，速度衰减到阈值后用 `elastic.out(1, 0.75)` 的等价实现拉回原位
+- **GlareHover** 必须先无过渡复位到 `-100%`、强制 reflow、再设 `100%` 才能重复触发（transition 不会因为 class 移除又加上而重放），所以这一个保留了原版的 JS 写法而没改成纯 CSS
+- **ShinyText / GradientText** 原版用 motion-v 的 `useAnimationFrame` 逐帧写 `backgroundPosition`，改成纯 CSS keyframes（等价且不占主线程）；GradientText 的首色需在尾部重复一次才能无缝循环，这是原版的关键细节
+- **ElectricBorder** 只移植了它的三层发光边框，canvas 分形噪声抖动那部分刻意没做：对一个管理控制台噪音大于收益，且每张卡一条 rAF 循环不划算
+
+刻意规避的坑：
+- **不给 Alpine 托管的数字挂 Counter**：那些数字由 `x-text` 持续驱动，Counter 会和 Alpine 抢 `textContent`
+- **图表卡不挂 SpotlightCard**：径向光斑透过半透明图表底色会让折线读数变糊，只留入场动效
+- 全屏 canvas（ClickSpark / DotGrid / LetterGlitch）在没有活动粒子、鼠标移出、页面切后台时主动停掉 rAF，不空烧 60fps
+- 沿用 armada-fx.css 的同一条禁令：本文件无 `@layer`、优先级高于 Tailwind 的 `@layer utilities`，绝不给 `nav`/`aside`/`main` 设 position
+
+### Bug 修复（本轮视觉层引入 / 既有问题）
+- **入场动效把仪表盘 12 张卡片永久藏住**（自查发现，未流出）：`[data-vb-reveal]` 初版由 CSS 无条件设 `opacity:0`，等 IntersectionObserver 回调加 `.vb-in` 才显示。但 `IntersectionObserver` 注册在 `display:none` 的元素上只会回调一次 `isIntersecting:false`，之后 Alpine 把 `x-show` 打开时**不再回调**（已单独写最小用例实测：`callsAfterUnhide: 0`）。而仪表盘的汇总卡/图表卡全在 `x-show="!loading && hasMetrics"` 内，意味着数据加载完之后这 12 张卡会永久停在 `opacity:0`。根因是设计方向错了——把「可见」押在 JS 一定会成功回调上。改为反向契约：隐藏态挂在 JS 添加的 `.vb-armed` 上，且只给 `getClientRects().length > 0`（确认已参与布局）的元素上锁，藏在 `x-show` 里的元素交给 MutationObserver 等 Alpine 打开后再补锁。JS 没加载 / IO 没触发 / 元素被藏 —— 一律保持可见，坏掉的方向是「没动画」而不是「没内容」
+- **节点列表「管理」按钮 hover 时文字被色块糊掉**（用户反馈）：该按钮同时写了 `hover:btn-primary` 和 `hover:bg-primary/10`，前者把文字设成浅色的 `primary-content`、后者把底色压成 10% 淡色，结果浅字压浅底。改用 `hover:text-primary` 仍不行——实测深色主题下蓝字压蓝底对比度只有 **2.89**。最终改为与项目既有 `.row-action` 一致的中性配色（`hover:bg-base-content/10` + `hover:text-base-content`），实测对比度 **10.22**。验证手段：在页面内用 canvas 逐层合成真实像素后算 WCAG 对比度（`getComputedStyle` 返回的是 `oklch()`/`oklab()`，不能按 RGB 解析——第一版脚本就是这么错的，得出的整屏数字全是垃圾），覆盖 dark/light × 5 处按钮，现全部 ≥ 4.85
+- **多行 `{# #}` 注释被当作文本渲染到操作列**（用户反馈）：Django 的 `{# #}` 只支持单行，多行写法会把注释原文输出到页面。改用 `{% comment %}`，并写脚本全量扫描 `templates/` 确认无其他同类问题
+- **各页面 hover 效果不统一**（用户反馈）：初版只给仪表盘和集群列表挂了 MagicBento，节点管理页/节点详情页的统计卡完全没挂，hover 无反应。补齐后四个页面共 20 张卡走同一套效果，并写脚本实测断言（hover 首卡 `--vb-glow-intensity` ≈ 1、邻近卡 > 0、鼠标移出后全部归 0），确认是真生效而非只挂上了 class
+
+### 验证
+- 全量巡检 14 个页面 + 登录页：`nav`/`aside` 的 computed position 全部仍为 `fixed`（布局回归探针）、控制台与 pageerror 零报错、无「已布局但不可见」的元素
+- 选中集群后的仪表盘单独验证：3 个 ECharts canvas 均为 456x340 非零尺寸、汇总数字正常（22.3% / 26.6% / 256 节点 / 163 GPU）、48 张 SpotlightCard 与 40 张节点卡挂载正常
+- hover 辉光一致性：集群列表 2 张 / 节点管理 4 张 / 仪表盘 3 张 / 节点详情 5 张，四页行为一致
+- 补记：`metrics` 接口在 256 节点集群上冷缓存需 ~40s（TTL 60s），验证脚本须先预热否则会误判为「图表没渲染」；LocMemCache 是进程内的，预热必须打到同一个 runserver 进程
+
 ---
 
 ## 2026-07-17

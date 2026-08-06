@@ -12,9 +12,14 @@
 
 {% block content %}
 {% if clusters %}
-<div class="fx-stagger grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+{% comment %}
+MagicBento 卡片墙：鼠标在这片区域内，每张卡按离鼠标的距离算辉光强度，
+整墙形成亮度梯度。叠 vb-glare 让 hover 时有一道光带扫过。
+{% endcomment %}
+<div data-vb-bento class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
   {% for cluster in clusters %}
-  <div class="fx-card fx-card-glow fx-tilt card bg-base-100 border border-base-300 group">
+  <div class="vb-bento-card vb-spotlight-card vb-glare fx-card fx-tilt card bg-base-100 border border-base-300 group"
+       data-vb-reveal data-vb-reveal-stagger="0.06">
     <div class="card-body p-5">
       <div class="flex items-start justify-between mb-4">
         <div class="flex items-center gap-3">
@@ -60,7 +65,7 @@
         <a href="{% url 'clusters:select' cluster.pk %}?next=/" class="btn btn-outline btn-sm gap-1.5 h-8 min-h-0 hover:btn-primary transition-all text-xs">
           <i class="fas fa-check-circle text-[10px]"></i> 选择
         </a>
-        <a href="{% url 'clusters:detail' cluster.pk %}" class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 transition-all text-xs">
+        <a href="{% url 'clusters:detail' cluster.pk %}" data-vb-spark class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 transition-all text-xs">
           <i class="fas fa-eye text-[10px]"></i> 详情
         </a>
       </div>
@@ -73,9 +78,9 @@
   <div class="w-20 h-20 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-5">
     <i class="fas fa-server text-4xl text-primary"></i>
   </div>
-  <p class="text-xl font-semibold mb-1">暂无集群</p>
-  <p class="text-sm mb-5 opacity-70">导入 Kubeconfig 以开始管理您的 Kubernetes 集群</p>
-  <a href="{% url 'clusters:add' %}" class="btn btn-primary gap-2">
+  <p class="vb-gradient-text text-xl font-semibold mb-1">暂无集群</p>
+  <p class="vb-shiny text-sm mb-5">导入 Kubeconfig 以开始管理您的 Kubernetes 集群</p>
+  <a href="{% url 'clusters:add' %}" data-vb-spark class="btn btn-primary gap-2">
     <i class="fas fa-plus text-xs"></i> 导入集群
   </a>
 </div>

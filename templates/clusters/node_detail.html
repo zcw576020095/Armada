@@ -117,9 +117,13 @@
     </div>
 
     <!-- Top Info Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
+    {% comment %}
+    和集群列表 / 节点管理 / 仪表盘统一走同一套 MagicBento：
+    鼠标在这片区域内时每张卡按离鼠标的距离算辉光强度，整排有亮度梯度。
+    {% endcomment %}
+    <div data-vb-bento class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
       <!-- Status -->
-      <div class="dash-card" :class="node.status === 'Ready' ? 'dash-card-emerald' : 'dash-card-rose'">
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card" data-vb-reveal data-vb-reveal-stagger="0.05" :class="node.status === 'Ready' ? 'dash-card-emerald' : 'dash-card-rose'">
         <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">状态</div>
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full" :class="node.status === 'Ready' ? 'bg-emerald-400' : 'bg-rose-400'"></span>
@@ -127,24 +131,24 @@
         </div>
       </div>
       <!-- Type -->
-      <div class="dash-card" :class="node.is_gpu ? 'dash-card-violet' : 'dash-card-blue'">
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card" data-vb-reveal data-vb-reveal-stagger="0.05" :class="node.is_gpu ? 'dash-card-violet' : 'dash-card-blue'">
         <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">类型</div>
         <span class="badge badge-sm font-medium"
           :class="node.is_gpu ? 'bg-violet-500/15 text-violet-400 border-violet-500/30' : 'bg-sky-500/15 text-sky-400 border-sky-500/30'"
           x-text="node.node_type"></span>
       </div>
       <!-- Role -->
-      <div class="dash-card dash-card-teal">
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-teal" data-vb-reveal data-vb-reveal-stagger="0.05">
         <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">角色</div>
         <span class="text-sm font-semibold text-teal-400" x-text="node.roles"></span>
       </div>
       <!-- K8s Version -->
-      <div class="dash-card dash-card-blue">
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-blue" data-vb-reveal data-vb-reveal-stagger="0.05">
         <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">K8s 版本</div>
         <div class="text-sm font-bold text-blue-400 truncate" x-text="node.k8s_version"></div>
       </div>
       <!-- Arch -->
-      <div class="dash-card dash-card-amber">
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-amber" data-vb-reveal data-vb-reveal-stagger="0.05">
         <div class="text-[10px] uppercase tracking-wider opacity-40 mb-2">架构</div>
         <div class="text-sm font-bold text-amber-400" x-text="node.arch || '-'"></div>
       </div>

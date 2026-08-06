@@ -4,7 +4,7 @@
 {% block extra_head %}{% endblock %}
 
 {% block content %}
-<div class="fx-card card bg-base-100 border border-base-300" x-data="resourceList()" x-init="init()"
+<div class="fx-card card bg-base-100 border border-base-300" data-vb-reveal x-data="resourceList()" x-init="init()"
   @resource-updated.window="
     const d = $event.detail;
     if (d && d.action === 'delete') {
@@ -33,9 +33,10 @@
       <div class="flex items-center gap-3">
         <h3 class="text-xl font-bold flex items-center gap-2 text-base-content/80">
           <i class="fas fa-{% block resource_icon %}cube{% endblock %} text-violet-500"></i>
-          {% block resource_title %}Resources{% endblock %}
+          {# DecryptedText：hover 时标题打乱再逐字归位 #}
+          <span data-vb-decrypt>{% block resource_title %}Resources{% endblock %}</span>
         </h3>
-        <span class="px-3 py-1 rounded-full bg-violet-500 text-white text-sm font-bold" x-show="!loading" x-cloak x-text="filteredRows.length"></span>
+        <span class="vb-counter px-3 py-1 rounded-full bg-violet-500 text-white text-sm font-bold" x-show="!loading" x-cloak x-text="filteredRows.length"></span>
       </div>
       <div class="flex items-center gap-2">
         {# 自定义 namespace combobox：原生 select 不支持子串模糊匹配（用户搜 zcw 找不到 test-zcw），改成 input + 下拉 panel 实现 contains 匹配，所有资源列表共享 #}

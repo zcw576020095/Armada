@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="{% static_v 'css/output.css' %}">
   <link rel="stylesheet" href="{% static 'css/all.min.css' %}">
   <link rel="stylesheet" href="{% static_v 'css/armada-fx.css' %}">
+  <link rel="stylesheet" href="{% static_v 'css/vue-bits.css' %}">
   <!-- 登录页跟随用户在主应用里保存的主题；提前同步执行避免闪烁 -->
   <script>
     (function() {
@@ -360,7 +361,13 @@
 <body>
 
   <!-- 左侧视觉面板 -->
-  <div class="visual-panel">
+  {% comment %}
+  data-vb-dotgrid 是 vue-bits DotGrid 的挂载点：点阵按离鼠标的距离在
+  base/primary 两色间插值，快速划过或点击会把点推开再弹回。
+  原版靠 GSAP 付费的 InertiaPlugin 做推开-回弹，免费包里没有，
+  vue-bits.js 里改成了自己积分（指数衰减 + elastic 回位），观感一致。
+  {% endcomment %}
+  <div class="visual-panel" data-vb-dotgrid data-vb-dot-size="4" data-vb-dot-gap="28" data-vb-dot-proximity="140">
     <div class="grid-bg"></div>
 
     <div class="visual-content">
@@ -373,7 +380,7 @@
       <div class="feature-list">
         <div class="feature-item">
           <i class="fas fa-check-circle"></i>
-          <span>统一管理多个 K8s 集群</span>
+          <span class="vb-shiny">统一管理多个 K8s 集群</span>
         </div>
         <div class="feature-item">
           <i class="fas fa-check-circle"></i>
@@ -418,7 +425,8 @@
         </div>
       </div>
 
-      <button type="submit" class="login-btn">
+      {# data-vb-spark：ClickSpark，点击时从光标射出 8 条线段 #}
+      <button type="submit" class="login-btn" data-vb-spark>
         登录
       </button>
     </form>
@@ -439,5 +447,10 @@
     </div>
   </div>
 
+  {% comment %}
+  登录页不继承 base.html，脚本要自己带。不引 gsap：这页用到的
+  DotGrid / ClickSpark 都是自己算的 rAF，不依赖 GSAP，省一个 73KB 请求。
+  {% endcomment %}
+  <script src="{% static_v 'js/vue-bits.js' %}"></script>
 </body>
 </html>

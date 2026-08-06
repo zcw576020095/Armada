@@ -1,0 +1,411 @@
+/* ============================================================
+   vue-bits 组件移植层
+   源: https://github.com/DavidHDev/vue-bits  (src/content/**)
+
+   Armada 是 Django 模板 + Alpine，没有 Vue，所以每个组件都从 SFC
+   拆成「CSS 这一半 + vue-bits.js 里的行为那一半」，靠 data-vb-* 属性挂载。
+
+   原版组件的颜色全是硬编码 hex（#27FF64 / #060010 / #333 这类深色底设定），
+   直接搬过来在亮色主题下会瞎。这里统一换成 DaisyUI 的 --color-* token，
+   于是同一份代码在 light/dark 下都成立。
+
+   ⚠️ 和 armada-fx.css 同一个层叠陷阱：本文件无 @layer，优先级高于
+   Tailwind 的 @layer utilities。禁止在这里给 nav / aside / main 设
+   position，会压掉 .fixed 导致整页塌陷。装饰层一律 absolute + 负 z-index。
+   ============================================================ */
+
+/* ---------- MagicBento ----------
+   原版: Components/MagicBento/MagicBento.vue
+   三件套：全局聚光灯跟随鼠标 + 卡片按「离鼠标的距离」算辉光强度 + 粒子。
+   --glow-intensity 由 JS 按邻近度写入，所以整片卡片墙会有个渐进的亮度梯度，
+   而不是只有 :hover 那一张亮 —— 这是它比普通 hover 卡片高级的地方。 */
+[data-vb-bento] {
+  --vb-glow-x: 50%;
+  --vb-glow-y: 50%;
+  --vb-glow-intensity: 0;
+  --vb-glow-radius: 220px;
+}
+
+.vb-bento-card {
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease;
+}
+
+/* 辉光只留边框那一圈：外层填满、content-box 挖空，再 exclude */
+.vb-bento-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 5px;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(
+    var(--vb-glow-radius) circle at var(--vb-glow-x) var(--vb-glow-y),
+    color-mix(in oklab, var(--color-primary) calc(var(--vb-glow-intensity) * 70%), transparent) 0%,
+    color-mix(in oklab, var(--color-primary) calc(var(--vb-glow-intensity) * 32%), transparent) 30%,
+    transparent 62%
+  );
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: subtract;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+}
+
+.vb-bento-card:hover {
+  box-shadow:
+    0 4px 20px color-mix(in oklab, var(--color-base-content) 12%, transparent),
+    0 0 30px color-mix(in oklab, var(--color-primary) 18%, transparent);
+}
+
+/* 全局聚光灯，JS 挂到 body 上用 fixed */
+.vb-spotlight {
+  position: fixed;
+  width: 800px;
+  height: 800px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 200;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  /* screen 在亮底上会把整片洗白，亮色主题下换 multiply 反而是压暗 —— 见 JS
+     里按主题切 mix-blend-mode 的逻辑，这里给深色的默认值 */
+  mix-blend-mode: screen;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--color-primary) 15%, transparent) 0%,
+    color-mix(in oklab, var(--color-primary) 8%, transparent) 15%,
+    color-mix(in oklab, var(--color-primary) 4%, transparent) 25%,
+    color-mix(in oklab, var(--color-primary) 2%, transparent) 40%,
+    transparent 70%
+  );
+}
+
+[data-theme='light'] .vb-spotlight { mix-blend-mode: multiply; }
+
+/* 粒子：JS clone 后 GSAP 驱动 */
+.vb-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 100;
+  background: var(--color-primary);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--color-primary) 60%, transparent);
+}
+
+/* ---------- SpotlightCard ----------
+   原版: Components/SpotlightCard/SpotlightCard.vue
+   单卡版本：径向光斑跟随鼠标，坐标是 px 不是 %，所以光斑不随卡片尺寸变形 */
+/* isolation + z-index:-1 是关键：光斑要压在卡片自身背景之上、文字之下。
+   若用 z-index:0，定位伪元素会盖到未定位的文字上，整段字被染色。
+   isolation 建独立层叠上下文，-1 才不会穿到卡片背景后面去。 */
+.vb-spotlight-card { position: relative; overflow: hidden; isolation: isolate; }
+
+.vb-spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease-in-out;
+  background: radial-gradient(
+    circle at var(--vb-sx, 50%) var(--vb-sy, 50%),
+    color-mix(in oklab, var(--color-primary) 22%, transparent),
+    transparent 80%
+  );
+}
+
+.vb-spotlight-card:hover::before,
+.vb-spotlight-card:focus-within::before { opacity: 0.6; }
+
+/* ---------- StarBorder ----------
+   原版: Animations/StarBorder/StarBorder.vue
+   两颗光点沿上下边一来一回。原版把内容区写死 #0b0b0b + #333 边框，
+   这里换成 base-100 / hair，亮色下才不是一块黑疤。 */
+.vb-star-border {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 12px;
+  padding: 1px 0;
+  background: transparent;
+  border: none;
+}
+
+.vb-star-border::before,
+.vb-star-border::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  width: 300%;
+  height: 50%;
+  border-radius: 999px;
+  opacity: 0.7;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--color-primary), transparent 10%);
+}
+
+.vb-star-border::after {
+  right: -250%;
+  bottom: -11px;
+  animation: vbStarBottom 6s linear infinite alternate;
+}
+
+.vb-star-border::before {
+  left: -250%;
+  top: -10px;
+  animation: vbStarTop 6s linear infinite alternate;
+}
+
+.vb-star-border > * {
+  position: relative;
+  z-index: 1;
+  border-radius: 11px;
+  background: var(--color-base-100);
+  border: 1px solid var(--hair);
+}
+
+@keyframes vbStarBottom {
+  0%   { transform: translate(0%, 0%); opacity: 1; }
+  100% { transform: translate(-100%, 0%); opacity: 0; }
+}
+
+@keyframes vbStarTop {
+  0%   { transform: translate(0%, 0%); opacity: 1; }
+  100% { transform: translate(100%, 0%); opacity: 0; }
+}
+
+/* ---------- ShinyText ----------
+   原版: TextAnimations/ShinyText.vue（原版用 motion-v 的 useAnimationFrame
+   逐帧写 backgroundPosition；纯 CSS keyframes 等价且不占主线程） */
+.vb-shiny {
+  display: inline-block;
+  background-image: linear-gradient(
+    120deg,
+    color-mix(in oklab, var(--color-base-content) 62%, transparent) 0%,
+    color-mix(in oklab, var(--color-base-content) 62%, transparent) 35%,
+    var(--color-base-content) 50%,
+    color-mix(in oklab, var(--color-base-content) 62%, transparent) 65%,
+    color-mix(in oklab, var(--color-base-content) 62%, transparent) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: vbShine 3s linear infinite;
+}
+
+@keyframes vbShine {
+  0%   { background-position: 150% center; }
+  100% { background-position: -50% center; }
+}
+
+/* ---------- GradientText ----------
+   原版: TextAnimations/GradientText.vue
+   首色在尾部重复一次才能无缝循环，这是原版的关键细节 */
+.vb-gradient-text {
+  background-image: linear-gradient(
+    to right,
+    var(--color-primary),
+    var(--color-info),
+    var(--color-secondary),
+    var(--color-primary)
+  );
+  background-size: 300% 100%;
+  background-repeat: repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: vbGradText 8s linear infinite;
+}
+
+@keyframes vbGradText {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+/* ---------- GlareHover ----------
+   原版: Animations/GlareHover.vue
+   一道 45° 光带扫过。原版靠 JS 改 backgroundPosition，这里保留同样做法
+   （见 vue-bits.js），因为 CSS transition 需要先复位再触发，纯 CSS 做不到 */
+.vb-glare { position: relative; overflow: hidden; }
+
+.vb-glare > .vb-glare-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(
+    -45deg,
+    transparent 60%,
+    color-mix(in oklab, var(--fx-sheen) 70%, transparent) 70%,
+    transparent 100%
+  );
+  background-size: 250% 250%;
+  background-repeat: no-repeat;
+  background-position: -100% -100%;
+}
+
+/* ---------- Magnet ----------
+   原版: Animations/Magnet.vue
+   位移由 JS 写 --vb-mag-x/y，transform 在 CSS 合成，避免和别的补间抢属性 */
+.vb-magnet { display: inline-block; }
+
+.vb-magnet > .vb-magnet-inner {
+  display: inline-block;
+  transform: translate3d(var(--vb-mag-x, 0px), var(--vb-mag-y, 0px), 0);
+  transition: transform 0.5s ease-in-out;
+  will-change: transform;
+}
+
+.vb-magnet[data-vb-magnet-active='1'] > .vb-magnet-inner {
+  transition: transform 0.3s ease-out;
+}
+
+/* ---------- ElectricBorder ----------
+   原版: Animations/ElectricBorder.vue
+   原版的抖动电流是 canvas + 分形噪声画的；这里只移植它的「三层发光边框」
+   （0.6 透明度 1px 模糊 + 实色 4px 模糊 + 32px 模糊的斜向底光），
+   canvas 噪声那部分对一个管理控制台来说噪音大于收益，且每个卡片一条
+   rAF 循环不划算。 */
+.vb-electric { position: relative; isolation: isolate; }
+
+.vb-electric > .vb-electric-layers {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.vb-electric > .vb-electric-layers::before,
+.vb-electric > .vb-electric-layers::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.vb-electric > .vb-electric-layers::before {
+  border: 2px solid color-mix(in oklab, var(--color-primary) 60%, transparent);
+  filter: blur(1px);
+}
+
+.vb-electric > .vb-electric-layers::after {
+  border: 2px solid var(--color-primary);
+  filter: blur(4px);
+}
+
+/* 斜向底光单独一层，scale 放大后溢出容器形成外发光 */
+.vb-electric > .vb-electric-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.3;
+  border-radius: inherit;
+  transform: scale(1.1);
+  filter: blur(32px);
+  pointer-events: none;
+  background: linear-gradient(-30deg, var(--color-primary), transparent, var(--color-primary));
+}
+
+/* ---------- GradualBlur ----------
+   原版: Animations/GradualBlur.vue
+   多层递增 blur + 分段 mask 叠出「渐进模糊」，比单层 blur 自然得多。
+   用在长列表底部，暗示下面还有内容。 */
+.vb-gradual-blur {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 64px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.vb-gradual-blur > div {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(var(--vb-blur));
+  -webkit-backdrop-filter: blur(var(--vb-blur));
+  mask-image: linear-gradient(to bottom, transparent var(--vb-from), #000 var(--vb-to));
+  -webkit-mask-image: linear-gradient(to bottom, transparent var(--vb-from), #000 var(--vb-to));
+}
+
+/* ---------- AnimatedContent / AnimatedList ----------
+   原版: Animations/AnimatedContent.vue + Components/AnimatedList.vue
+   进入视口时 scale+translate 复位。原版用 ScrollTrigger / motion-v 的 useInView，
+   这里用原生 IntersectionObserver。
+
+   ⚠️ 隐藏态挂在 .vb-armed 上而不是 [data-vb-reveal] 本身，这一点是必须的：
+   IntersectionObserver 注册在 display:none 的元素上只会回调一次
+   isIntersecting=false，之后 Alpine 把 x-show 打开时不再回调（实测），
+   元素就永久停在 opacity:0。所以由 JS 只给「当前已参与布局、确认能观测」的
+   元素加 .vb-armed。JS 没加载 / IO 没触发 / 元素藏在 x-show 里 —— 一律保持可见。
+   默认可见、按需上锁，坏掉的方向是"没动画"而不是"没内容"。 */
+[data-vb-reveal].vb-armed {
+  opacity: 0;
+  transform: translateY(var(--vb-reveal-y, 18px)) scale(var(--vb-reveal-scale, 0.96));
+  transition:
+    opacity 0.55s var(--ease-out-soft),
+    transform 0.55s var(--ease-out-soft);
+  transition-delay: var(--vb-reveal-delay, 0s);
+}
+
+[data-vb-reveal].vb-armed.vb-in {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ---------- DecryptedText ----------
+   原版: TextAnimations/DecryptedText.vue
+   未解密的字符用弱化色，解密后恢复，制造「乱码逐字归位」的观感 */
+.vb-decrypt-scrambled {
+  color: color-mix(in oklab, var(--color-primary) 70%, transparent);
+  opacity: 0.75;
+}
+
+/* ---------- Counter ----------
+   原版: Components/Counter.vue（数字滚轮）
+   等宽数字，避免位数变化时整行抖动 */
+.vb-counter { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   减少动效：常驻动画全停，hover 反馈保留（那是交互必需的信息）
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .vb-star-border::before,
+  .vb-star-border::after,
+  .vb-shiny,
+  .vb-gradient-text { animation: none; }
+
+  .vb-shiny {
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
+
+  .vb-gradient-text {
+    background-image: none;
+    color: inherit;
+  }
+
+  .vb-electric > .vb-electric-glow { opacity: 0.18; }
+
+  /* reduced 下 JS 根本不会加 .vb-armed，这条只是双保险：
+     万一 class 已经加上了（比如设置是在页面加载后改的），也强制显示 */
+  [data-vb-reveal].vb-armed {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .vb-bento-card,
+  .vb-spotlight-card::before,
+  .vb-magnet > .vb-magnet-inner { transition-duration: 0.01ms; }
+}

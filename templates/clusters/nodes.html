@@ -52,8 +52,13 @@
 <div x-data="nodeManager()" x-init="load(); $watch('search', () => page = 1); $watch('filter', () => page = 1)">
 
   <!-- Stats Cards -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-    <div class="dash-card dash-card-primary">
+  {% comment %}
+  统计卡走和集群列表 / 仪表盘同一套 MagicBento：鼠标在这片区域内时，
+  每张卡按离鼠标的距离算 --vb-glow-intensity，整排形成亮度梯度。
+  之前这页漏挂了，hover 完全没反应，和其他页面不一致。
+  {% endcomment %}
+  <div data-vb-bento class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-primary" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">节点总数</div>
@@ -65,7 +70,7 @@
       </div>
     </div>
 
-    <div class="dash-card dash-card-success">
+    <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-success" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">Ready</div>
@@ -80,7 +85,7 @@
       </div>
     </div>
 
-    <div class="dash-card dash-card-error">
+    <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-error" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">NotReady</div>
@@ -95,7 +100,7 @@
       </div>
     </div>
 
-    <div class="dash-card dash-card-violet">
+    <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-violet" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">GPU 节点</div>
@@ -186,7 +191,13 @@
               <td><span class="text-amber-400 font-medium text-xs" x-text="node.cpu_capacity + ' 核'"></span></td>
               <td><span class="text-emerald-400 font-medium text-xs" x-text="node.memory_capacity"></span></td>
               <td>
-                <a :href="'/clusters/{{ cluster.pk }}/node/' + node.name + '/'" class="btn btn-ghost btn-xs gap-1.5 h-7 min-h-0 text-[10px] hover:btn-primary hover:bg-primary/10 transition-all">
+                {% comment %}
+                hover 配色跟 .row-action 保持一致（中性底 + 高对比文字，实测对比度 10.22）。
+                不要用 primary 系：hover:btn-primary 会把文字设成浅色的 primary-content，
+                若再叠 hover:bg-primary/10 就是浅字压浅底；单用 hover:text-primary 也不行，
+                实测深色主题下蓝字压蓝底只有 2.89 对比度，字会被色块糊掉。
+                {% endcomment %}
+                <a :href="'/clusters/{{ cluster.pk }}/node/' + node.name + '/'" class="btn btn-ghost btn-xs gap-1.5 h-7 min-h-0 text-[10px] hover:bg-base-content/10 hover:text-base-content transition-all">
                   <i class="fas fa-cog"></i> 管理
                 </a>
               </td>
