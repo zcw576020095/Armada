@@ -1,0 +1,348 @@
+/* ============================================================
+   Armada FX — 视觉增强层
+   手写 CSS，不参与 Tailwind 编译（改动无需 build:css）。
+   全部颜色走 DaisyUI 的 --color-* token，保证亮/暗主题都成立。
+   所有持续动效在 prefers-reduced-motion 下统一降级（见文件末尾）。
+   ============================================================ */
+
+/* ---------- 0. 背景层归属 ---------- */
+/* body 自带不透明的 bg-base-200，会把负 z-index 的伪元素整个盖住。
+   把底色移到 html 上、body 置为透明，光晕与网格才可见。 */
+html { background: var(--color-base-200); }
+body { background: transparent; }
+
+/* ---------- 1. 全局环境光：跟随主题的漂移光晕 ---------- */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -30%;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side at 22% 28%, color-mix(in oklab, var(--color-primary) 13%, transparent), transparent),
+    radial-gradient(closest-side at 78% 72%, color-mix(in oklab, var(--color-secondary) 11%, transparent), transparent),
+    radial-gradient(closest-side at 60% 12%, color-mix(in oklab, var(--color-accent) 8%, transparent), transparent);
+  filter: blur(40px);
+  animation: fx-aurora 26s ease-in-out infinite alternate;
+}
+
+@keyframes fx-aurora {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  33%  { transform: translate3d(2.5%, -2%, 0) scale(1.06); }
+  66%  { transform: translate3d(-2%, 2.5%, 0) scale(1.02); }
+  100% { transform: translate3d(1.5%, 1.5%, 0) scale(1.07); }
+}
+
+/* 注意：绝不能在这里给 nav / aside / main 加 position: relative。
+   本文件是无 @layer 的普通样式，优先级高于 Tailwind 的 @layer utilities，
+   会直接压掉 .fixed，导致顶栏和侧边栏丢失固定定位、主内容区塌出大片空白。
+   背景层靠负 z-index 自然沉到内容之下，不需要动内容层的定位。 */
+
+/* 亮色主题下同样的强度会显脏（白底对色偏更敏感），整体收一档 */
+[data-theme='light'] body::before {
+  opacity: 0.55;
+  filter: blur(60px);
+}
+
+/* ---------- 2. 细网格底纹 ---------- */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--color-base-content) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-base-content) 4%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 10%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 10%, transparent 80%);
+}
+
+/* 网格在白底上比在暗底上显眼得多，亮色主题下减淡 */
+[data-theme='light'] body::after { opacity: 0.5; }
+
+/* ---------- 3. 玻璃拟态面板 ---------- */
+.fx-glass {
+  background: color-mix(in oklab, var(--color-base-100) 78%, transparent);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+}
+
+/* ---------- 4. 卡片：光泽扫过 + 鼠标跟随高光 ---------- */
+.fx-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.28s ease,
+              border-color 0.28s ease;
+}
+
+/* 鼠标跟随的柔光，坐标由 JS 写入 --fx-mx / --fx-my */
+.fx-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(
+    220px circle at var(--fx-mx, 50%) var(--fx-my, 50%),
+    color-mix(in oklab, var(--color-primary) 16%, transparent),
+    transparent 65%
+  );
+}
+
+.fx-card:hover::after { opacity: 1; }
+
+.fx-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--color-primary) 38%, transparent);
+  box-shadow:
+    0 10px 30px -8px color-mix(in oklab, var(--color-primary) 22%, transparent),
+    0 2px 8px color-mix(in oklab, var(--color-base-content) 6%, transparent);
+}
+
+/* ---------- 5. 数字/进度条：呼吸微光 ---------- */
+.fx-metric {
+  text-shadow: 0 0 18px color-mix(in oklab, currentColor 32%, transparent);
+}
+
+.fx-bar {
+  position: relative;
+  overflow: hidden;
+}
+
+/* 进度条上持续游走的高光 */
+.fx-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in oklab, white 55%, transparent) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: fx-sheen 2.6s ease-in-out infinite;
+}
+
+@keyframes fx-sheen {
+  0%       { transform: translateX(-100%); }
+  60%,100% { transform: translateX(220%); }
+}
+
+/* ---------- 6. 状态点：脉冲光环 ---------- */
+.fx-pulse {
+  position: relative;
+}
+
+/* 用描边环而不是填充块：填充色扩散后会糊成一坨色块压住旁边的文字 */
+.fx-pulse::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  pointer-events: none;
+  animation: fx-ring 2s cubic-bezier(0.24, 0.6, 0.35, 1) infinite;
+}
+
+@keyframes fx-ring {
+  0%   { transform: scale(0.8); opacity: 0.7; }
+  70%  { transform: scale(1.7); opacity: 0; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* ---------- 7. 表格行：左侧指示条 + 悬停浮起 ---------- */
+.fx-table tbody tr {
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.fx-table tbody tr td:first-child {
+  position: relative;
+}
+
+.fx-table tbody tr td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8%;
+  bottom: 8%;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--color-primary);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fx-table tbody tr:hover td:first-child::before { transform: scaleY(1); }
+
+.fx-table tbody tr:hover {
+  background: color-mix(in oklab, var(--color-primary) 7%, transparent) !important;
+}
+
+/* ---------- 8. 侧边栏激活项：光条 ---------- */
+.sidebar-nav-item {
+  position: relative;
+}
+
+.sidebar-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2.5px;
+  border-radius: 0 3px 3px 0;
+  background: var(--color-primary);
+  box-shadow: 0 0 10px var(--color-primary);
+  animation: fx-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes fx-glow {
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1; }
+}
+
+/* 侧栏图标悬停轻微放大 */
+.sidebar-nav-item .sidebar-nav-icon {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sidebar-nav-item:hover .sidebar-nav-icon { transform: scale(1.16); }
+
+/* ---------- 9. 品牌 logo：持续色相流动 ---------- */
+.fx-logo {
+  background: linear-gradient(
+    120deg,
+    var(--color-primary),
+    var(--color-secondary),
+    var(--color-accent),
+    var(--color-primary)
+  );
+  background-size: 300% 300%;
+  animation: fx-flow 7s ease infinite;
+}
+
+@keyframes fx-flow {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ---------- 10. 渐变标题文字 ---------- */
+.fx-title {
+  background: linear-gradient(
+    100deg,
+    var(--color-base-content) 20%,
+    var(--color-primary) 50%,
+    var(--color-base-content) 80%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: fx-flow 9s ease infinite;
+}
+
+/* ---------- 11. 按钮：光沿边框游走 ---------- */
+.fx-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.fx-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in oklab, white 32%, transparent),
+    transparent
+  );
+  transition: left 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fx-btn:hover::before { left: 130%; }
+
+/* ---------- 12. 骨架屏微光（替代干巴巴的 spinner 文案） ---------- */
+.fx-skeleton {
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--color-base-content) 6%, transparent) 25%,
+    color-mix(in oklab, var(--color-base-content) 13%, transparent) 50%,
+    color-mix(in oklab, var(--color-base-content) 6%, transparent) 75%
+  );
+  background-size: 220% 100%;
+  animation: fx-shimmer 1.5s linear infinite;
+  border-radius: 8px;
+}
+
+@keyframes fx-shimmer {
+  0%   { background-position: 130% 0; }
+  100% { background-position: -30% 0; }
+}
+
+/* ---------- 13. 入场：轻微上浮（一次性，仅作为补充） ---------- */
+.fx-rise {
+  animation: fx-rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fx-rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 网格子项依次浮现 */
+.fx-stagger > * { animation: fx-rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.fx-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.fx-stagger > *:nth-child(2) { animation-delay: 0.07s; }
+.fx-stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.fx-stagger > *:nth-child(4) { animation-delay: 0.17s; }
+.fx-stagger > *:nth-child(5) { animation-delay: 0.22s; }
+.fx-stagger > *:nth-child(6) { animation-delay: 0.27s; }
+
+/* ---------- 14. 顶栏滚动时增强分隔 ---------- */
+nav.fx-nav-scrolled {
+  box-shadow: 0 4px 20px -6px color-mix(in oklab, var(--color-base-content) 18%, transparent);
+}
+
+/* ============================================================
+   无障碍降级：用户要求减少动效时，关掉所有"一直在动"的效果，
+   保留 hover 反馈（那是交互必需的信息）。
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  .fx-bar::after,
+  .fx-pulse::before,
+  .fx-logo,
+  .fx-title,
+  .sidebar-nav-item.active::before,
+  .fx-skeleton { animation: none; }
+
+  .fx-title {
+    -webkit-text-fill-color: currentColor;
+    background: none;
+  }
+  .fx-bar::after { display: none; }
+
+  .fx-rise,
+  .fx-stagger > * { animation: none; }
+
+  .fx-card,
+  .fx-card::after,
+  .fx-table tbody tr,
+  .fx-table tbody tr td:first-child::before,
+  .sidebar-nav-item .sidebar-nav-icon,
+  .fx-btn::before {
+    transition-duration: 0.01ms;
+  }
+  .fx-card:hover { transform: none; }
+}

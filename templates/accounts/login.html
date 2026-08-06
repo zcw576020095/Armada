@@ -8,6 +8,7 @@
   <title>登录 - Armada</title>
   <link rel="stylesheet" href="{% static_v 'css/output.css' %}">
   <link rel="stylesheet" href="{% static 'css/all.min.css' %}">
+  <link rel="stylesheet" href="{% static_v 'css/armada-fx.css' %}">
   <!-- 登录页跟随用户在主应用里保存的主题；提前同步执行避免闪烁 -->
   <script>
     (function() {
@@ -38,14 +39,101 @@
       overflow: hidden;
     }
 
-    /* 微妙的渐变光晕，用主题主色驱动 */
+    /* 持续漂移的渐变光晕，用主题主色驱动。
+       登录页 body 是不透明的 base-100，盖住了 armada-fx.css 的全局光晕，
+       所以这里自带一份动效。 */
     .visual-panel::before {
       content: '';
       position: absolute;
-      inset: 0;
+      inset: -25%;
       background:
-        radial-gradient(circle at 20% 30%, color-mix(in oklab, var(--color-primary) 10%, transparent) 0%, transparent 50%),
-        radial-gradient(circle at 80% 70%, color-mix(in oklab, var(--color-secondary) 8%, transparent) 0%, transparent 50%);
+        radial-gradient(closest-side at 22% 30%, color-mix(in oklab, var(--color-primary) 18%, transparent) 0%, transparent 100%),
+        radial-gradient(closest-side at 78% 70%, color-mix(in oklab, var(--color-secondary) 15%, transparent) 0%, transparent 100%),
+        radial-gradient(closest-side at 55% 15%, color-mix(in oklab, var(--color-accent) 10%, transparent) 0%, transparent 100%);
+      filter: blur(30px);
+      animation: login-aurora 22s ease-in-out infinite alternate;
+    }
+
+    @keyframes login-aurora {
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      50%  { transform: translate3d(3%, -2.5%, 0) scale(1.08); }
+      100% { transform: translate3d(-2%, 3%, 0) scale(1.04); }
+    }
+
+    /* 网格缓慢平移，给静态页面一点生命感 */
+    .grid-bg { animation: login-grid 34s linear infinite; }
+
+    @keyframes login-grid {
+      from { background-position: 0 0, 0 0; }
+      to   { background-position: 80px 80px, 80px 80px; }
+    }
+
+    /* 品牌图标：色相持续流动 + 悬浮 */
+    .brand-icon {
+      background-size: 300% 300%;
+      animation: login-flow 7s ease infinite, login-float 5s ease-in-out infinite;
+    }
+
+    @keyframes login-flow {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    @keyframes login-float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-7px); }
+    }
+
+    /* 标题渐变流动 */
+    .visual-content h1 {
+      background: linear-gradient(100deg,
+        var(--color-base-content) 15%,
+        var(--color-primary) 45%,
+        var(--color-secondary) 60%,
+        var(--color-base-content) 85%);
+      background-size: 220% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: login-flow 9s ease infinite;
+    }
+
+    /* 登录按钮：光泽扫过 */
+    .login-btn { position: relative; overflow: hidden; }
+    .login-btn::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -120%;
+      width: 55%; height: 100%;
+      background: linear-gradient(100deg, transparent,
+        color-mix(in oklab, white 38%, transparent), transparent);
+      transition: left 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .login-btn:hover::after { left: 130%; }
+
+    /* 特性项：依次浮现 */
+    .feature-item { animation: login-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .feature-item:nth-child(1) { animation-delay: 0.15s; }
+    .feature-item:nth-child(2) { animation-delay: 0.28s; }
+    .feature-item:nth-child(3) { animation-delay: 0.41s; }
+
+    @keyframes login-rise {
+      from { opacity: 0; transform: translateX(-10px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .visual-panel::before,
+      .grid-bg,
+      .brand-icon,
+      .visual-content h1,
+      .feature-item { animation: none; }
+      .visual-content h1 {
+        background: none;
+        -webkit-text-fill-color: currentColor;
+      }
+      .login-btn::after { display: none; }
     }
 
     /* 精致的网格背景 */

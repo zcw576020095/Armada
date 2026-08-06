@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-08-06
+
+### Bug 修复
+- **DaemonSet 回滚历史里「当前版本」永不高亮**：`list_daemonset_revisions()` 从 `ds.spec.template.metadata.labels` 里取 `controller-revision-hash`，但这个 label 是控制器注入到 **Pod** 上的、并不存在于 spec 模板中，导致 `current_hash` 恒为空字符串 → 所有 revision 的 `is_current` 全是 false、`current_revision` 恒为 None，用户在回滚弹框里看不出当前跑的是哪个版本。原代码还用 `hasattr(ds.status, 'current_number_scheduled')` 做守卫，而该字段与 revision 无关，属于无效条件。修复分两处：(1) 新增 `_daemonset_current_revision_hash()`，按 selector 拉取该 DaemonSet 实际拥有的 Pod（label selector 先过滤 + ownerReferences 二次校验，与项目既有 `_list_pods_by_owner` 口径一致），统计 Pod 上 `controller-revision-hash` 出现次数取众数——滚动更新期间新旧 hash 共存，众数即当前主版本；(2) 比较方式也是错的：Pod label 里是**裸 hash**（`6fd988788d`），而 ControllerRevision 的名字是 `<daemonset名>-<hash>`（`cce-gpu-exporter-6fd988788d`），原先的 `cr.metadata.name == current_hash` 恒不成立，改为按 `-<hash>` 后缀匹配。StatefulSet 那边能直接相等比较，是因为 `status.update_revision` 本身就是完整 CR 名，DaemonSet 没有这个字段。对照：Deployment 走 `deployment.kubernetes.io/revision` annotation，本就正确，只有 DaemonSet 缺对应实现。实测 pk=7 集群 6 个 DaemonSet：有 Pod 的 4 个全部正确识别出当前版本且 `is_current` 唯一命中，另 2 个 `desired=0`（无 Pod 调度）返回 None 属预期
+- **集群节点指标拉取失败被静默吞掉，前端显示「0 节点」而非报错**：`_fetch_metrics_data()` 的三个并发任务中，`fetch_metrics` / `fetch_pod_requests` 都有 try/except（用量类数据失败降级合理），但硬依赖的 `fetch_nodes` 没有；而 `ThreadPoolExecutor.submit()` 的异常只存在 Future 里，不调用 `.result()` 就永远不会抛出。结果集群不可达/凭据失效时 node_cap 为空字典 → 汇总出全 0 的 summary 正常返回 200，还被 `cached_metrics` 缓存 60 秒，用户看到「0 节点、CPU 0%」会误以为集群真的空了。修复：保留该任务 Future 并显式 `.result()`，让异常抛给已有 `except` 分支转成 `error` 字段展示，同时避免空结果进缓存
+- **K8s 原始异常整段渲染到界面，含响应头与 Set-Cookie**：仪表盘/节点页的错误提示直接展示后端的 `str(e)`，而 kubernetes SDK 的 `ApiException.__str__()` 会把完整 HTTP 响应头（含 `Set-Cookie`、`Audit-Id`、`Traceresponse`）和 body 一起拼进字符串，页面上糊出一大段无法阅读的调试信息，同时把 cookie / 审计 ID 暴露到前端。修复：新增 `_friendly_error()`，`ApiException` 只取 `status` + `reason`（401/403 另给「凭证无效或已过期」「权限不足」的中文说明），其余异常复用项目已有的 `_describe_sync_error()` 分类；原始异常改为 `logger.warning` 落日志便于排查。覆盖 `cluster_nodes_api` / `node_detail` / `cluster_metrics_api` 三处
+- **仪表盘未选集群时页面大片空白**：原空状态只有一个图标加两行文案居中，视口下方剩一整屏空白，且用户还得先去集群列表页才能切换。改为直接把当前用户可见的集群铺成卡片墙（状态脉冲点 / K8s 版本 / 节点数，点击即进仪表盘），末尾附一张虚线「导入新集群」卡；无任何集群时才回退为引导导入的提示块
+
+### 优化改进
+- **新增视觉增强层 `static/css/armada-fx.css`**：以持续动效为主（环境光晕漂移、网格底纹、进度条流光、状态点脉冲环、侧栏激活光条、logo 与标题色相流动），交互反馈为辅（卡片鼠标跟随高光 + 悬停浮起、表格行左侧指示条、按钮光泽扫过），顶栏与侧边栏改玻璃拟态。全部颜色走 DaisyUI v5 的 `--color-*` token 与 `color-mix()`，明暗主题都成立、无硬编码色值；亮色主题下额外调低光晕与网格强度（白底对色偏更敏感）。所有持续动画在 `prefers-reduced-motion: reduce` 下统一关闭、渐变文字回退纯色
+- 该文件是**手写 CSS、不参与 Tailwind 编译**，视觉调整无需 `npm run build:css` 重建产物，也不触碰任何 Alpine 状态或 fetch 逻辑；HTML 侧只做加 class 的最小改动
+- 登录页同步升级（独立模板不继承 base.html，且自带不透明 body 会盖住全局光晕，故内联一份等效动效）：光晕漂移、网格缓慢平移、品牌图标流光悬浮、标题渐变、特性项依次浮现、按钮光泽扫过，同样带 reduced-motion 降级
+- **踩坑记录（CSS 层叠优先级）**：Tailwind v4 的工具类位于 `@layer utilities` 内，而无 `@layer` 的普通样式优先级**高于**任何 `@layer`。最初在 fx 文件里写 `nav, aside, main { position: relative }` 想把内容抬到光晕之上，结果直接压掉了 Tailwind 的 `.fixed`，顶栏与侧边栏丢失固定定位、主内容区塌出整屏空白。正确做法是让背景伪元素用负 `z-index` 自然沉底（并把 `bg-base-200` 从 `body` 移到 `html`、`body` 置透明，否则不透明底色会盖住负层伪元素），完全不碰内容层定位。文件内已留注释警告
+- 验证方式：Playwright 实登录后巡检 12 个页面（集群列表/节点/Deployment/Pod/StatefulSet/Service/Namespace/ConfigMap/用户/权限/个人设置/集群详情），逐页断言 `nav` 与 `aside` 的 computed position 仍为 `fixed` 作为布局回归探针，明暗两主题各截图核对，控制台零报错
+
+---
+
 ## 2026-07-17
 
 ### Bug 修复

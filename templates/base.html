@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
   <link rel="stylesheet" href="{% static_v 'css/output.css' %}">
   <link rel="stylesheet" href="{% static 'css/all.min.css' %}">
+  <link rel="stylesheet" href="{% static_v 'css/armada-fx.css' %}">
   <style>
     /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -106,14 +107,14 @@
 <body class="min-h-screen bg-base-200 text-base-content" x-data="{ sidebarOpen: localStorage.getItem('sidebarOpen') !== 'false' }" x-init="$watch('sidebarOpen', val => localStorage.setItem('sidebarOpen', val))">
 
   <!-- Top Navbar -->
-  <nav class="fixed top-0 left-0 right-0 z-50 h-14 bg-base-100 border-b border-base-300 flex items-center justify-between px-4">
+  <nav id="topNav" class="fx-glass fixed top-0 left-0 right-0 z-50 h-14 border-b border-base-300 flex items-center justify-between px-4 transition-shadow duration-300">
     <!-- Left: Toggle + Logo -->
     <div class="flex items-center gap-3">
       <button @click="sidebarOpen = !sidebarOpen" class="btn btn-ghost btn-sm btn-square">
         <i class="fas fa-bars text-sm opacity-60"></i>
       </button>
       <a href="{% url 'dashboard:index' %}" class="flex items-center gap-2 no-underline">
-        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+        <div class="fx-logo w-7 h-7 rounded-lg flex items-center justify-center">
           <i class="fas fa-dharmachakra text-white text-xs"></i>
         </div>
         <span class="font-semibold text-base tracking-tight text-base-content">Armada</span>
@@ -191,7 +192,7 @@
 
   <!-- Sidebar -->
   <aside
-    class="sidebar fixed top-14 left-0 bottom-0 z-40 bg-base-100 border-r border-base-300 overflow-y-auto flex flex-col"
+    class="sidebar fx-glass fixed top-14 left-0 bottom-0 z-40 border-r border-base-300 overflow-y-auto flex flex-col"
     :class="sidebarOpen ? '' : 'sidebar-collapsed'"
   >
     <nav class="flex-1 py-2 px-2">
@@ -298,7 +299,7 @@
     <div class="px-6 py-4 border-b border-base-300 bg-base-100">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-xl font-semibold text-base-content">{% block page_title %}Dashboard{% endblock %}</h1>
+          <h1 class="fx-title text-xl font-semibold">{% block page_title %}Dashboard{% endblock %}</h1>
           <div class="text-sm breadcrumbs opacity-50 py-0 text-xs">
             <ul>
               <li><a href="{% url 'dashboard:index' %}" class="hover:text-primary transition-colors">首页</a></li>
@@ -352,6 +353,34 @@
         });
       }
     });
+  </script>
+  <script>
+    // 视觉增强层的交互驱动。全部是纯装饰，用 try/catch 之外的写法保持无副作用：
+    // 只写 CSS 自定义属性和 class，不碰任何业务状态。
+    (function() {
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      // 卡片鼠标跟随高光：把光标位置写进 --fx-mx / --fx-my
+      if (!reduced) {
+        document.addEventListener('mousemove', function(e) {
+          const card = e.target.closest && e.target.closest('.fx-card');
+          if (!card) return;
+          const r = card.getBoundingClientRect();
+          card.style.setProperty('--fx-mx', ((e.clientX - r.left) / r.width * 100) + '%');
+          card.style.setProperty('--fx-my', ((e.clientY - r.top) / r.height * 100) + '%');
+        }, { passive: true });
+      }
+
+      // 顶栏滚动时加深阴影
+      const nav = document.getElementById('topNav');
+      if (nav) {
+        const onScroll = function() {
+          nav.classList.toggle('fx-nav-scrolled', window.scrollY > 8);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+      }
+    })();
   </script>
   {% include 'components/toast.html' %}
   {% block extra_js %}{% endblock %}

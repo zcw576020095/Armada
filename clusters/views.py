@@ -17,6 +17,26 @@ from .prometheus import PrometheusClient
 logger = logging.getLogger(__name__)
 
 
+def _friendly_error(exc) -> str:
+    """把异常翻译成能直接展示给用户的一句话。
+
+    K8s SDK 的 ApiException.__str__ 会把完整响应头（含 Set-Cookie、Audit-Id）和 body
+    一起拼进来，直接送到前端既难读也泄漏信息，因此只取 status + reason。
+    """
+    from kubernetes.client.rest import ApiException
+
+    if isinstance(exc, ApiException):
+        reason = exc.reason or '请求被拒绝'
+        if exc.status == 401:
+            return 'kubeconfig 凭证无效或已过期（401 Unauthorized）'
+        if exc.status == 403:
+            return f'当前 kubeconfig 权限不足（403 {reason}）'
+        return f'K8s API 错误（{exc.status}）：{reason}'
+
+    from resources.sync_service import _describe_sync_error
+    return _describe_sync_error(exc)
+
+
 def _parse_memory_bytes(mem_str: str) -> int:
     """Convert K8s memory string (Ki/Mi/Gi/bytes) to bytes."""
     if not mem_str:
@@ -217,7 +237,8 @@ def cluster_nodes_api(request, pk):
                 'gpu': gpu_display,
             })
     except Exception as e:
-        error = str(e)
+        logger.warning(f'[cluster {cluster.pk}] list nodes failed: {e}')
+        error = _friendly_error(e)
 
     # Stats
     ready_count = sum(1 for n in nodes if n['status'] == 'Ready')
@@ -393,7 +414,8 @@ def node_info_api(request, pk, node_name):
                 'age': p.metadata.creation_timestamp.isoformat() if p.metadata.creation_timestamp else '',
             })
     except Exception as e:
-        error = str(e)
+        logger.warning(f'[cluster {cluster.pk}] node detail failed: {e}')
+        error = _friendly_error(e)
 
     return JsonResponse({'node': node_info, 'pods': pods, 'error': error})
 
@@ -626,9 +648,13 @@ def _fetch_metrics_data(cluster):
                 pass
 
         with ThreadPoolExecutor(max_workers=3) as executor:
-            executor.submit(fetch_nodes)
+            nodes_future = executor.submit(fetch_nodes)
             executor.submit(fetch_metrics)
             executor.submit(fetch_pod_requests)
+            # 节点容量是硬依赖，拉不到就整体失败并让调用方把错误抛给前端。
+            # 用量类的两个任务失败可以静默降级，但这里若吞掉异常，前端会显示"0 节点"
+            # 而不是报错；抛出还能避免 cached_metrics 把空结果缓存 60 秒。
+            nodes_future.result()
 
         # Combine data
         nodes_data = []
@@ -703,11 +729,12 @@ def cluster_metrics_api(request, pk):
         result['error'] = None
         return JsonResponse(result)
     except Exception as e:
+        logger.warning(f'[cluster {cluster.pk}] fetch metrics failed: {e}')
         return JsonResponse({
             'nodes': [],
             'summary': {'cpu_capacity': 0, 'cpu_used': 0, 'cpu_percent': 0,
                          'mem_capacity_gb': 0, 'mem_used_gb': 0, 'mem_percent': 0},
-            'error': str(e),
+            'error': _friendly_error(e),
             'has_metrics': False,
             'data_source': None,
         })

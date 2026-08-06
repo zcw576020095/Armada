@@ -1510,6 +1510,40 @@ class K8sResourceManager:
             'pods': pods,
         }
 
+    def _daemonset_current_revision_hash(self, ds, name, namespace):
+        """从 DaemonSet 实际运行的 Pod 上取 controller-revision-hash。
+
+        滚动更新期间新旧 hash 共存，取出现次数最多的那个。
+        """
+        match_labels = {}
+        if ds.spec and ds.spec.selector and ds.spec.selector.match_labels:
+            match_labels = dict(ds.spec.selector.match_labels)
+
+        try:
+            if match_labels:
+                label_selector = ','.join(f'{k}={v}' for k, v in match_labels.items())
+                res = self.core_v1.list_namespaced_pod(
+                    namespace, label_selector=label_selector, _request_timeout=15
+                )
+            else:
+                res = self.core_v1.list_namespaced_pod(namespace, _request_timeout=15)
+        except ApiException as e:
+            logger.warning(f'list daemonset pods for revision hash failed: {e.reason}')
+            return ''
+
+        counts = {}
+        for pod in res.items:
+            owners = pod.metadata.owner_references or []
+            if not any(o.kind == 'DaemonSet' and o.name == name for o in owners):
+                continue
+            pod_hash = (pod.metadata.labels or {}).get(self.CONTROLLER_REVISION_HASH_LABEL)
+            if pod_hash:
+                counts[pod_hash] = counts.get(pod_hash, 0) + 1
+
+        if not counts:
+            return ''
+        return max(counts, key=counts.get)
+
     def list_daemonset_revisions(self, name, namespace):
         """列出 DaemonSet 的 ControllerRevision 历史，按 revision 倒序，去重相同 pod template"""
         try:
@@ -1531,10 +1565,10 @@ class K8sResourceManager:
                     owned.append(cr)
                     break
 
-        current_hash = ''
-        if ds.status and hasattr(ds.status, 'current_number_scheduled'):
-            labels = ds.spec.template.metadata.labels if ds.spec and ds.spec.template and ds.spec.template.metadata else {}
-            current_hash = labels.get(self.CONTROLLER_REVISION_HASH_LABEL, '')
+        # DaemonSet 没有 StatefulSet 那样的 status.update_revision，只能从实际运行的
+        # Pod 上读 controller-revision-hash（该 label 由控制器注入 Pod，不在 spec.template 里）。
+        # 滚动更新期间新旧 hash 会共存，取占比最高的那个当作当前版本。
+        current_hash = self._daemonset_current_revision_hash(ds, name, namespace)
 
         # 按 template 去重：只保留每个唯一 template 的最新 revision
         # 需要剥掉的干扰字段：
@@ -1578,7 +1612,10 @@ class K8sResourceManager:
                 'images': containers,
                 'change_cause': (cr.metadata.annotations or {}).get(self.CHANGE_CAUSE_ANNOTATION, ''),
                 'created': self._ts_to_str(cr.metadata.creation_timestamp),
-                'is_current': cr.metadata.name == current_hash,
+                # Pod 上的 controller-revision-hash 是裸 hash（如 6fd988788d），而 CR 名字是
+                # "<daemonset>-<hash>"，不能直接相等比较。StatefulSet 的 status.update_revision
+                # 本身就是完整 CR 名，所以那边可以直接比，这里必须按 hash 后缀匹配。
+                'is_current': bool(current_hash) and cr.metadata.name.endswith(f'-{current_hash}'),
             })
 
         revisions.sort(key=lambda r: int(r['revision']), reverse=True)

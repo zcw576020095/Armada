@@ -35,20 +35,76 @@
 
 {% block content %}
 {% if not active_cluster %}
-<div class="flex flex-col items-center justify-center py-24 opacity-60">
-  <div class="w-16 h-16 rounded-xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 flex items-center justify-center mb-4">
-    <i class="fas fa-dharmachakra text-3xl text-indigo-400"></i>
+{% comment %}
+未选集群时不要只放一行文案（页面会剩一大片空白），直接把可选集群铺成卡片，点一下即进。
+再用 min-height + 居中把内容摊在视口中间，避免全挤在顶部、下方留白。
+{% endcomment %}
+<div class="fx-rise flex flex-col justify-center" style="min-height: calc(100vh - 12rem);">
+  <div class="flex flex-col items-center text-center mb-8">
+    <div class="fx-logo w-14 h-14 rounded-2xl flex items-center justify-center mb-4">
+      <i class="fas fa-dharmachakra text-2xl text-white"></i>
+    </div>
+    <h2 class="fx-title text-2xl font-bold mb-1.5">欢迎使用 Armada</h2>
+    <p class="text-sm opacity-50">选择一个集群开始，或导入新的 Kubeconfig</p>
   </div>
-  <p class="text-lg font-medium mb-1">欢迎使用 Armada</p>
-  <p class="text-sm mb-6 opacity-70">多集群 Kubernetes 资源管理平台</p>
-  <div class="flex gap-3">
-    <a href="{% url 'clusters:list' %}" class="btn btn-outline btn-sm gap-2">
-      <i class="fas fa-server text-xs"></i> 集群列表
+
+  {% if all_clusters %}
+  <div class="fx-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3 max-w-5xl mx-auto">
+    {% for c in all_clusters %}
+    <a href="{% url 'clusters:select' c.pk %}?next={% url 'dashboard:index' %}"
+       class="fx-card group block rounded-xl border border-base-300 bg-base-100 p-5 no-underline">
+      <div class="flex items-start justify-between mb-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-lg grid place-items-center flex-shrink-0
+                      {% if c.status == 'online' %}bg-success/15 text-success{% elif c.status == 'offline' %}bg-error/15 text-error{% else %}bg-warning/15 text-warning{% endif %}">
+            <i class="fas fa-server text-sm"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="font-semibold text-base-content truncate">{{ c.name }}</div>
+            <div class="text-xs opacity-45 mt-0.5">{{ c.k8s_version|default:"版本未知" }}</div>
+          </div>
+        </div>
+        <span class="flex items-center gap-1.5 text-xs flex-shrink-0
+                     {% if c.status == 'online' %}text-success{% elif c.status == 'offline' %}text-error{% else %}text-warning{% endif %}">
+          <span class="fx-pulse w-1.5 h-1.5 rounded-full bg-current"></span>
+          {% if c.status == 'online' %}在线{% elif c.status == 'offline' %}离线{% else %}未知{% endif %}
+        </span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 pt-4 border-t border-base-300">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40">节点</div>
+          <div class="text-lg font-semibold mt-0.5">{{ c.node_count|default:"-" }}</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40">进入</div>
+          <div class="text-sm font-medium mt-1 text-primary flex items-center gap-1.5">
+            仪表盘
+            <i class="fas fa-arrow-right text-[10px] transition-transform duration-200 group-hover:translate-x-1"></i>
+          </div>
+        </div>
+      </div>
     </a>
-    <a href="{% url 'clusters:add' %}" class="btn btn-primary btn-sm gap-2">
+    {% endfor %}
+
+    <a href="{% url 'clusters:add' %}"
+       class="fx-card group flex flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-base-300 bg-base-100/40 p-5 no-underline min-h-[168px]">
+      <div class="w-10 h-10 rounded-lg bg-primary/10 text-primary grid place-items-center transition-transform duration-200 group-hover:scale-110">
+        <i class="fas fa-plus text-sm"></i>
+      </div>
+      <div class="text-sm font-medium text-primary">导入新集群</div>
+      <div class="text-xs opacity-40">粘贴 Kubeconfig 即可接入</div>
+    </a>
+  </div>
+  {% else %}
+  <div class="max-w-md mx-auto text-center rounded-xl border border-dashed border-base-300 bg-base-100 p-10">
+    <i class="fas fa-cloud-upload-alt text-3xl opacity-25 mb-4"></i>
+    <p class="text-sm opacity-60 mb-5">还没有接入任何集群，导入 Kubeconfig 后即可开始管理。</p>
+    <a href="{% url 'clusters:add' %}" class="fx-btn btn btn-primary btn-sm gap-2">
       <i class="fas fa-plus text-xs"></i> 导入集群
     </a>
   </div>
+  {% endif %}
 </div>
 {% else %}
 <div x-data="dashboard()" x-init="load(); $watch('nodeSearch', () => currentPage = 1); $watch('nodeSort', () => currentPage = 1)">
@@ -96,18 +152,18 @@
     </div>
 
     <!-- Summary Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-      <div class="dash-card dash-card-amber">
+    <div class="fx-stagger grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+      <div class="fx-card dash-card dash-card-amber">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5" x-text="dataSource === 'pod_requests' ? 'CPU 已分配' : 'CPU 使用率'"></div>
-            <div class="text-2xl font-bold text-amber-400" x-text="summary.cpu_percent + '%'"></div>
+            <div class="fx-metric text-2xl font-bold text-amber-400" x-text="summary.cpu_percent + '%'"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-amber-500/15 grid place-items-center">
             <i class="fas fa-microchip text-amber-400 text-sm"></i>
           </div>
         </div>
-        <div class="mt-3 w-full bg-black/10 rounded-full h-1.5 overflow-hidden">
+        <div class="fx-bar mt-3 w-full bg-black/10 rounded-full h-1.5 overflow-hidden">
           <div class="bg-amber-400 h-full rounded-full transition-all duration-500" :style="`width: ${summary.cpu_percent}%`"></div>
         </div>
         <div class="flex justify-between mt-2 text-[10px] opacity-40">
@@ -116,17 +172,17 @@
         </div>
       </div>
 
-      <div class="dash-card dash-card-emerald">
+      <div class="fx-card dash-card dash-card-emerald">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5" x-text="dataSource === 'pod_requests' ? '内存已分配' : '内存使用率'"></div>
-            <div class="text-2xl font-bold text-emerald-400" x-text="summary.mem_percent + '%'"></div>
+            <div class="fx-metric text-2xl font-bold text-emerald-400" x-text="summary.mem_percent + '%'"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-emerald-500/15 grid place-items-center">
             <i class="fas fa-memory text-emerald-400 text-sm"></i>
           </div>
         </div>
-        <div class="mt-3 w-full bg-black/10 rounded-full h-1.5 overflow-hidden">
+        <div class="fx-bar mt-3 w-full bg-black/10 rounded-full h-1.5 overflow-hidden">
           <div class="bg-emerald-400 h-full rounded-full transition-all duration-500" :style="`width: ${summary.mem_percent}%`"></div>
         </div>
         <div class="flex justify-between mt-2 text-[10px] opacity-40">
@@ -135,11 +191,11 @@
         </div>
       </div>
 
-      <div class="dash-card dash-card-blue">
+      <div class="fx-card dash-card dash-card-blue">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">节点总数</div>
-            <div class="text-2xl font-bold text-blue-400" x-text="nodes.length"></div>
+            <div class="fx-metric text-2xl font-bold text-blue-400" x-text="nodes.length"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-blue-500/15 grid place-items-center">
             <i class="fas fa-server text-blue-400 text-sm"></i>
@@ -147,11 +203,11 @@
         </div>
       </div>
 
-      <div class="dash-card dash-card-violet">
+      <div class="fx-card dash-card dash-card-violet">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">GPU 节点</div>
-            <div class="text-2xl font-bold text-violet-400" x-text="nodes.filter(n => n.is_gpu).length"></div>
+            <div class="fx-metric text-2xl font-bold text-violet-400" x-text="nodes.filter(n => n.is_gpu).length"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-violet-500/15 grid place-items-center">
             <i class="fas fa-microchip text-violet-400 text-sm"></i>
@@ -163,24 +219,24 @@
     <!-- Charts Row -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
       <!-- CPU Top 10 -->
-      <div class="chart-card">
+      <div class="fx-card chart-card">
         <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">CPU 使用率 Top 10</h3>
         <div id="cpuTop10" style="width: 100%; height: 340px;"></div>
       </div>
       <!-- Memory Top 10 -->
-      <div class="chart-card">
+      <div class="fx-card chart-card">
         <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">内存使用率 Top 10</h3>
         <div id="memTop10" style="width: 100%; height: 340px;"></div>
       </div>
       <!-- Resource Distribution -->
-      <div class="chart-card">
+      <div class="fx-card chart-card">
         <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">资源分布</h3>
         <div id="resourcePie" style="width: 100%; height: 340px;"></div>
       </div>
     </div>
 
     <!-- Node Detail Table - Card Grid -->
-    <div class="chart-card">
+    <div class="fx-card chart-card">
       <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">节点资源明细</h3>
       <div class="flex items-center gap-2 mb-3">
         <input type="text" x-model="nodeSearch" placeholder="搜索节点..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary">
@@ -301,45 +357,45 @@
     </div>
 
     <!-- Capacity Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-      <div class="dash-card dash-card-blue">
+    <div class="fx-stagger grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+      <div class="fx-card dash-card dash-card-blue">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">节点总数</div>
-            <div class="text-2xl font-bold text-blue-400" x-text="nodes.length"></div>
+            <div class="fx-metric text-2xl font-bold text-blue-400" x-text="nodes.length"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-blue-500/15 grid place-items-center">
             <i class="fas fa-server text-blue-400 text-sm"></i>
           </div>
         </div>
       </div>
-      <div class="dash-card dash-card-amber">
+      <div class="fx-card dash-card dash-card-amber">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">CPU 总容量</div>
-            <div class="text-2xl font-bold text-amber-400" x-text="summary.cpu_capacity + ' 核'"></div>
+            <div class="fx-metric text-2xl font-bold text-amber-400" x-text="summary.cpu_capacity + ' 核'"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-amber-500/15 grid place-items-center">
             <i class="fas fa-microchip text-amber-400 text-sm"></i>
           </div>
         </div>
       </div>
-      <div class="dash-card dash-card-emerald">
+      <div class="fx-card dash-card dash-card-emerald">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">内存总容量</div>
-            <div class="text-2xl font-bold text-emerald-400" x-text="summary.mem_capacity_gb + ' GB'"></div>
+            <div class="fx-metric text-2xl font-bold text-emerald-400" x-text="summary.mem_capacity_gb + ' GB'"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-emerald-500/15 grid place-items-center">
             <i class="fas fa-memory text-emerald-400 text-sm"></i>
           </div>
         </div>
       </div>
-      <div class="dash-card dash-card-violet">
+      <div class="fx-card dash-card dash-card-violet">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">GPU 节点</div>
-            <div class="text-2xl font-bold text-violet-400" x-text="nodes.filter(n => n.is_gpu).length"></div>
+            <div class="fx-metric text-2xl font-bold text-violet-400" x-text="nodes.filter(n => n.is_gpu).length"></div>
           </div>
           <div class="w-9 h-9 rounded-lg bg-violet-500/15 grid place-items-center">
             <i class="fas fa-microchip text-violet-400 text-sm"></i>
@@ -349,13 +405,13 @@
     </div>
 
     <!-- Capacity Chart -->
-    <div class="chart-card mb-5">
+    <div class="fx-card chart-card mb-5">
       <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">各节点资源容量</h3>
       <div id="capacityBar" style="width: 100%; height: 320px;"></div>
     </div>
 
     <!-- Node Detail Cards (same layout as metrics view, but showing capacity only) -->
-    <div class="chart-card">
+    <div class="fx-card chart-card">
       <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">节点资源明细</h3>
       <div class="flex items-center gap-2 mb-3">
         <input type="text" x-model="nodeSearch" placeholder="搜索节点..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary">
