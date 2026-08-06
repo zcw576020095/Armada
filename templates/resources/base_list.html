@@ -4,7 +4,7 @@
 {% block extra_head %}{% endblock %}
 
 {% block content %}
-<div class="card bg-base-100 border border-base-300" x-data="resourceList()" x-init="init()"
+<div class="fx-card card bg-base-100 border border-base-300" x-data="resourceList()" x-init="init()"
   @resource-updated.window="
     const d = $event.detail;
     if (d && d.action === 'delete') {

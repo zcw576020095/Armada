@@ -104,7 +104,15 @@
   </style>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="min-h-screen bg-base-200 text-base-content" x-data="{ sidebarOpen: localStorage.getItem('sidebarOpen') !== 'false' }" x-init="$watch('sidebarOpen', val => localStorage.setItem('sidebarOpen', val))">
+<body class="min-h-screen text-base-content" x-data="{ sidebarOpen: localStorage.getItem('sidebarOpen') !== 'false' }" x-init="$watch('sidebarOpen', val => localStorage.setItem('sidebarOpen', val))">
+
+  {% comment %}
+  背景动效层：光斑由 GSAP 驱动漂移，网格是静态底纹。
+  用负 z-index 沉到内容之下，因此 body 的底色移到了 html 上（见 armada-fx.css）。
+  {% endcomment %}
+  <div class="fx-bg" aria-hidden="true">
+    <div class="fx-grid-layer"></div>
+  </div>
 
   <!-- Top Navbar -->
   <nav id="topNav" class="fx-glass fixed top-0 left-0 right-0 z-50 h-14 border-b border-base-300 flex items-center justify-between px-4 transition-shadow duration-300">
@@ -354,34 +362,12 @@
       }
     });
   </script>
-  <script>
-    // 视觉增强层的交互驱动。全部是纯装饰，用 try/catch 之外的写法保持无副作用：
-    // 只写 CSS 自定义属性和 class，不碰任何业务状态。
-    (function() {
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-      // 卡片鼠标跟随高光：把光标位置写进 --fx-mx / --fx-my
-      if (!reduced) {
-        document.addEventListener('mousemove', function(e) {
-          const card = e.target.closest && e.target.closest('.fx-card');
-          if (!card) return;
-          const r = card.getBoundingClientRect();
-          card.style.setProperty('--fx-mx', ((e.clientX - r.left) / r.width * 100) + '%');
-          card.style.setProperty('--fx-my', ((e.clientY - r.top) / r.height * 100) + '%');
-        }, { passive: true });
-      }
-
-      // 顶栏滚动时加深阴影
-      const nav = document.getElementById('topNav');
-      if (nav) {
-        const onScroll = function() {
-          nav.classList.toggle('fx-nav-scrolled', window.scrollY > 8);
-        };
-        window.addEventListener('scroll', onScroll, { passive: true });
-        onScroll();
-      }
-    })();
-  </script>
+  {% comment %}
+  视觉层驱动：GSAP 负责光斑漂移与粒子，armada-fx.js 负责绑定交互效果。
+  两者都是纯装饰，只写 CSS 变量 / class / 装饰性 DOM，不碰业务状态。
+  {% endcomment %}
+  <script src="{% static 'js/gsap.min.js' %}"></script>
+  <script src="{% static_v 'js/armada-fx.js' %}"></script>
   {% include 'components/toast.html' %}
   {% block extra_js %}{% endblock %}
 </body>

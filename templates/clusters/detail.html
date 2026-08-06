@@ -175,7 +175,7 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
     <!-- 快速导航 -->
-    <div class="card bg-base-100 border border-base-300">
+    <div class="fx-card card bg-base-100 border border-base-300">
       <div class="card-body p-4">
         <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">快速导航</h3>
         <div class="grid grid-cols-4 gap-2.5">
@@ -252,7 +252,7 @@
     <!-- 右侧 -->
     <div class="space-y-5">
       {% if cluster.description %}
-      <div class="card bg-base-100 border border-base-300">
+      <div class="fx-card card bg-base-100 border border-base-300">
         <div class="card-body p-4">
           <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-2">集群描述</h3>
           <p class="text-sm opacity-60 leading-relaxed">{{ cluster.description }}</p>
@@ -260,7 +260,7 @@
       </div>
       {% endif %}
 
-      <div class="card bg-base-100 border border-base-300">
+      <div class="fx-card card bg-base-100 border border-base-300">
         <div class="card-body p-4">
           <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">监控配置</h3>
           <form method="post" action="{% url 'clusters:update_prometheus' cluster.pk %}">

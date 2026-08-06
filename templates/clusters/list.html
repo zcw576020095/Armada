@@ -5,16 +5,16 @@
 {% block breadcrumb %}<li>集群列表</li>{% endblock %}
 
 {% block page_actions %}
-<a href="{% url 'clusters:add' %}" class="btn btn-primary btn-sm gap-2 h-9">
+<a href="{% url 'clusters:add' %}" class="fx-btn fx-ripple btn btn-primary btn-sm gap-2 h-9">
   <i class="fas fa-plus text-xs"></i> 导入集群
 </a>
 {% endblock %}
 
 {% block content %}
 {% if clusters %}
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+<div class="fx-stagger grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
   {% for cluster in clusters %}
-  <div class="card bg-base-100 border border-base-300 hover:border-primary/30 transition-all group">
+  <div class="fx-card fx-card-glow fx-tilt card bg-base-100 border border-base-300 group">
     <div class="card-body p-5">
       <div class="flex items-start justify-between mb-4">
         <div class="flex items-center gap-3">

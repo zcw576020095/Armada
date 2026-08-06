@@ -13,7 +13,12 @@
 - **仪表盘未选集群时页面大片空白**：原空状态只有一个图标加两行文案居中，视口下方剩一整屏空白，且用户还得先去集群列表页才能切换。改为直接把当前用户可见的集群铺成卡片墙（状态脉冲点 / K8s 版本 / 节点数，点击即进仪表盘），末尾附一张虚线「导入新集群」卡；无任何集群时才回退为引导导入的提示块
 
 ### 优化改进
-- **新增视觉增强层 `static/css/armada-fx.css`**：以持续动效为主（环境光晕漂移、网格底纹、进度条流光、状态点脉冲环、侧栏激活光条、logo 与标题色相流动），交互反馈为辅（卡片鼠标跟随高光 + 悬停浮起、表格行左侧指示条、按钮光泽扫过），顶栏与侧边栏改玻璃拟态。全部颜色走 DaisyUI v5 的 `--color-*` token 与 `color-mix()`，明暗主题都成立、无硬编码色值；亮色主题下额外调低光晕与网格强度（白底对色偏更敏感）。所有持续动画在 `prefers-reduced-motion: reduce` 下统一关闭、渐变文字回退纯色
+- **新增视觉层 `static/css/armada-fx.css` + `static/js/armada-fx.js`，设计语言移植自 best-resume**（`web/src/style.css` / `web/src/lib/fx.js`）。搬过来的是它那套体系而非单个效果：分层 token（三色光晕 `--fx-a1/a2/a3`、发丝线 `--hair`、三档阴影 `card`/`lift`/`brand`）、两条缓动曲线（`--ease-spring` 回弹用于交互、`--ease-out-soft` 缓出用于展开）、"玻璃 + 发丝边 + 阴影托层次"的容器组合，以及"常驻动效为主、交互动效为辅"的取向。差异点：best-resume 是 Vue + `@theme` + `html.dark`，Armada 是 Django 模板 + DaisyUI v5，因此 token 桥接到 `--color-*` 上、主题跟随 `[data-theme]`
+- 常驻动效：三团背景光斑由 GSAP 驱动漂移（各自独立随机时长与目标点，避免 CSS keyframes 那种整组同频摆动的钟摆感）、网格底纹、进度条流光、状态点脉冲、侧栏激活光条、logo 与标题渐变流动
+- 交互动效：卡片鼠标跟随柔光、3D 倾斜（限 6° 内，再大就显廉价）、光沿边框游走（`conic-gradient` + `@property` 注册角度，否则只会跳变不补间）、点击水波纹与粒子火花、按钮光泽扫过、表格行左侧指示条
+- 本地 vendor 了 `gsap.min.js`（73KB，从 best-resume 的 node_modules 复制），不引 CDN
+- 明暗两主题均逐页截图核对；亮色下另调低光晕与网格强度（白底对色偏更敏感）。全部持续动画在 `prefers-reduced-motion: reduce` 下关闭，渐变文字回退纯色
+- 刻意没做的：统计数字的计数动效。那些数字由 Alpine 的 `x-text` 驱动，`countUp` 会和 Alpine 抢 `textContent`，属于自找 bug（`armada-fx.js` 里保留了 `countUp`，只对非 Alpine 托管的 `[data-fx-count]` 生效）
 - 该文件是**手写 CSS、不参与 Tailwind 编译**，视觉调整无需 `npm run build:css` 重建产物，也不触碰任何 Alpine 状态或 fetch 逻辑；HTML 侧只做加 class 的最小改动
 - 登录页同步升级（独立模板不继承 base.html，且自带不透明 body 会盖住全局光晕，故内联一份等效动效）：光晕漂移、网格缓慢平移、品牌图标流光悬浮、标题渐变、特性项依次浮现、按钮光泽扫过，同样带 reduced-motion 降级
 - **踩坑记录（CSS 层叠优先级）**：Tailwind v4 的工具类位于 `@layer utilities` 内，而无 `@layer` 的普通样式优先级**高于**任何 `@layer`。最初在 fx 文件里写 `nav, aside, main { position: relative }` 想把内容抬到光晕之上，结果直接压掉了 Tailwind 的 `.fixed`，顶栏与侧边栏丢失固定定位、主内容区塌出整屏空白。正确做法是让背景伪元素用负 `z-index` 自然沉底（并把 `bg-base-200` 从 `body` 移到 `html`、`body` 置透明，否则不透明底色会盖住负层伪元素），完全不碰内容层定位。文件内已留注释警告
