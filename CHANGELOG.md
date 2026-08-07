@@ -6,8 +6,18 @@
 
 ## 2026-08-07
 
+### 新增功能
+
+- **Pod 容器终端（exec）**：Pod 列表操作列新增「终端」按钮，浏览器内直连容器 shell，不用 kubectl。前端用本地 vendor 的 xterm.js 5.5.0 + fit 插件（不引 CDN，与 gsap/echarts 同一约定），进容器时依次尝试 `bash` → `sh`，多容器 Pod 默认取 `spec.containers[0]`
+  - **不走 WebSocket 直通**：项目跑在 WSGI 上（没装 channels/daphne），WebSocket 直通要把部署改成 ASGI 全栈。改为服务端持有那条到 K8s 的 exec WebSocket（`kubernetes.stream`，依赖的 websocket-client 已在），浏览器侧用 HTTP 短轮询收发字节 —— 零部署改造，代价是输入到回显有一个轮询周期延迟。单次轮询最多阻塞 0.6s 且一有输出立刻返回，往返完成后立即发起下一次而不用 `setInterval`（定时器会让请求叠在一起）
+  - **权限**：四个端点全部是 POST 且挂在 `/resources/<pk>/pods/` 前缀下，因此自动落到 `PermissionMiddleware` 的 pod 模块 + **edit** 权限校验（进了 shell 等价于对该 Pod 完全控制，只有查看权限不该放行）。会话 token 与创建者 `user_id` 绑定，换个用户拿到 token 也用不了。会话有 5 分钟空闲超时和 32 个总数上限，避免泄漏的会话吃掉 K8s 连接
+  - 终端弹窗**故意不放 `.modal-backdrop`**：随手点一下就关掉、把没保存的命令和会话一起丢了，代价太大，只能用右上角关闭按钮退出。非 Running 的 Pod 按钮置灰
+  - 本地不回显，由容器里的 shell 自己回显（否则每个字符出现两次）；`window.resize` 时 fit 并把新行列数发给容器
+
 ### Bug 修复
 
+- **exec 会打断其它线程的普通 K8s 请求**（做终端时发现，属既有连接池设计缺陷）：`kubernetes.stream.stream()` 的实现（`stream/stream.py:32-46`）会把 `api_client.request` 临时替换成 WebSocket 版本、调用结束再还原。而连接池里的 `ApiClient` 是**跨线程共享**的，在那个替换窗口内，后台同步线程发出的 list 请求会被送到 WebSocket 实现上，报 `Handshake status 200 OK`。实测并发下 60 次 list 有 **3 次**因此失败（第一次跑 exec 测试时就在输出里看到后台同步报了 `Failed to sync pod`）。修复：新增 `K8sClientPool.dedicated_core_v1()` 给 exec/attach 这类 WebSocket 调用返回**独立** client，握手完成后立即 `close()`（WebSocket 由 WSClient 自己持有，close 只回收 ApiClient 的线程池，不影响已建立的连接）。修复后同一并发场景 60 次 list 全部成功
+- **xterm.js 与 Monaco 的 AMD loader 撞车导致终端组件加载不出来**（自查发现）：`resource_modals.html` 引了 Monaco 的 AMD loader，它定义了全局 `define`/`define.amd`。xterm 是 UMD 包，一旦检测到 `define.amd` 就走匿名 `define()` 注册，与 Monaco 的 loader 冲突，抛 `Can only have one anonymous define call per script file`，`window.Terminal` 永远挂不上（首次浏览器实测直接报「终端组件未加载」）。修复：加载 xterm 前把 `window.define` 暂存并置空，让 UMD 落到浏览器全局分支，加载完立刻还原给 Monaco 用
 - **删除弹框「点好几次才有反应」**（用户反馈）：现象是点删除后弹框闪一下就没了，看起来像没响应。根因不在按钮而在 DaisyUI 的 `.modal-backdrop` —— 它是 `<form method="dialog"><button>` 结构，`showModal()` 一执行就铺满整个视口。用户手快的第二次点击（或误双击）落在遮罩上，直接触发 `method="dialog"` 提交把刚打开的弹框关掉了；用户以为没打开，再点一次，于是「点好几次」。修复新增 `static/js/modal-guard.js`：包一层 `HTMLDialogElement.prototype.showModal` 记录打开时刻，用捕获阶段拦 `.modal-backdrop` 上的 click 与 submit，打开后 450ms 内的遮罩操作一律吞掉。全局生效，覆盖 7 个模板里的 21 个 dialog，不用逐个改。关键是不能把正常功能堵死：守卫窗口过后点遮罩必须照常能关，实测 60/150/300/430ms 连点与真实 `dblclick` 全部保持打开，等 600ms/1000ms 点遮罩正常关闭，Esc 与取消按钮不受影响
 
 - **Pod 列表单响应体 168MB 导致同步失败**（用户反馈）：报错 `IncompleteRead(168443513 bytes read)`，界面提示「集群连接异常，列表数据可能不是最新的」。原因是 `list_pod_for_all_namespaces()` 一次性拉全量，某生产集群 Pod 数量下响应体达 168MB，传输中途连接被中断 —— 这不是超时也不是凭据问题，加大 timeout 没有意义。改为走 K8s 原生的 chunked list：`_list_paginated()` 每页 500 条、靠 `continue` token 往下翻（`V1ListMeta._continue`，已确认 SDK 的 `all_params` 接受 `limit`/`_continue`）。token 过期返 410 时重头翻一次，仍失败才抛。另设 50000 条上限并回传 `truncated` 标记，避免异常规模的集群把内存吃穿。实测 16670 个 Pod 全量同步成功、零报错
@@ -26,6 +36,14 @@
 - 探针脚本里的 class 串不写死，与模板保持一致，否则改了模板仍在量旧值
 - 全量巡检 9 个页面：`nav`/`aside` 的 computed position 全部为 `fixed`（布局回归探针）、无「已布局但不可见」元素、控制台与 pageerror 零报错
 - 集群 pk 改为从集群列表动态发现。此前脚本写死 `CLUSTER=7`，而该集群已不存在（返回 404），导致多次探测拿到空数据、断言在空集合上假通过；现在「数量为 0」一律记 FAIL 而不是跳过
+
+### 终端功能的验证
+
+- 浏览器实登录后点开终端，在真实容器里执行 `echo ARMADA_EXEC_OK_$((6*7))`，断言终端里出现算好的 `ARMADA_EXEC_OK_42` —— 只有 shell 真的执行了才会有这个结果，命令被回显不算通过
+- resize 精确比对：容器内 `tput cols` = 143，与 xterm 的 `cols` = 143 一致，证明 resize channel 真的送到了容器
+- 会话回收从服务端行为判定，不看前端状态：关闭弹窗后用已作废的 token 再打 `exec/io` 端点，返回 404「终端会话不存在或已过期」
+- 权限双向验证：只读用户点终端弹出无权限提示，**并且**直接 fetch `exec/open` 接口也返回 403「无权编辑「Pod」模块」—— 前端拦得住不代表接口拦得住，必须分别验
+- 非 Running 的 Pod 按钮置灰：从全量缓存的 12688 个非 Running Pod 里取样，用搜索框过滤到页面上确认 `disabled=true`。第一轮这条是在**空集合**上通过的（当前页恰好全是 Running，检查了 0 行），补验后才算数
 
 ---
 

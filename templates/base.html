@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="{% static 'css/all.min.css' %}">
   <link rel="stylesheet" href="{% static_v 'css/armada-fx.css' %}">
   <link rel="stylesheet" href="{% static_v 'css/vue-bits.css' %}">
+  <link rel="stylesheet" href="{% static 'css/xterm.css' %}">
   <style>
     /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -376,6 +377,20 @@
   <script src="{% static 'js/gsap.min.js' %}"></script>
   <script src="{% static_v 'js/armada-fx.js' %}"></script>
   <script src="{% static_v 'js/vue-bits.js' %}"></script>
+  {% comment %}
+  容器终端用的 xterm.js（本地 vendor，不引 CDN，与 gsap/echarts 同一约定）。
+
+  必须先把 define 藏起来再加载：resource_modals.html 里引了 Monaco 的 AMD
+  loader，它定义了全局 define/define.amd。xterm 是 UMD 包，一旦检测到 define.amd
+  就走匿名 define() 注册，与 Monaco 的 loader 撞车，抛
+  "Can only have one anonymous define call per script file"，
+  window.Terminal 永远挂不上（实测过）。藏掉 define 后 UMD 落到浏览器全局分支，
+  正常挂出 window.Terminal 与 window.FitAddon，加载完立刻还原给 Monaco 用。
+  {% endcomment %}
+  <script>window.__armadaDefine = window.define; window.define = undefined;</script>
+  <script src="{% static 'js/xterm.js' %}"></script>
+  <script src="{% static 'js/xterm-addon-fit.js' %}"></script>
+  <script>window.define = window.__armadaDefine; delete window.__armadaDefine;</script>
   {% include 'components/toast.html' %}
   {% block extra_js %}{% endblock %}
 </body>

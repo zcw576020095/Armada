@@ -1062,6 +1062,61 @@
   <form method="dialog" class="modal-backdrop" @click="stopLive()"><button>close</button></form>
 </dialog>
 
+{% comment %}
+Pod 终端（exec）。故意不放 .modal-backdrop：终端里随手点一下就关掉、
+把没保存的命令和会话一起丢了，代价太大。只能靠右上角关闭按钮退出。
+{% endcomment %}
+<dialog id="execModal" class="modal" x-data="podExecTerminal()"
+        @open-pod-exec.window="open($event.detail)"
+        @close="teardown()">
+  <div class="modal-box bg-base-100 border border-base-300 shadow-2xl flex flex-col p-0"
+       style="max-width: 1100px; height: 72vh; border-radius: 20px;">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-base-300 flex-shrink-0 bg-base-200/50">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl grid place-items-center shadow-lg bg-success/20">
+          <i class="fas fa-terminal text-sm text-success"></i>
+        </div>
+        <div>
+          <span class="font-semibold text-base text-base-content">容器终端</span>
+          <div class="text-xs mt-0.5 opacity-60">
+            <span x-text="namespace + ' / ' + podName"></span>
+            <span x-show="container" class="ml-1.5 px-1.5 py-0.5 rounded bg-success/15 text-success"
+                  x-text="container"></span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg"
+              :class="connected ? 'bg-success/15 text-success' : 'bg-base-content/10 opacity-60'">
+          <span class="w-1.5 h-1.5 rounded-full" :class="connected ? 'bg-success animate-pulse' : 'bg-base-content/40'"></span>
+          <span x-text="connected ? '已连接' : '已断开'"></span>
+        </span>
+        <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0" title="关闭终端"
+                @click="$el.closest('dialog').close()">
+          <i class="fas fa-times text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 min-h-0 relative bg-[#0b0f14]">
+      <div x-show="starting" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b0f14]">
+        <span class="loading loading-spinner loading-md text-success"></span>
+        <span class="text-xs opacity-50 text-neutral-content">正在进入容器...</span>
+      </div>
+      <div x-show="error" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-8 text-center bg-[#0b0f14]">
+        <i class="fas fa-triangle-exclamation text-2xl text-error"></i>
+        <span class="text-xs text-error break-all" x-text="error"></span>
+      </div>
+      <div x-ref="term" class="absolute inset-0 px-3 py-2"></div>
+    </div>
+
+    <div class="flex items-center justify-between px-5 py-2.5 border-t border-base-300 text-[11px] flex-shrink-0 bg-base-200/30 opacity-60">
+      <span x-text="namespace + ' / ' + podName"></span>
+      <span>输入 exit 或点右上角关闭退出</span>
+    </div>
+  </div>
+</dialog>
+
 <!-- CSRF Token -->
 {% csrf_token %}
 
@@ -1607,6 +1662,162 @@ function podLogViewer() {
       this.liveMode = false;
       if (this.liveTimer) { clearInterval(this.liveTimer); this.liveTimer = null; }
     }
+  };
+}
+
+// Pod 容器终端（exec）。由 open-pod-exec 事件触发，detail 带 execBase（不含动作段）。
+//
+// 收发走 HTTP 短轮询而不是 WebSocket：项目跑在 WSGI 上，没装 channels/daphne，
+// WebSocket 直通要把部署改成 ASGI 全栈。服务端已经持有到 K8s 的那条 WebSocket，
+// 这里只负责把按键送上去、把输出取回来。
+function podExecTerminal() {
+  return {
+    podName: '', namespace: '', container: '', execBase: '',
+    session: '', connected: false, starting: false, error: null,
+    _term: null, _fit: null, _pending: '', _timer: null, _onResize: null,
+
+    _csrf() {
+      return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    },
+    _post(action, body) {
+      const form = new URLSearchParams(body || {});
+      return fetch(this.execBase + action + '/', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': this._csrf(),
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: form.toString(),
+      }).then(r => r.json().then(d => ({ok: r.ok, data: d})));
+    },
+
+    open(detail) {
+      this.podName = detail.podName;
+      this.namespace = detail.namespace;
+      this.execBase = detail.execBase;
+      this.container = detail.container || '';
+      this.session = '';
+      this.error = null;
+      this.connected = false;
+      this.starting = true;
+      document.getElementById('execModal').showModal();
+
+      // xterm 需要容器已经有实际尺寸才能算出行列数，所以等 dialog 布局完成
+      this.$nextTick(() => this._boot());
+    },
+
+    _boot() {
+      if (!window.Terminal) {
+        this.starting = false;
+        this.error = '终端组件未加载（static/js/xterm.js）';
+        return;
+      }
+      const term = new window.Terminal({
+        cursorBlink: true,
+        fontSize: 12.5,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        scrollback: 5000,
+        theme: {background: '#0b0f14', foreground: '#d6deeb', cursor: '#7fdbca'},
+      });
+      this._term = term;
+      term.open(this.$refs.term);
+
+      if (window.FitAddon) {
+        this._fit = new window.FitAddon.FitAddon();
+        term.loadAddon(this._fit);
+        this._fit.fit();
+      }
+
+      // 本地不回显：让容器里的 shell 自己回显，否则每个字符会出现两次
+      term.onData(d => { this._pending += d; });
+
+      this._onResize = () => {
+        if (!this._fit || !this._term) return;
+        this._fit.fit();
+        this._sendResize();
+      };
+      window.addEventListener('resize', this._onResize);
+
+      this._post('open', {container: this.container}).then(({ok, data}) => {
+        this.starting = false;
+        if (!ok || !data.success) {
+          this.error = data.error || '无法建立终端会话';
+          return;
+        }
+        this.session = data.session;
+        this.container = data.container || this.container;
+        this.connected = true;
+        this._sendResize();
+        this._loop();
+        this._term.focus();
+      }).catch(e => {
+        this.starting = false;
+        this.error = e.message;
+      });
+    },
+
+    _sendResize() {
+      if (!this.session || !this._term) return;
+      this._post('resize', {
+        session: this.session,
+        cols: this._term.cols,
+        rows: this._term.rows,
+      }).catch(() => {});
+    },
+
+    // 单次往返完成后立刻发起下一次，不用 setInterval：
+    // 后端每次轮询最多阻塞 0.6s，定时器会让请求叠在一起。
+    _loop() {
+      if (!this.session) return;
+      const input = this._pending;
+      this._pending = '';
+      this._post('io', {session: this.session, input: input})
+        .then(({ok, data}) => {
+          if (!this.session) return;
+          if (!ok) {
+            // 输入已经取走但没送达，退回队首避免丢按键
+            this._pending = input + this._pending;
+            if (data && data.closed) return this._finish(data.error);
+            this.error = (data && data.error) || '终端连接中断';
+            return this._finish();
+          }
+          if (data.output) this._term.write(data.output);
+          if (data.closed) return this._finish(data.error);
+          this._timer = setTimeout(() => this._loop(), 0);
+        })
+        .catch(e => {
+          this._pending = input + this._pending;
+          this.error = e.message;
+          this._finish();
+        });
+    },
+
+    _finish(msg) {
+      this.connected = false;
+      this.session = '';
+      if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+      if (this._term) {
+        this._term.write('\r\n\x1b[33m' + (msg ? msg + ' ' : '') + '[会话已结束]\x1b[0m\r\n');
+      }
+    },
+
+    teardown() {
+      if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+      if (this.session) {
+        this._post('close', {session: this.session}).catch(() => {});
+        this.session = '';
+      }
+      if (this._onResize) {
+        window.removeEventListener('resize', this._onResize);
+        this._onResize = null;
+      }
+      if (this._term) { this._term.dispose(); this._term = null; }
+      this._fit = null;
+      this._pending = '';
+      this.connected = false;
+      this.starting = false;
+    },
   };
 }
 

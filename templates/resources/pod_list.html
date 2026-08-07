@@ -62,6 +62,12 @@
         <i class="fas fa-file-code"></i>
       </button>
       <button type="button" class="row-action" title="日志" @click="$dispatch('open-pod-logs', {namespace: r.namespace, podName: r.name, logsUrl: '/resources/{{ cluster.pk }}/pods/' + r.namespace + '/' + r.name + '/logs/'})">
+        <i class="fas fa-file-lines"></i>
+      </button>
+      {# 终端要 edit 权限：进了 shell 等价于对该 Pod 完全控制。只有 Running 的 Pod 能进。 #}
+      <button type="button" class="row-action" title="终端" :disabled="r.status_phase != 'Running'"
+              :class="r.status_phase != 'Running' ? 'opacity-30 cursor-not-allowed' : ''"
+              @click="{% if can_edit %}r.status_phase == 'Running' && $dispatch('open-pod-exec', {namespace: r.namespace, podName: r.name, execBase: '/resources/{{ cluster.pk }}/pods/' + r.namespace + '/' + r.name + '/exec/'}){% else %}noPermModal.showModal(){% endif %}">
         <i class="fas fa-terminal"></i>
       </button>
       <span class="row-action-sep"></span>

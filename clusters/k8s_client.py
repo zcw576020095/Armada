@@ -64,6 +64,23 @@ class K8sClientPool:
                 except OSError:
                     pass
 
+    def dedicated_core_v1(self, cluster):
+        """给 exec/attach 这类 WebSocket 调用用的**独立** CoreV1Api，不走缓存。
+
+        必须独立，否则会打断其它线程的普通请求：`kubernetes.stream.stream()`
+        的实现（stream/stream.py）会把 `api_client.request` 临时替换成
+        WebSocket 版本，调用结束再还原。池里的 ApiClient 是跨线程共享的，
+        在那个替换窗口内，后台同步线程发出的 list 请求会被送到 WebSocket
+        实现上，报 `Handshake status 200 OK`。实测并发下 60 次 list 有 3 次
+        因此失败。
+
+        调用方拿到后应在握手完成（拿到 WSClient）后 close() 掉这个 client：
+        WebSocket 由 WSClient 自己持有，close() 只回收 ApiClient 的线程池，
+        不影响已建立的连接。
+        """
+        api_client = self._load_client(cluster.get_kubeconfig())
+        return client.CoreV1Api(api_client), api_client
+
     def core_v1(self, cluster):
         return client.CoreV1Api(self.get_client(cluster))
 

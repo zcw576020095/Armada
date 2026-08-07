@@ -36,6 +36,12 @@ urlpatterns = [
     # Pods
     path('<int:pk>/pods/', views.pod_list, name='pods'),
     path('<int:pk>/pods/<str:namespace>/<str:pod_name>/logs/', views.pod_logs, name='pod_logs'),
+    # 终端（exec）。挂在 /pods/ 前缀下，才会被 PermissionMiddleware 归入 pod 模块；
+    # 四个端点都是 POST，因此普通用户须有 pod 的 edit 权限才能进终端。
+    path('<int:pk>/pods/<str:namespace>/<str:pod_name>/exec/open/', views.pod_exec_open, name='pod_exec_open'),
+    path('<int:pk>/pods/<str:namespace>/<str:pod_name>/exec/io/', views.pod_exec_io, name='pod_exec_io'),
+    path('<int:pk>/pods/<str:namespace>/<str:pod_name>/exec/resize/', views.pod_exec_resize, name='pod_exec_resize'),
+    path('<int:pk>/pods/<str:namespace>/<str:pod_name>/exec/close/', views.pod_exec_close, name='pod_exec_close'),
 
     # Services
     path('<int:pk>/services/', views.service_list, name='services'),

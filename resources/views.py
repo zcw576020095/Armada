@@ -9,6 +9,7 @@ from django.views.decorators.http import require_POST
 from clusters.models import Cluster
 from clusters.k8s_client import k8s_pool
 from clusters.pod_logs import fetch_pod_logs
+from resources import pod_exec
 from resources.models import K8sResourceCache
 from resources.sync_service import trigger_immediate_sync, get_sync_error
 
@@ -525,6 +526,33 @@ def pod_list_api(request, pk):
 def pod_logs(request, pk, namespace, pod_name):
     cluster = get_object_or_404(Cluster, pk=pk)
     return fetch_pod_logs(cluster, namespace, pod_name, request.GET)
+
+
+# 终端端点全部用 POST：一是要携带按键数据，二是让 PermissionMiddleware 按写操作
+# 校验（拿到 shell 等价于对该 Pod 完全控制，只有 edit 权限才该放行）。
+
+@require_POST
+def pod_exec_open(request, pk, namespace, pod_name):
+    cluster = get_object_or_404(Cluster, pk=pk)
+    return pod_exec.open_session(request, cluster, namespace, pod_name)
+
+
+@require_POST
+def pod_exec_io(request, pk, namespace, pod_name):
+    cluster = get_object_or_404(Cluster, pk=pk)
+    return pod_exec.io_session(request, cluster, namespace, pod_name)
+
+
+@require_POST
+def pod_exec_resize(request, pk, namespace, pod_name):
+    cluster = get_object_or_404(Cluster, pk=pk)
+    return pod_exec.resize_session(request, cluster, namespace, pod_name)
+
+
+@require_POST
+def pod_exec_close(request, pk, namespace, pod_name):
+    cluster = get_object_or_404(Cluster, pk=pk)
+    return pod_exec.close_session(request, cluster, namespace, pod_name)
 
 
 # ─── Services ────────────────────────────────────────────────
