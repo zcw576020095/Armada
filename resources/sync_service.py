@@ -106,9 +106,81 @@ def _list_func_for(cluster, resource_type):
 
     def _call():
         api = getattr(k8s_pool, api_attr)(cluster)
-        return getattr(api, method_name)(_request_timeout=timeout)
+        return _list_paginated(getattr(api, method_name), timeout)
 
     return _call
+
+
+# 单页条数。K8s 的 chunked list（limit + continue）上限是服务端说了算，
+# 500 是 kubectl 自己的默认值，兼容性最稳。
+_LIST_PAGE_SIZE = 500
+
+# 单个资源类型的总条数上限，纯粹是保险丝：避免异常集群把内存吃穿。
+# 5 万个 Pod 已远超本平台的展示能力（前端有分页且只显示前若干页）。
+_LIST_MAX_ITEMS = 50000
+
+
+class _PagedResult:
+    """把分页结果拼成跟 SDK 原生返回值一样的形状。
+
+    调用方只用到 `.items`，所以这里只需提供它；额外带上 truncated 供日志判断。
+    """
+
+    __slots__ = ('items', 'truncated')
+
+    def __init__(self, items, truncated=False):
+        self.items = items
+        self.truncated = truncated
+
+
+def _list_paginated(list_method, timeout):
+    """分页拉取 list 结果。
+
+    为什么必须分页：原来是一次性全量拉取，某生产集群的 Pod 列表单个响应体
+    达到 168MB，传输过程中连接被中断，urllib3 抛
+      ProtocolError('Connection broken: IncompleteRead(168443513 bytes read)')
+    前端就显示「集群连接异常，列表数据可能不是最新的」。响应越大、耗时越长，
+    被网络抖动/中间层截断的概率就越高，重试也只是重新赌一次。
+
+    改用 K8s 的 chunked list：每页 500 条，靠 continue token 往下翻。
+    单个响应从百 MB 级降到几 MB，任一页失败也只影响那一页的重试成本。
+
+    注意 410 Gone：翻页期间 etcd 的历史版本被压缩掉，continue token 会失效。
+    这种情况没法接着翻，只能从头再来（此时数据已经是新的一致快照）。
+    """
+    from kubernetes.client.rest import ApiException
+
+    items = []
+    token = None
+    restarted = False
+
+    while True:
+        kwargs = {'limit': _LIST_PAGE_SIZE, '_request_timeout': timeout}
+        if token:
+            kwargs['_continue'] = token
+
+        try:
+            page = list_method(**kwargs)
+        except ApiException as e:
+            # 410 Gone：token 过期。允许整体重来一次，避免无限循环
+            if e.status == 410 and not restarted:
+                logger.warning('List continue token expired (410), restarting pagination')
+                items, token, restarted = [], None, True
+                continue
+            raise
+
+        items.extend(page.items or [])
+
+        token = getattr(getattr(page, 'metadata', None), '_continue', None)
+        if not token:
+            return _PagedResult(items)
+
+        if len(items) >= _LIST_MAX_ITEMS:
+            logger.warning(
+                f'List truncated at {len(items)} items (limit {_LIST_MAX_ITEMS}); '
+                'remaining pages skipped'
+            )
+            return _PagedResult(items, truncated=True)
 
 
 # 同步优先级顺序（先同步的会先被用户看到）

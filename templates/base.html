@@ -340,6 +340,12 @@
     </div>
   </main>
 
+  {% comment %}
+  弹框防误关守卫。必须不带 defer 且早于其他脚本：它给
+  HTMLDialogElement.prototype.showModal 打补丁，要在任何 showModal 调用前就位。
+  {% endcomment %}
+  <script src="{% static_v 'js/modal-guard.js' %}"></script>
+
   <!-- Alpine.js -->
   <script defer src="{% static 'js/alpine.min.js' %}"></script>
   <script>

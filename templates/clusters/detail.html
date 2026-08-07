@@ -75,8 +75,13 @@
 <div x-data="clusterOverview()" x-init="load()">
 
   <!-- 集群基本信息 -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-    <div class="info-card info-card-blue">
+  {% comment %}
+  和集群列表 / 节点管理 / 节点详情 / 仪表盘统一走同一套 MagicBento：
+  鼠标在这片区域内时每张卡按离鼠标的距离算辉光强度，整排有亮度梯度。
+  这页之前漏改，还是旧样式、hover 无反应。
+  {% endcomment %}
+  <div data-vb-bento class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="vb-bento-card vb-spotlight-card fx-card info-card info-card-blue" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">状态</div>
@@ -91,7 +96,7 @@
       </div>
     </div>
 
-    <div class="info-card info-card-amber">
+    <div class="vb-bento-card vb-spotlight-card fx-card info-card info-card-amber" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">K8s 版本</div>
@@ -103,7 +108,7 @@
       </div>
     </div>
 
-    <div class="info-card info-card-violet">
+    <div class="vb-bento-card vb-spotlight-card fx-card info-card info-card-violet" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div>
           <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">节点数</div>
@@ -115,7 +120,7 @@
       </div>
     </div>
 
-    <div class="info-card info-card-green">
+    <div class="vb-bento-card vb-spotlight-card fx-card info-card info-card-green" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div class="flex-1 min-w-0 mr-3">
           <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">API Server</div>
@@ -129,8 +134,8 @@
   </div>
 
   <!-- 节点状态 -->
-  <div class="grid grid-cols-3 gap-4 mb-5">
-    <div class="info-card info-card-green">
+  <div data-vb-bento class="grid grid-cols-3 gap-4 mb-5">
+    <div class="vb-bento-card vb-spotlight-card fx-card info-card info-card-green" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2">
           <div class="w-7 h-7 rounded-md bg-green-500/15 grid place-items-center">
@@ -145,7 +150,7 @@
       </div>
     </div>
 
-    <div class="info-card info-card-red">
+    <div class="vb-bento-card vb-spotlight-card fx-card info-card info-card-red" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2">
           <div class="w-7 h-7 rounded-md bg-red-500/15 grid place-items-center">
@@ -160,7 +165,7 @@
       </div>
     </div>
 
-    <div class="info-card info-card-purple">
+    <div class="vb-bento-card vb-spotlight-card fx-card info-card info-card-purple" data-vb-reveal data-vb-reveal-stagger="0.05">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <div class="w-7 h-7 rounded-md bg-purple-500/15 grid place-items-center">

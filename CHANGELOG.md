@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-08-07
+
+### Bug 修复
+
+- **删除弹框「点好几次才有反应」**（用户反馈）：现象是点删除后弹框闪一下就没了，看起来像没响应。根因不在按钮而在 DaisyUI 的 `.modal-backdrop` —— 它是 `<form method="dialog"><button>` 结构，`showModal()` 一执行就铺满整个视口。用户手快的第二次点击（或误双击）落在遮罩上，直接触发 `method="dialog"` 提交把刚打开的弹框关掉了；用户以为没打开，再点一次，于是「点好几次」。修复新增 `static/js/modal-guard.js`：包一层 `HTMLDialogElement.prototype.showModal` 记录打开时刻，用捕获阶段拦 `.modal-backdrop` 上的 click 与 submit，打开后 450ms 内的遮罩操作一律吞掉。全局生效，覆盖 7 个模板里的 21 个 dialog，不用逐个改。关键是不能把正常功能堵死：守卫窗口过后点遮罩必须照常能关，实测 60/150/300/430ms 连点与真实 `dblclick` 全部保持打开，等 600ms/1000ms 点遮罩正常关闭，Esc 与取消按钮不受影响
+
+- **Pod 列表单响应体 168MB 导致同步失败**（用户反馈）：报错 `IncompleteRead(168443513 bytes read)`，界面提示「集群连接异常，列表数据可能不是最新的」。原因是 `list_pod_for_all_namespaces()` 一次性拉全量，某生产集群 Pod 数量下响应体达 168MB，传输中途连接被中断 —— 这不是超时也不是凭据问题，加大 timeout 没有意义。改为走 K8s 原生的 chunked list：`_list_paginated()` 每页 500 条、靠 `continue` token 往下翻（`V1ListMeta._continue`，已确认 SDK 的 `all_params` 接受 `limit`/`_continue`）。token 过期返 410 时重头翻一次，仍失败才抛。另设 50000 条上限并回传 `truncated` 标记，避免异常规模的集群把内存吃穿。实测 16670 个 Pod 全量同步成功、零报错
+  - **需要决策的遗留项**：分页把一次大请求换成 34 次小请求，该集群同步耗时约 244s，而同步周期是 60s，会出现周期重叠。可选方向是拉长该集群的同步间隔、或对 Pod 列表按 namespace 拆分并行。此项未改，等确认后再动
+
+- **节点详情页三个操作按钮在亮色主题下几乎看不见**（自查发现，未流出）：上一轮把 Cordon/Uncordon/Drain/移除节点 从硬编码调色板换成 DaisyUI 语义 token 时用了 `btn-outline btn-warning` 一类写法。`--color-warning` 是 `oklch(82% .189 84.429)`，浅黄色当文字压白底，实测 light 主题下**常态**对比度只有 **1.66**（success 1.84 / error 2.7），静止状态基本读不出来。之前的断言只查了 hover（4.31 通过）没查常态，所以这个问题「通过」了验证 —— 断言已补上常态检查
+  - 改法按实测数据选：`btn-outline`/`btn-soft`/`btn-dash` 配任何语义色在 light 下常态全部不达标，实心彩色虽达标（5.24/5.48）但三个排一起太吵。最终走站内既有的那套语言（与 `.row-action`、节点列表「管理」按钮一致）：**常态中性、hover 才上语义色**。实测常态 15.62(dark)/16.68(light)、hover 5.24~5.48，dark/light × 常态/hover 四个态全部 ≥ 4.5
+  - 横向扫了一遍全站的 `btn-outline` + 语义色组合，发现日志弹窗的「上次日志」按钮（`previous` 为真时挂 `btn-warning btn-outline`）是同一个毛病，light 下常态 1.73，一并改成同样写法（改后 15.08/17.42 常态、5.24 hover）。集群列表的「选择」按钮虽然也是 `btn-outline` 但没配语义色，实测 15.11/17.42，无需改动
+
+- **集群详情页仍是旧样式**（用户反馈）：详情页的 7 张 `info-card` 没挂 MagicBento，hover 无反应，与已改造的其他页面不一致。两个 grid 容器加 `data-vb-bento`、7 张卡补 `vb-bento-card vb-spotlight-card fx-card` 与入场动效。实测 hover 首卡 `--vb-glow-intensity` = 1.00、鼠标移出后全部归 0
+
+### 验证方法修正
+
+- **对比度测量踩的坑**：候选变体是用 JS 在活页面里注入 class 来量的，但 Tailwind v4 只产出 `@source` 扫描到的类 —— 没被任何模板引用的 `btn-soft`/`btn-dash` 在产物里根本不存在，注入后静默退化成实心按钮。第一轮因此得出「btn-soft 达标 5.24」的**错误结论**（三个变体数字完全相同才暴露出来，实际它们都退化成了同一个实心样式）。修正：候选类先写进临时探针模板、`npm run build:css` 重建，选型定下后删除模板再重建；测量同时回传按钮自身的底色与边框（`borderWidth`/`borderStyle`/`borderColor`），退化立刻可见。`btn-soft` 真正生效后的实际值是 light 1.69，与 `btn-outline` 的 1.66 同样不合格
+- hover 一律用真实鼠标移过去后再量，不读 CSS 规则推断；常态量之前先把鼠标移到远处，避免上一个按钮的 hover 未退影响读数
+- 探针脚本里的 class 串不写死，与模板保持一致，否则改了模板仍在量旧值
+- 全量巡检 9 个页面：`nav`/`aside` 的 computed position 全部为 `fixed`（布局回归探针）、无「已布局但不可见」元素、控制台与 pageerror 零报错
+- 集群 pk 改为从集群列表动态发现。此前脚本写死 `CLUSTER=7`，而该集群已不存在（返回 404），导致多次探测拿到空数据、断言在空集合上假通过；现在「数量为 0」一律记 FAIL 而不是跳过
+
+---
+
 ## 2026-08-06
 
 ### Bug 修复

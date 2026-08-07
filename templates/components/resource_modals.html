@@ -1030,7 +1030,7 @@
         </button>
         <button @click="if(liveMode) stopLive(); previous = !previous; viewLogs(namespace, podName, baseUrl, false, true)"
                 class="btn btn-sm h-8 min-h-0 gap-1.5 text-xs rounded-lg transition-all"
-                :class="previous ? 'btn-warning btn-outline' : 'btn-ghost'">
+                :class="previous ? 'btn-outline hover:bg-warning hover:text-warning-content hover:border-warning' : 'btn-ghost'">
           <i class="fas fa-history text-[10px]"></i> 上次日志
         </button>
       </div>

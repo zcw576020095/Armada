@@ -72,45 +72,57 @@
   <div x-show="!loading && !error && node.name" x-cloak>
 
     <!-- Action Bar -->
+    {% comment %}
+    这排按钮原先用硬编码的 Tailwind 调色板（amber-500 / emerald-500 / rose-500 /
+    cyan-500），不跟 DaisyUI 主题走，和全站其他操作按钮不是一套语言。
+    改为语义 token：warning=停止调度、success=恢复调度、error=破坏性操作、info=已完成状态，
+    这样切主题时能一起变，且语义比"某个颜色"更清楚。
+    配色走「中性常态 + 语义色 hover」，和列表页的 .row-action / 「管理」按钮同一套语言。
+    不要给常态挂语义色：--color-warning 是 oklch(82% .189 84.429)，浅黄当文字压白底，
+    btn-outline/btn-soft/btn-dash 配 warning 在 light 主题下实测常态只有 1.66~1.69
+    （success 1.84 / error 2.7），静止状态几乎看不见。
+    实心彩色虽然达标但三个排一起太吵。当前写法实测常态 15.6/16.7、hover 5.1~5.5，
+    dark/light 双主题、常态与 hover 四个态全部过 4.5。
+    {% endcomment %}
     <div class="flex flex-wrap items-center gap-2 mb-5">
       <!-- Cordon / Uncordon -->
       <template x-if="node.schedulable">
-        <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all"
+        <button class="btn btn-sm btn-outline hover:bg-warning hover:text-warning-content hover:border-warning gap-1.5 h-8 min-h-0 text-xs transition-all" data-vb-spark
           @click="{% if can_edit %}cordonModal.showModal(){% else %}noPermission(){% endif %}">
           <i class="fas fa-ban text-[10px]"></i> Cordon
         </button>
       </template>
       <template x-if="!node.schedulable">
-        <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all"
+        <button class="btn btn-sm btn-outline hover:bg-success hover:text-success-content hover:border-success gap-1.5 h-8 min-h-0 text-xs transition-all" data-vb-spark
           @click="{% if can_edit %}uncordonModal.showModal(){% else %}noPermission(){% endif %}">
           <i class="fas fa-check text-[10px]"></i> Uncordon
         </button>
       </template>
       <!-- Drain / 已 Drain -->
       <template x-if="!node.drained">
-        <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-amber-500/30 bg-base-100 text-amber-400 hover:bg-amber-500/10 transition-all"
+        <button class="btn btn-sm btn-outline hover:bg-warning hover:text-warning-content hover:border-warning gap-1.5 h-8 min-h-0 text-xs transition-all" data-vb-spark
           @click="{% if can_edit %}drainModal.showModal(){% else %}noPermission(){% endif %}">
           <i class="fas fa-water text-[10px]"></i> Drain
         </button>
       </template>
       <template x-if="node.drained">
-        <span class="flex items-center gap-1.5 text-xs border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 px-3 h-8 rounded-lg">
+        <span class="badge badge-info badge-outline gap-1.5 h-8 px-3 text-xs">
           <i class="fas fa-water text-[10px]"></i> 已 Drain
-          <span class="opacity-50 text-[10px]" x-show="node.drained_at" x-text="node.drained_at"></span>
+          <span class="opacity-60 text-[10px]" x-show="node.drained_at" x-text="node.drained_at"></span>
         </span>
       </template>
-      <button class="btn btn-sm gap-1.5 h-8 min-h-0 text-xs border border-rose-500/30 bg-base-100 text-rose-400 hover:bg-rose-500/10 transition-all"
+      <button class="btn btn-sm btn-outline hover:bg-error hover:text-error-content hover:border-error gap-1.5 h-8 min-h-0 text-xs transition-all" data-vb-spark
         @click="{% if can_edit %}deleteNodeModal.showModal(){% else %}noPermission(){% endif %}">
         <i class="fas fa-trash-alt text-[10px]"></i> 移除节点
       </button>
       <!-- 状态标签 -->
       <template x-if="!node.schedulable && !node.drained">
-        <span class="ml-2 flex items-center gap-1.5 text-[10px] text-amber-400 border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 rounded-full">
+        <span class="badge badge-warning badge-outline ml-2 gap-1.5 text-[10px] px-2.5 py-1">
           <i class="fas fa-ban text-[8px]"></i> 已 Cordon（停止调度）
         </span>
       </template>
       <template x-if="node.drained">
-        <span class="ml-2 flex items-center gap-1.5 text-[10px] text-cyan-400 border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 rounded-full">
+        <span class="badge badge-info badge-outline ml-2 gap-1.5 text-[10px] px-2.5 py-1">
           <i class="fas fa-water text-[8px]"></i> 已 Drain（停止调度 + 已驱逐 Pod）
         </span>
       </template>
