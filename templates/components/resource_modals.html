@@ -1,3 +1,4 @@
+{% load static %}
 <!-- YAML Editor Modal - 全屏风格 -->
 <dialog id="yamlModal" class="modal">
   <div class="modal-box flex flex-col p-0 shadow-2xl" style="width: 90vw; max-width: 90vw; height: 90vh; max-height: 90vh; border-radius: 16px; background: #1e1e2e; color: #d4d4d4; border: 1px solid rgba(139,92,246,0.2);">
@@ -1120,8 +1121,14 @@ Pod 终端（exec）。故意不放 .modal-backdrop：终端里随手点一下�
 <!-- CSRF Token -->
 {% csrf_token %}
 
-<!-- Monaco Editor CDN -->
-<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+{% comment %}
+Monaco 改为本地 vendor（static/js/monaco/vs），不再走 CDN。
+原因：jsdelivr 的 loader.js 能拿到，但真正的 editor.main.js 有 947KB，
+实测在浏览器里 30 秒都下不完 → YAML 弹窗永远停在空白，编辑器根本没实例化。
+只搬 YAML 编辑用得到的部分（editor + base + yaml 语言包，去掉多余语言包和
+非中英文 nls），约 4MB。与 gsap/echarts/xterm 一致：前端依赖不赌 CDN 可用性。
+{% endcomment %}
+<script src="{% static 'js/monaco/vs/loader.js' %}"></script>
 <script>
 let monacoEditor = null;
 let currentYamlUrl = '';
@@ -1135,7 +1142,7 @@ function _setYamlTip(mode) {
   document.getElementById(target).classList.remove('hidden');
 }
 
-require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' }});
+require.config({ paths: { vs: '{% static "js/monaco/vs" %}'.replace(/\/$/, '') }});
 
 // 各资源类型的默认 YAML 模板（用于"新建"按钮）
 const RESOURCE_YAML_TEMPLATES = {
