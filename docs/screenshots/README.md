@@ -41,8 +41,10 @@
 | 人名 namespace | 露前一半、后一半打星 | `zhangchaowu` → `zhangc*****` |
 | 主机 IP | 遮蔽后两段 | `192.168.144.10` → `192.168.*.*` |
 | 集群名 | 换成示例名 | `测试集群1` → `production-cluster` |
+| 私有镜像仓库实例 ID | 打星 | `ccr-23gxup9u-vpc.cnc.bj...` → `ccr-********-vpc.cnc.bj...` |
 | 基础组件 namespace | **保留原样** | `kube-system`、`argocd`、`monitoring` |
 | 网段常量 / 保留地址 | **保留原样** | `10.0.0.0/8`、`127.0.0.1`、`255.255.255.0` |
+| 公共镜像仓库域名 | **保留原样** | `quay.io`、`ghcr.io`、`registry.baidubce.com` |
 
 几个容易踩的点：
 
@@ -52,6 +54,10 @@
 - **网段常量不要打星**。Pod 日志里 ip-masq-agent 会打
   `nonMasqueradeCIDRs:["10.0.0.0/8",...]`，一律遮蔽会截出 `10.0.*.*/8`，
   像是日志查看器把内容弄坏了。判定：带 `/前缀` 且后两段为 0 的是网络地址。
+- **镜像仓库只遮私有实例 ID**。`ccr-<实例ID>-vpc.cnc.bj.baidubce.com` 里的实例 ID
+  能定位到具体账号下的仓库，要遮；`quay.io`、`ghcr.io`、`public.ecr.aws`、
+  `registry.baidubce.com` 这类公共仓库人人可见，遮了反而让"镜像从哪来"失真。
+  阿里 ACR 的 `crpi-<实例ID>` 同理（跨云对齐时会出现）。
 - **改 DOM 文本盖不住三个地方**，只做 TreeWalker 替换会得到"半脱敏"：
   - 仪表盘 ECharts 把节点名画进 `<canvas>`，而本集群节点名**就是 IP**。
     canvas 里的字既改不到、也读不到，得在 metrics 接口的响应体上就改掉。

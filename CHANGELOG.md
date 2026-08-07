@@ -11,7 +11,8 @@
 - **补齐 README 功能截图（15 张）**：`docs/screenshots/` 下 15 张全部落地，README 引用逐一核对无裂图。成图 3200×2000（视口 1600×1000 + `device_scale_factor=2`），统一 dark 主题。截图由脚本自动完成并自校验：文件字节数、关键元素是否真的在页面上、脱敏是否有残留，任一不过即报失败，避免把白屏或空壳弹窗当成功
   - `yaml-validate.png` 是**故意注入 `replicas: -5`** 让 K8s 真实 dry-run 返 422 截出来的，不是摆拍；`pod-exec.png` 里是真正连上的 shell，跑了 `whoami`/`uname -sr`/`ls /`
 
-- **截图脱敏规则**（记录在 `docs/screenshots/README.md`，补图请沿用）：该集群 152 个 namespace 里绝大多数是**真人姓名拼音**，且这些名字还会出现在 Pod 名、PFS 路径 `/mnt/pfs/users/<name>`、终端提示符里，只替换「namespace 那一列」远远不够。规则：人名 ns 露前一半后一半打星（`zhangchaowu` → `zhangc*****`）、主机 IP 遮蔽后两段（`192.168.144.10` → `192.168.*.*`）、集群名换示例名；`kube-system`/`argocd`/`monitoring` 等基础组件 ns 与 `10.0.0.0/8`、`127.0.0.1` 等网段常量、保留地址**保留原样**
+- **截图脱敏规则**（记录在 `docs/screenshots/README.md`，补图请沿用）：该集群 152 个 namespace 里绝大多数是**真人姓名拼音**，且这些名字还会出现在 Pod 名、PFS 路径 `/mnt/pfs/users/<name>`、终端提示符里，只替换「namespace 那一列」远远不够。规则：人名 ns 露前一半后一半打星（`zhangchaowu` → `zhangc*****`）、主机 IP 遮蔽后两段（`192.168.144.10` → `192.168.*.*`）、集群名换示例名、私有镜像仓库实例 ID 打星（`ccr-23gxup9u-vpc.cnc.bj...` → `ccr-********-vpc.cnc.bj...`，阿里 ACR 的 `crpi-<实例ID>` 同理）
+  - 有意**保留**的：`kube-system`/`argocd`/`monitoring` 等基础组件 ns、`10.0.0.0/8`/`127.0.0.1` 等网段常量与保留地址、`quay.io`/`ghcr.io`/`public.ecr.aws`/`registry.baidubce.com` 等公共仓库域名。这些人人可见，遮了只会让「这是个真集群」「镜像从哪来」的信息失真，反而像界面出了 bug
 
 ### Bug 修复（截图脱敏，均为自查发现）
 
