@@ -1,35 +1,40 @@
 <div align="center">
 
+<img src="docs/images/logo.svg" width="116" alt="Armada">
+
 # Armada
 
 **一个面板管理你所有的 Kubernetes 集群**
 
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
-![Django](https://img.shields.io/badge/Django-6.0.4-092E20?logo=django&logoColor=white)
-![Kubernetes](https://img.shields.io/badge/Kubernetes_Client-v35-326CE5?logo=kubernetes&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.2-38B2AC?logo=tailwindcss&logoColor=white)
-![DaisyUI](https://img.shields.io/badge/DaisyUI-5.5-5A0EF8?logo=daisyui&logoColor=white)
-![Prometheus](https://img.shields.io/badge/Prometheus-Ready-E6522C?logo=prometheus&logoColor=white)
-![License](https://img.shields.io/badge/License-Private-red)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Django](https://img.shields.io/badge/Django-6.0.4-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes_Client-v35-326CE5?logo=kubernetes&logoColor=white)](https://github.com/kubernetes-client/python)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.2-38B2AC?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Stars](https://img.shields.io/github/stars/zcw576020095/Armada?style=flat&logo=github&color=8957E5)](https://github.com/zcw576020095/Armada/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/zcw576020095/Armada?color=1F6FEB)](https://github.com/zcw576020095/Armada/commits)
+[![License](https://img.shields.io/badge/License-Private-red)](LICENSE)
 
-多集群 Kubernetes 管理面板：资源查看走本地缓存（毫秒级），写操作直连 API Server，
+[核心设计](#核心设计) · [功能截图](#功能截图) · [安装部署](#安装部署) · [API 路由](#api-路由) · [已知限制](#已知限制)
+
+资源查看走本地缓存（毫秒级），写操作直连 API Server，<br>
 按「集群 × 模块 × 读写」做细粒度授权，浏览器内直连容器终端。
+
+<img src="docs/images/demo.gif" width="820" alt="Armada 演示">
+
+<sub>真实集群实录：250+ 节点 / 16000+ Pod · 演示素材已按脱敏规则处理</sub>
 
 </div>
 
 ---
 
-## 目录
-
-- [它解决什么问题](#它解决什么问题)
-- [功能截图](#功能截图)
-- [核心设计](#核心设计)
-- [功能清单](#功能清单)
-- [技术栈](#技术栈)
-- [安装部署](#安装部署)
-- [项目结构](#项目结构)
-- [API 路由](#api-路由)
-- [已知限制](#已知限制)
+<table>
+<tr>
+<td width="25%" align="center"><b>毫秒级列表</b><br><sub>16765 个 Pod<br>259.6 s → <b>17.8 ms</b></sub></td>
+<td width="25%" align="center"><b>写操作直连</b><br><sub>扩缩 / 重启 / 回滚<br>不读缓存，不拿旧状态决策</sub></td>
+<td width="25%" align="center"><b>细粒度授权</b><br><sub>集群 × 模块 × 读写<br>13 个模块，前后端双拦</sub></td>
+<td width="25%" align="center"><b>浏览器内终端</b><br><sub>直连容器 shell<br>零部署改造，不装 kubectl</sub></td>
+</tr>
+</table>
 
 ---
 
@@ -338,6 +343,9 @@ Armada/
 
 页面路由返回 HTML 骨架，`/api/` 下的端点返回 JSON 由 Alpine 渲染。
 
+<details>
+<summary>展开完整路由表</summary>
+
 ### 集群与节点
 
 | 方法 | 路径 | 说明 |
@@ -378,6 +386,8 @@ Armada/
 | GET/POST | `/accounts/users/` `create/` `<id>/update/` `<id>/delete/` | 用户管理（管理员） |
 | GET/POST | `/accounts/permissions/` `create/` `<id>/delete/` | 权限管理（管理员） |
 
+</details>
+
 ---
 
 ## 已知限制
@@ -396,6 +406,21 @@ Armada/
   不中断流程，节点会被标记 drain 但该 Pod 仍在。
 - **集群状态判定是单次探测**，网络抖动可能造成一次误判为离线，下一轮刷新恢复。
 - 未做多副本部署适配：后台同步线程与终端会话都在进程内，多进程部署会重复同步。
+
+---
+
+## Star 趋势
+
+<div align="center">
+
+<a href="https://star-history.com/#zcw576020095/Armada&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zcw576020095/Armada&type=Date&theme=dark">
+    <img src="https://api.star-history.com/svg?repos=zcw576020095/Armada&type=Date" width="640" alt="Star History Chart">
+  </picture>
+</a>
+
+</div>
 
 ---
 

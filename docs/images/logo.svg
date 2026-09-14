@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="0.55" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#5b21b6"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <rect width="256" height="256" rx="58" fill="url(#sheen)"/>
+
+  <!-- 舵轮 / 法轮：延续 favicon 的图形语言，8 根轮辐 = 多集群统一掌舵 -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" filter="url(#glow)">
+    <circle cx="128" cy="128" r="62" stroke-width="9" stroke-opacity="0.97"/>
+    <circle cx="128" cy="128" r="27" stroke-width="9" stroke-opacity="0.97"/>
+    <g stroke-width="9" stroke-opacity="0.95">
+      <line x1="128" y1="101" x2="128" y2="52"/>
+      <line x1="128" y1="155" x2="128" y2="204"/>
+      <line x1="101" y1="128" x2="52" y2="128"/>
+      <line x1="155" y1="128" x2="204" y2="128"/>
+      <line x1="109" y1="109" x2="74" y2="74"/>
+      <line x1="147" y1="147" x2="182" y2="182"/>
+      <line x1="147" y1="109" x2="182" y2="74"/>
+      <line x1="109" y1="147" x2="74" y2="182"/>
+    </g>
+  </g>
+  <circle cx="128" cy="128" r="10" fill="#ffffff"/>
+</svg>
