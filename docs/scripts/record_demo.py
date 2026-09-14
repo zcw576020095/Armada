@@ -4,19 +4,24 @@
 脱敏在网络层做：拦下 HTML / JSON 响应改写响应体，这样 ECharts 画进 canvas 的
 节点名、服务端渲染的集群名都能一次盖住，不必再去补 DOM。
 
-GIF 由 Pillow 合成，不走 ffmpeg 的 gif muxer —— Playwright 自带的 ffmpeg 是
---disable-everything 编的，只有 png 编码器和 image2 muxer，没有 gif muxer，
-也没有 palettegen/fps 滤镜。ffmpeg 在这里只负责把 webm 抽成 PNG 帧。
+帧走 CDP 的 Page.startScreencast(format=png)，**不用 Playwright 的录像**：
+录像编码成 VP8 是有损的，同一块 Running 徽章无损截图只有 87 种颜色、webm 抽帧
+变成 769 种，多出来的全是压缩噪点 —— 文字边缘发毛、纯色块出现块效应，就是
+"动图很模糊"的真正原因（与缩放、调色板都无关，那两处先前都查错了）。
+screencast 的 PNG 帧实测回到 87 色，且 1280×800 原尺寸不缩放。
+
+GIF 由 Pillow 合成：Playwright 自带的 ffmpeg 是 --disable-everything 编的，
+没有 gif muxer 也没有 palettegen 滤镜。现在整条链路不再需要 ffmpeg。
 
 用法：
     venv/bin/python docs/scripts/record_demo.py
-    venv/bin/python docs/scripts/record_demo.py --from-webm docs/images/_raw/x.webm
+    venv/bin/python docs/scripts/record_demo.py --from-frames /tmp/armada-frames-xxx
 """
 
 import argparse
+import base64
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -30,10 +35,11 @@ DB = str(ROOT / 'db.sqlite3')
 OUT_DIR = ROOT / 'docs' / 'images'
 CHROMIUM = (Path.home() / 'Library/Caches/ms-playwright/chromium-1194'
             / 'chrome-mac/Chromium.app/Contents/MacOS/Chromium')
-FFMPEG = Path.home() / 'Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac'
 
 BASE = 'http://127.0.0.1:9000'
 USER, PASSWORD = 'admin', 'admin123'
+# 录制视口。不能再缩：资源表格固定要 1009px，1152 视口下内容区只剩 822px，
+# 会横向切掉列（1024/900 更糟）。1280 是表格完整显示的下限。
 VIEW_W, VIEW_H = 1280, 800
 
 # Playwright 录的视频里没有鼠标指针，不画一个的话画面就是"东西自己在动"，
@@ -176,14 +182,9 @@ def discover_cluster_pk(page):
     raise RuntimeError('集群列表里找不到任何 /clusters/<pk>/ 链接')
 
 
-def record(rules):
-    """跑一遍操作流程，返回录出来的 webm 路径。"""
+def record(rules, frame_dir):
+    """跑一遍操作流程，把 CDP screencast 的 PNG 帧写进 frame_dir，返回帧路径列表。"""
     from playwright.sync_api import sync_playwright
-
-    raw_dir = OUT_DIR / '_raw'
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    for stale in raw_dir.glob('*.webm'):
-        stale.unlink()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path=str(CHROMIUM))
@@ -222,16 +223,18 @@ def record(rules):
         ctx = browser.new_context(
             viewport={'width': VIEW_W, 'height': VIEW_H},
             storage_state=state,
-            record_video_dir=str(raw_dir),
-            record_video_size={'width': VIEW_W, 'height': VIEW_H},
         )
         ctx.add_init_script(CURSOR_JS)
         install_desensitizer(ctx, rules)
         page = ctx.new_page()
 
-        # 1) 仪表盘。指标已预热进 60s 缓存，这里只等 DOM——
-        # 图表轮询会让 networkidle 永远等不到。
+        # screencast 从这里开始收帧。先导航到仪表盘再开，避免把 about:blank
+        # 那几帧空白收进来（开头的未稳定帧另有 drop_unsettled_head 兜底）。
         page.goto(f'{BASE}/', wait_until='domcontentloaded')
+        cast = Screencast(ctx, page, frame_dir)
+
+        # 1) 仪表盘。指标已预热进 60s 缓存，导航在开 screencast 前就做了，
+        # 这里只等加载完成 —— 图表轮询会让 networkidle 永远等不到。
         # 判据用 .loading-spinner 这个真正的 spinner 元素是否可见。
         # 两种写法都试错过：等 canvas 出现 —— canvas 在 loading 态就已在 DOM 里，
         # 会在转圈时就往下走；用 textContent.includes 遍历 div —— 匹到的是包含
@@ -293,18 +296,76 @@ def record(rules):
         page.keyboard.press('Enter')
         page.wait_for_timeout(2100)
 
-        video = page.video.path()
+        cast.stop()
+        measured_fps = cast.fps
+        frame_paths = cast.paths
         ctx.close()
         browser.close()
-    return Path(video)
+
+    print(f'  screencast 收到 {len(frame_paths)} 帧（{measured_fps:.0f} fps）')
+    return frame_paths, measured_fps
 
 
-def extract_frames(webm, frame_dir, width, fps):
-    subprocess.run(
-        [str(FFMPEG), '-y', '-i', str(webm), '-vf', f'scale={width}:-1',
-         '-r', str(fps), '-f', 'image2', str(frame_dir / '%05d.png')],
-        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return sorted(frame_dir.glob('*.png'))
+class Screencast:
+    """CDP Page.startScreencast(format=png) 的帧收集器。
+
+    必须显式给 maxWidth/maxHeight，否则 CDP 会自行缩放输出 ——
+    那就又回到"缩放糊字"的老问题上。
+    """
+
+    def __init__(self, ctx, page, frame_dir):
+        self.dir = frame_dir
+        self.paths = []
+        self._t0 = time.time()
+        self._client = ctx.new_cdp_session(page)
+        self._client.on('Page.screencastFrame', self._on_frame)
+        self._client.send('Page.startScreencast', {
+            'format': 'png', 'everyNthFrame': 1,
+            'maxWidth': VIEW_W, 'maxHeight': VIEW_H,
+        })
+
+    def _on_frame(self, params):
+        path = self.dir / f'{len(self.paths):05d}.png'
+        path.write_bytes(base64.b64decode(params['data']))
+        self.paths.append(path)
+        try:
+            # 不 Ack 的话 Chromium 会停发后续帧
+            self._client.send('Page.screencastFrameAck',
+                              {'sessionId': params['sessionId']})
+        except Exception:
+            pass
+
+    def stop(self):
+        self._elapsed = time.time() - self._t0
+        try:
+            self._client.send('Page.stopScreencast')
+        except Exception:
+            pass
+
+    @property
+    def count(self):
+        return len(self.paths)
+
+    @property
+    def fps(self):
+        el = getattr(self, '_elapsed', None) or (time.time() - self._t0)
+        return len(self.paths) / el if el else 0
+
+
+def resample(frames, target_fps, source_fps):
+    """screencast 是变帧率（有变化才发帧），按时间均匀抽到目标帧率。
+
+    直接每 N 帧取一帧会让"页面静止时"和"动画密集时"的实际时间被压成一样，
+    动图节奏会失真。这里按累计时间取最近帧。
+    """
+    if not frames or target_fps >= source_fps:
+        return frames
+    step = source_fps / target_fps
+    picked, i = [], 0.0
+    while i < len(frames):
+        picked.append(frames[int(i)])
+        i += step
+    return picked
 
 
 def drop_unsettled_head(frames, lookahead=4, tol=0.012):
@@ -374,7 +435,6 @@ def build_gif(frames, out, colors, delay, diff_thresh):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--fps', type=int, default=9)
-    ap.add_argument('--width', type=int, default=900)
     # 200 色：背景是大面积紫色径向渐变光晕，正是量化的最坏情况。128 色会压出
     # 蓝/青/红的色阶断层，看着像图片坏了。加调色板比开抖动划算 —— 抖动撒的噪点
     # 会打断 LZW 的行程，体积涨得更多。
@@ -382,18 +442,27 @@ def main():
     ap.add_argument('--diff-thresh', type=int, default=800)
     ap.add_argument('--max-seconds', type=int, default=60,
                     help='成片时长上限，超了就报错而不是产出废 GIF')
-    ap.add_argument('--from-webm', help='跳过录制，用现成的 webm 重新合成 GIF')
-    ap.add_argument('--keep-webm', action='store_true')
+    ap.add_argument('--from-frames',
+                    help='跳过录制，用现成的帧目录重新合成 GIF')
+    ap.add_argument('--source-fps', type=float, default=70,
+                    help='配合 --from-frames：原始帧的采集帧率（screencast 实测约 70）')
+    ap.add_argument('--keep-frames', action='store_true',
+                    help='保留原始 PNG 帧，便于反复调参数不重录')
     args = ap.parse_args()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     rules = ds.build_rules(DB)
     print(f'脱敏规则 {len(rules)} 条（人名 ns {len(ds.person_namespaces(DB))} 个）')
 
-    if args.from_webm:
-        webm = Path(args.from_webm)
+    if args.from_frames:
+        frame_dir = Path(args.from_frames)
+        frames = sorted(frame_dir.glob('*.png'))
+        cleanup = False
+        source_fps = args.source_fps
     else:
-        webm = record(rules)
+        frame_dir = Path(tempfile.mkdtemp(prefix='armada-frames-'))
+        cleanup = not args.keep_frames
+        frames, source_fps = record(rules, frame_dir)
         print(f'\n改写过的响应 {masked_hits} 个')
         if masked_hits == 0:
             print('!! 一次都没改到，脱敏等于没跑，先查规则再发布')
@@ -406,32 +475,39 @@ def main():
         print('回读无残留')
 
     gif = OUT_DIR / 'demo.gif'
-    tmp = Path(tempfile.mkdtemp(prefix='armada-frames-'))
     try:
-        frames = extract_frames(webm, tmp, args.width, args.fps)
+        if not frames:
+            print('!! 一帧都没收到，screencast 没工作')
+            return 1
         frames, dropped = drop_unsettled_head(frames)
         if dropped:
             print(f'裁掉开头 {dropped} 帧未稳定画面')
+
+        # screencast 是变帧率的（只在画面有变化时发帧），实测约 70fps。
+        # 按实测帧率抽到目标帧率，别每 N 帧硬取一帧。
+        kept_src = len(frames)
+        frames = resample(frames, args.fps, max(args.fps, source_fps))
+        print(f'{kept_src} 帧 -> 抽为 {len(frames)} 帧，合成 GIF…')
+
         # 护栏：某个等待卡住时（曾因判据写错干等 180s），会安静产出一个
         # 200 秒 / 27MB 的废 GIF。宁可报错也别发这种东西。
-        max_frames = args.max_seconds * args.fps
-        if len(frames) > max_frames:
-            print(f'!! 录了 {len(frames) / args.fps:.0f}s，超过 {args.max_seconds}s '
-                  f'上限，说明某处在干等，别合成了')
+        if len(frames) > args.max_seconds * args.fps:
+            print(f'!! 成片会有 {len(frames) / args.fps:.0f}s，超过 '
+                  f'{args.max_seconds}s 上限，说明某处在干等，别合成了')
             return 1
-        print(f'抽出 {len(frames)} 帧，合成 GIF…')
+
         kept, secs = build_gif(frames, gif, args.colors,
                                round(1000 / args.fps), args.diff_thresh)
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-    if not args.keep_webm and not args.from_webm:
-        webm.unlink(missing_ok=True)
+        if cleanup:
+            shutil.rmtree(frame_dir, ignore_errors=True)
+        else:
+            print(f'原始帧保留在 {frame_dir}')
 
     size_mb = gif.stat().st_size / 1024 / 1024
     print(f'\n{gif.relative_to(ROOT)}  {kept} 帧 / {secs:.1f}s / {size_mb:.2f} MB')
     if size_mb > 8:
-        print('   偏大，建议降 --width 或 --colors')
+        print('   偏大，建议降 --fps 或缩短流程')
     return 0
 
 
