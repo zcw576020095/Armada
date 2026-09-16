@@ -28,9 +28,9 @@
 
 ### Bug 修复（录制脚本，均为自查发现）
 
-- **改了响应体却沿用原 headers，导致列表全空**：脱敏会改变内容长度（`192.168.48.108` → `192.168.*.*` 变短、`测试集群1` → `production-cluster` 变长），`Content-Length` 与新 body 不匹配，浏览器拿到被截断的 JSON 直接解析失败。表现是列表页「暂无数据」、计数 0，**不报任何错**，成片里就是一张空表。修复：`fulfill` 时剥掉 `Content-Length` 与 `Content-Encoding`
+- **改了响应体却沿用原 headers，导致列表全空**：脱敏会改变内容长度（主机 IP `192.168.N.M` → `192.168.*.*` 变短、集群原名 → `production-cluster` 变长），`Content-Length` 与新 body 不匹配，浏览器拿到被截断的 JSON 直接解析失败。表现是列表页「暂无数据」、计数 0，**不报任何错**，成片里就是一张空表。修复：`fulfill` 时剥掉 `Content-Length` 与 `Content-Encoding`
 
-- **129 个人名逐条正则替换拖慢响应，把空表录进成片**：Pod 列表响应有 1.4MB，逐条 `sub` 一遍要 **1.9 秒**，合并成一条 alternation 后 **0.22 秒**（8.7 倍）。慢的后果不是等得久，而是前端还没渲染完就被录进去。合并时名字必须**按长度降序**进 alternation —— 正则的 `|` 取最先匹配的分支，短名在前会让 `zhochendongyu` 被 `chendongyu` 截断（与截图那轮同一个坑的另一种形态）
+- **129 个人名逐条正则替换拖慢响应，把空表录进成片**：Pod 列表响应有 1.4MB，逐条 `sub` 一遍要 **1.9 秒**，合并成一条 alternation 后 **0.22 秒**（8.7 倍）。慢的后果不是等得久，而是前端还没渲染完就被录进去。合并时名字必须**按长度降序**进 alternation —— 正则的 `|` 取最先匹配的分支，短名在前会让形如 `xiaowanglei` 的长名被其中嵌套的 `wanglei` 截断（与截图那轮同一个坑的另一种形态）
 
 - **首帧是坏帧**：GitHub 拿 GIF 首帧当封面，首帧错了等于 README 顶部没有图。先后错过三版判据 ——
   - 等 `canvas` 出现：canvas 在 loading 态就已经在 DOM 里，会在转圈时就往下走，首帧录到 spinner
@@ -71,15 +71,15 @@
 - **补齐 README 功能截图（15 张）**：`docs/screenshots/` 下 15 张全部落地，README 引用逐一核对无裂图。成图 3200×2000（视口 1600×1000 + `device_scale_factor=2`），统一 dark 主题。截图由脚本自动完成并自校验：文件字节数、关键元素是否真的在页面上、脱敏是否有残留，任一不过即报失败，避免把白屏或空壳弹窗当成功
   - `yaml-validate.png` 是**故意注入 `replicas: -5`** 让 K8s 真实 dry-run 返 422 截出来的，不是摆拍；`pod-exec.png` 里是真正连上的 shell，跑了 `whoami`/`uname -sr`/`ls /`
 
-- **截图脱敏规则**（记录在 `docs/screenshots/README.md`，补图请沿用）：该集群 152 个 namespace 里绝大多数是**真人姓名拼音**，且这些名字还会出现在 Pod 名、PFS 路径 `/mnt/pfs/users/<name>`、终端提示符里，只替换「namespace 那一列」远远不够。规则：人名 ns 露前一半后一半打星（`zhangchaowu` → `zhangc*****`）、主机 IP 遮蔽后两段（`192.168.144.10` → `192.168.*.*`）、集群名换示例名、私有镜像仓库实例 ID 打星（`ccr-23gxup9u-vpc.cnc.bj...` → `ccr-********-vpc.cnc.bj...`，阿里 ACR 的 `crpi-<实例ID>` 同理）
+- **截图脱敏规则**（记录在 `docs/screenshots/README.md`，补图请沿用）：该集群 152 个 namespace 里绝大多数是**真人姓名拼音**，且这些名字还会出现在 Pod 名、PFS 路径 `/mnt/pfs/users/<name>`、终端提示符里，只替换「namespace 那一列」远远不够。规则：人名 ns 露前一半后一半打星（`wangxiaoming` → `wangxi******`）、主机 IP 遮蔽后两段（`192.168.N.M` → `192.168.*.*`）、集群名换示例名、私有镜像仓库实例 ID 打星（`ccr-<实例ID>-vpc.cnc.bj...` → `ccr-********-vpc.cnc.bj...`，阿里 ACR 的 `crpi-<实例ID>` 同理）
   - 有意**保留**的：`kube-system`/`argocd`/`monitoring` 等基础组件 ns、`10.0.0.0/8`/`127.0.0.1` 等网段常量与保留地址、`quay.io`/`ghcr.io`/`public.ecr.aws`/`registry.baidubce.com` 等公共仓库域名。这些人人可见，遮了只会让「这是个真集群」「镜像从哪来」的信息失真，反而像界面出了 bug
 
 ### Bug 修复（截图脱敏，均为自查发现）
 
-- **裸子串替换把 `argocd` 打成 `argo**`**：ns 列表里既有 `gocd` 又有 `argocd`，逐个 `split().join()` 会误伤后者，截图上看着像界面出了 bug。改为带字母边界的单次正则 `(?<![a-z])name(?![a-z])`（K8s 名字用 `-` `/` `.` 连接，人名两侧必然不是字母），并按名字从长到短排序，保证嵌套的先被长名吃掉（`zhochendongyu` 早于 `chendongyu`）
+- **裸子串替换把 `argocd` 打成 `argo**`**：ns 列表里既有 `gocd` 又有 `argocd`，逐个 `split().join()` 会误伤后者，截图上看着像界面出了 bug。改为带字母边界的单次正则 `(?<![a-z])name(?![a-z])`（K8s 名字用 `-` `/` `.` 连接，人名两侧必然不是字母），并按名字从长到短排序，保证嵌套的先被长名吃掉（形如 `xiaowanglei` 要早于其中嵌套的 `wanglei`）
 - **网段常量被一并遮蔽成 `10.0.*.*/8`**：Pod 日志里 ip-masq-agent 会打 `nonMasqueradeCIDRs:["10.0.0.0/8","172.16.0.0/12",...]`，一律打星后看着像日志查看器把内容弄坏了。改为「带 `/前缀` 且后两段为 0」按网络地址保留，另加 `127.0.0.1`/`0.0.0.0`/子网掩码白名单，真实主机地址照常遮蔽
 - **只改 DOM 会得到「半脱敏」**：`TreeWalker` 替换文本节点盖不住三个地方 ——
-  - 仪表盘 ECharts 把节点名画进 `<canvas>`，而本集群 240 个节点的名字**就是 IP**（`192.168.144.10` 这种）。canvas 里的字既改不到、`document.body.innerText` 也读不到，于是「DOM 全绿」时图表上 IP 其实全裸。改为在 metrics 接口的响应体上就脱敏，DOM 与 canvas 拿同一份数据，天然一致
+  - 仪表盘 ECharts 把节点名画进 `<canvas>`，而本集群 240 个节点的名字**就是 IP**（`192.168.N.M` 这种）。canvas 里的字既改不到、`document.body.innerText` 也读不到，于是「DOM 全绿」时图表上 IP 其实全裸。改为在 metrics 接口的响应体上就脱敏，DOM 与 canvas 拿同一份数据，天然一致
   - Monaco 的 model 原文不受 DOM 改动影响，一滚动就重新渲染出真名，需单独 `setValue()`
   - 终端里的主机名/路径来自容器本身，DOM 替换管不到。改为固定挑 `kube-system` 下的 Pod 开终端，从源头上避免人名进 xterm
 - **终端截图截成了 404 报错页**：上一版从**已脱敏**的表格 DOM 里回读 Pod 名再发 exec，拿到的是打星后的名字（`aoyu****-motion324-...`），请求必然 404。修复：不再从脱敏后的页面回读标识符，直接指定实测 shell 可用的 Pod，并在截图前断言 `connected` 为真且 xterm 已渲染出内容（实测 443 字符），杜绝再截到报错页

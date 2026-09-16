@@ -38,10 +38,10 @@
 
 | 对象 | 处理 | 例 |
 |---|---|---|
-| 人名 namespace | 露前一半、后一半打星 | `zhangchaowu` → `zhangc*****` |
-| 主机 IP | 遮蔽后两段 | `192.168.144.10` → `192.168.*.*` |
-| 集群名 | 换成示例名 | `测试集群1` → `production-cluster` |
-| 私有镜像仓库实例 ID | 打星 | `ccr-23gxup9u-vpc.cnc.bj...` → `ccr-********-vpc.cnc.bj...` |
+| 人名 namespace | 露前一半、后一半打星 | `wangxiaoming` → `wangxi******` |
+| 主机 IP | 遮蔽后两段 | `192.168.N.M` → `192.168.*.*` |
+| 集群名 | 换成示例名 | 集群原名 → `production-cluster` |
+| 私有镜像仓库实例 ID | 打星 | `ccr-<实例ID>-vpc.cnc.bj...` → `ccr-********-vpc.cnc.bj...` |
 | 基础组件 namespace | **保留原样** | `kube-system`、`argocd`、`monitoring` |
 | 网段常量 / 保留地址 | **保留原样** | `10.0.0.0/8`、`127.0.0.1`、`255.255.255.0` |
 | 公共镜像仓库域名 | **保留原样** | `quay.io`、`ghcr.io`、`registry.baidubce.com` |
@@ -50,7 +50,7 @@
 
 - **替换必须带字母边界**。ns 里既有 `gocd` 又有 `argocd`，裸子串替换会把
   `argocd` 打成 `argo**`，看着像界面出了 bug。用 `(?<![a-z])name(?![a-z])`，
-  并按名字从长到短替换（`zhochendongyu` 要早于 `chendongyu`）。
+  并按名字从长到短替换（形如 `xiaowanglei` 要早于其中嵌套的 `wanglei`）。
 - **网段常量不要打星**。Pod 日志里 ip-masq-agent 会打
   `nonMasqueradeCIDRs:["10.0.0.0/8",...]`，一律遮蔽会截出 `10.0.*.*/8`，
   像是日志查看器把内容弄坏了。判定：带 `/前缀` 且后两段为 0 的是网络地址。
