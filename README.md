@@ -74,8 +74,8 @@ Pod 日志直接看，容器终端浏览器里开，YAML 在线编辑且提交�
 
 ## 功能截图
 
-> 截图放在 [`docs/screenshots/`](docs/screenshots/)，命名规范见该目录的
-> [README](docs/screenshots/README.md)。GitHub 会自动渲染相对路径图片，无需额外配置。
+> 全部截图在 [`docs/screenshots/`](docs/screenshots/)，命名与脱敏规则见该目录的
+> [README](docs/screenshots/README.md)。图中集群名、人名 namespace、主机 IP 均已脱敏。
 
 ### 仪表盘
 
@@ -84,42 +84,92 @@ Metrics Server、Pod requests 聚合，不会直接空着。
 
 ![仪表盘](docs/screenshots/dashboard.png)
 
-### 集群与节点
+### 集群列表
 
-| 集群列表 | 节点管理 | 节点详情 |
-|:---:|:---:|:---:|
-| ![集群列表](docs/screenshots/clusters-list.png) | ![节点管理](docs/screenshots/nodes.png) | ![节点详情](docs/screenshots/node-detail.png) |
-| 多集群一键切换，kubeconfig 加密存储 | Cordon / Uncordon / Drain | 容量、负载与该节点上的 Pod |
+多集群一键切换，kubeconfig 加密存储，当前集群始终显示在顶栏。
 
-### 容器终端与日志
+![集群列表](docs/screenshots/clusters-list.png)
 
-浏览器内直连容器 shell，不用装 kubectl。
+### 节点管理
 
-| 容器终端 | Pod 日志 | Pod 列表 |
-|:---:|:---:|:---:|
-| ![容器终端](docs/screenshots/pod-exec.png) | ![Pod 日志](docs/screenshots/pod-logs.png) | ![Pod 列表](docs/screenshots/pods.png) |
-| 自动选 bash / sh，支持窗口 resize | 实时刷新 / 上次日志 / tail 行数 | 容器层卡点 reason 高亮 |
+节点列表支持 Cordon / Uncordon / Drain，GPU 机型与分配情况一并列出。
 
-### 工作负载管理
+![节点管理](docs/screenshots/nodes.png)
 
-| Deployment 列表 | 详情（Events + 关联 Pods） | 回滚到历史版本 |
-|:---:|:---:|:---:|
-| ![Deployment 列表](docs/screenshots/deployments.png) | ![Deployment 详情](docs/screenshots/deployment-detail.png) | ![回滚](docs/screenshots/deployment-rollback.png) |
-| 扩缩 / 重启 / 回滚 / 删除 | 概览、Events、关联 Pods 分页 | 列出历史 revision，一键回滚 |
+### 节点详情
 
-### YAML 编辑与校验
+容量、负载，以及该节点上正在跑的 Pod。
 
-| 在线编辑（默认只读） | dry-run 校验 |
-|:---:|:---:|
-| ![YAML 编辑](docs/screenshots/yaml-edit.png) | ![YAML 校验](docs/screenshots/yaml-validate.png) |
-| Monaco 编辑器，按开关进入编辑模式 | 调 K8s 真实 server-side dry-run，报错翻译成中文并给出处置建议 |
+![节点详情](docs/screenshots/node-detail.png)
 
-### 用户与权限
+### 容器终端
 
-| 权限管理 | 用户管理 | 登录 |
-|:---:|:---:|:---:|
-| ![权限管理](docs/screenshots/permissions.png) | ![用户管理](docs/screenshots/users.png) | ![登录页](docs/screenshots/login.png) |
-| 按集群 × 模块 × 读写授权 | 管理员 / 普通用户，可禁用账户 | 账户禁用提示、CSRF 失效友好回登录 |
+浏览器内直连容器 shell，不用装 kubectl。自动选 bash / sh，支持窗口 resize。
+
+![容器终端](docs/screenshots/pod-exec.png)
+
+### Pod 日志
+
+实时刷新、上次日志（容器重启过时可看崩溃前输出）、可调 tail 行数。
+
+![Pod 日志](docs/screenshots/pod-logs.png)
+
+### Pod 列表
+
+容器层卡点 reason 高亮 —— `ImagePullBackOff`、`CrashLoopBackOff` 这类
+在 `status.phase` 里看不出来的问题，直接标在列表上。
+
+![Pod 列表](docs/screenshots/pods.png)
+
+### Deployment 列表
+
+扩缩 / 重启 / 回滚 / 删除，写操作一律直连 API Server，不读缓存。
+
+![Deployment 列表](docs/screenshots/deployments.png)
+
+### Deployment 详情
+
+概览、Events、关联 Pods 分页展示。
+
+![Deployment 详情](docs/screenshots/deployment-detail.png)
+
+### 回滚到历史版本
+
+列出历史 revision 并标出当前版本，一键回滚。三种工作负载的回滚机制并不相同，
+详见[核心设计](#三种工作负载的回滚机制并不相同)。
+
+![回滚](docs/screenshots/deployment-rollback.png)
+
+### YAML 在线编辑
+
+Monaco 编辑器，默认只读，按开关才进入编辑模式。
+
+![YAML 编辑](docs/screenshots/yaml-edit.png)
+
+### YAML dry-run 校验
+
+调 K8s 真实的 server-side dry-run，报错翻译成中文并给出处置建议。
+图中是故意写错一处的效果。
+
+![YAML 校验](docs/screenshots/yaml-validate.png)
+
+### 权限管理
+
+按**集群 × 模块 × 读写**授权，13 个模块独立控制。
+
+![权限管理](docs/screenshots/permissions.png)
+
+### 用户管理
+
+管理员 / 普通用户，可禁用账户。
+
+![用户管理](docs/screenshots/users.png)
+
+### 登录
+
+账户禁用提示、CSRF 失效友好回登录。
+
+![登录页](docs/screenshots/login.png)
 
 ---
 
